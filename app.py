@@ -4,28 +4,53 @@ Ejecutar con: streamlit run app.py
 """
 from __future__ import annotations
 
+import logging
+
 import streamlit as st
 
 from components.navigation import render_sidebar
-from database.connection import init_db, session_scope
+from database import connection
+from database.connection import init_db, render_scope, session_scope
+from database.migrations import MigracionError
 from database.repositories import get_company
 from database.seed import seed_default_accounts
 
 st.set_page_config(page_title="Análisis Financiero", layout="wide")
 
 if st.session_state.get("pending_restore"):
-    import shutil
+    from pathlib import Path
 
-    from database.connection import DB_PATH, dispose_engine
+    from database.backup_utils import RespaldoInvalido, RestauracionError, restaurar
 
-    origen = st.session_state.pop("pending_restore")
-    dispose_engine()
-    shutil.copy2(origen, DB_PATH)
+    origen = Path(st.session_state.pop("pending_restore"))
+    connection.dispose_engine()
+    try:
+        resultado = restaurar(origen, connection.DB_PATH, dir_respaldos=connection.DB_PATH.parent / "backups")
+    except RespaldoInvalido as exc:
+        logging.getLogger(__name__).exception("Restauración rechazada")
+        st.error(f"No se restauró la copia: {exc} La base de datos actual no se modificó.")
+    except RestauracionError as exc:
+        logging.getLogger(__name__).exception("Restauración fallida")
+        st.error(f"No se restauró la copia: {exc}")
+    else:
+        previo = resultado.respaldo_previo.name if resultado.respaldo_previo else "no aplica"
+        st.success(
+            f"Base de datos restaurada: {resultado.info.empresa} · ejercicios "
+            f"{', '.join(str(a) for a, _ in resultado.info.ejercicios) or 'ninguno'}. "
+            f"Copia automática de la base anterior: {previo}."
+        )
     st.session_state["db_inicializada"] = False
-    st.success("Base de datos restaurada correctamente.")
 
 if not st.session_state.get("db_inicializada"):
-    init_db()
+    try:
+        init_db()
+    except MigracionError as exc:
+        logging.getLogger(__name__).exception("Migración de esquema fallida")
+        st.error(
+            f"No se pudo actualizar la base de datos: {exc} No se aplicó ningún cambio; "
+            "la copia previa (si se creó) está en data/backups/."
+        )
+        st.stop()
     with session_scope() as _s:
         seed_default_accounts(_s)
     st.session_state["db_inicializada"] = True
@@ -41,7 +66,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-with session_scope() as session:
+# La pagina se renderiza sin commit implicito: cada accion de escritura
+# confirma por su cuenta (components/transacciones.py).
+with render_scope() as session:
     company = get_company(session)
     pagina = render_sidebar(company_exists=company is not None)
 

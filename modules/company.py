@@ -4,6 +4,8 @@ from __future__ import annotations
 import streamlit as st
 from sqlalchemy.orm import Session
 
+from components.money import ANIO_MAXIMO, ANIO_MINIMO
+from components.transacciones import ejecutar_escritura
 from database.repositories import get_company, save_company
 
 
@@ -17,11 +19,12 @@ def render(session: Session) -> None:
         actividad_economica = st.text_input("Actividad económica", value=company.actividad_economica if company else "")
         pais = st.text_input("País", value=company.pais if company else "")
         moneda = st.text_input("Moneda de presentación (ej. GTQ, USD)", value=company.moneda if company else "")
+        anio_actual = company.anio_inicial_analisis if company else 2021
         anio_inicial = st.number_input(
             "Año inicial de análisis",
-            min_value=1900,
-            max_value=2200,
-            value=company.anio_inicial_analisis if company else 2021,
+            min_value=min(ANIO_MINIMO, anio_actual),
+            max_value=max(ANIO_MAXIMO, anio_actual),
+            value=anio_actual,
             step=1,
         )
         enviado = st.form_submit_button("Guardar")
@@ -31,18 +34,22 @@ def render(session: Session) -> None:
         if not all(c.strip() for c in campos_obligatorios):
             st.error("Todos los campos son obligatorios.")
             return
-        save_company(
+        guardado, _ = ejecutar_escritura(
             session,
-            nombre_legal=nombre_legal.strip(),
-            nombre_comercial=nombre_comercial.strip(),
-            actividad_economica=actividad_economica.strip(),
-            pais=pais.strip(),
-            moneda=moneda.strip().upper(),
-            anio_inicial_analisis=int(anio_inicial),
+            lambda: save_company(
+                session,
+                nombre_legal=nombre_legal.strip(),
+                nombre_comercial=nombre_comercial.strip(),
+                actividad_economica=actividad_economica.strip(),
+                pais=pais.strip(),
+                moneda=moneda.strip().upper(),
+                anio_inicial_analisis=int(anio_inicial),
+            ),
+            descripcion="guardar los datos de la empresa",
         )
-        session.commit()
-        st.success("Datos de la empresa guardados correctamente.")
-        st.rerun()
+        if guardado:
+            st.success("Datos de la empresa guardados correctamente.")
+            st.rerun()
 
     if not company:
         st.info(

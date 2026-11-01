@@ -4,6 +4,8 @@ capturados en un unico tablero por ejercicio, con historial de cambios.
 La clasificacion de cuentas (categoria/subcategoria/estado) se edita en
 el modulo Catalogo de cuentas -- aqui solo se modifican los IMPORTES
 capturados, para no duplicar la logica de validacion de clasificacion.
+Tambien se administra el ejercicio: cierre, reapertura y eliminacion de
+ejercicios vacios (hallazgo M-05).
 """
 from __future__ import annotations
 
@@ -14,19 +16,113 @@ import streamlit as st
 from sqlalchemy.orm import Session
 
 from calculations.balance_sheet import compute_balance_sheet
-from components.money import format_money
+from components.money import ImporteInvalido, es_vacio, format_money, parse_importe_con_aviso
 from components.navigation import select_fiscal_period
+from components.transacciones import ejecutar_escritura
 from database.enums import TipoEstadoFinanciero as Tipo
-from database.models import Company
-from database.repositories import list_entries, list_history, upsert_entry
+from database.models import Account, Company, FiscalPeriod
+from database.repositories import (
+    close_fiscal_period,
+    delete_entry,
+    delete_fiscal_period,
+    list_entries,
+    list_history,
+    period_has_entries,
+    reopen_fiscal_period,
+    upsert_entry,
+)
+from modules.history import historial_dataframe
+
+
+def _guardar_edicion(
+    session: Session,
+    period: FiscalPeriod,
+    tipo: Tipo,
+    editado: pd.DataFrame,
+    originales: dict[int, Decimal],
+    cuentas: dict[int, Account],
+) -> None:
+    errores: list[str] = []
+    avisos: list[str] = []
+    cambios: list[tuple[int, Decimal]] = []
+    for _, fila in editado.iterrows():
+        account_id = int(fila["account_id"])
+        cuenta = cuentas[account_id]
+        valor = fila["Valor"]
+        if es_vacio(valor):
+            errores.append(
+                f"{cuenta.codigo} — {cuenta.nombre}: la celda está vacía. Para eliminar un importe use 'Borrar importe'."
+            )
+            continue
+        if float(valor) == float(originales[account_id]):
+            continue
+        try:
+            importe, aviso = parse_importe_con_aviso(float(valor), redondear=True)
+        except ImporteInvalido as exc:
+            errores.append(f"{cuenta.codigo} — {cuenta.nombre}: {exc}")
+            continue
+        if aviso:
+            avisos.append(f"{cuenta.codigo} — {cuenta.nombre}: {aviso}")
+        if importe != originales[account_id]:
+            cambios.append((account_id, importe))
+
+    if errores:
+        st.error("No se guardó ningún cambio. Corrija:\n" + "\n".join(f"- {e}" for e in errores))
+        return
+    if not cambios:
+        st.info("No se detectaron cambios.")
+        return
+    guardado, _ = ejecutar_escritura(
+        session,
+        lambda: [
+            upsert_entry(session, fiscal_period_id=period.id, account_id=account_id, valor=importe, tipo=tipo)
+            for account_id, importe in cambios
+        ],
+        descripcion=f"guardar los cambios del ejercicio {period.anio}",
+    )
+    if guardado:
+        st.success(f"Ejercicio {period.anio}: {len(cambios)} valor(es) actualizado(s).")
+        for aviso in avisos:
+            st.warning(aviso)
+        if not avisos:
+            st.rerun()
+
+
+def _borrar_importe(
+    session: Session, period: FiscalPeriod, tipo: Tipo, cuentas: dict[int, Account], originales: dict[int, Decimal],
+    moneda: str, key: str,
+) -> None:
+    with st.expander("Borrar un importe capturado"):
+        st.caption("El importe borrado queda como 'sin dato' (no como cero) y la eliminación se registra en el historial.")
+        account_id = st.selectbox(
+            "Cuenta",
+            list(originales),
+            format_func=lambda i: f"{cuentas[i].codigo} — {cuentas[i].nombre} ({format_money(originales[i], moneda)})",
+            key=f"{key}_borrar_cuenta",
+        )
+        confirmar = st.checkbox(
+            f"Confirmo que deseo borrar este importe del ejercicio {period.anio}", key=f"{key}_borrar_confirmar"
+        )
+        if st.button("Borrar importe", key=f"{key}_borrar", disabled=not confirmar):
+            borrado, _ = ejecutar_escritura(
+                session,
+                lambda: delete_entry(session, fiscal_period_id=period.id, account_id=account_id, tipo=tipo),
+                descripcion=f"borrar el importe de {cuentas[account_id].codigo} en {period.anio}",
+            )
+            if borrado:
+                st.success("Importe borrado.")
+                st.rerun()
 
 
 def _tabla_editable(session: Session, period_id: int, tipo: Tipo, moneda: str, key: str) -> None:
+    period = session.get(FiscalPeriod, period_id)
     entradas = list_entries(session, period_id, tipo)
     if not entradas:
         st.info("No hay cuentas con valores capturados todavía para este ejercicio.")
         return
 
+    originales = {cuenta.id: valor for cuenta, valor in entradas}
+    cuentas = {cuenta.id: cuenta for cuenta, _ in entradas}
     df = pd.DataFrame(
         [
             {
@@ -45,34 +141,60 @@ def _tabla_editable(session: Session, period_id: int, tipo: Tipo, moneda: str, k
         df,
         hide_index=True,
         width="stretch",
-        disabled=["account_id", "Código", "Nombre", "Categoría", "Subcategoría"],
+        disabled=True if period.cerrado else ["account_id", "Código", "Nombre", "Categoría", "Subcategoría"],
         column_config={"Valor": st.column_config.NumberColumn(format="%.2f", step=0.01)},
         key=key,
     )
+    if period.cerrado:
+        st.caption(f"El ejercicio {period.anio} está cerrado: solo lectura.")
+        return
 
     col_guardar, col_cancelar = st.columns(2)
     with col_guardar:
         if st.button("Guardar cambios", key=f"{key}_guardar"):
-            cambios = 0
-            for _, fila in editado.iterrows():
-                original = df.loc[df["account_id"] == fila["account_id"], "Valor"].iloc[0]
-                if round(float(fila["Valor"]), 2) != round(float(original), 2):
-                    upsert_entry(
-                        session,
-                        fiscal_period_id=period_id,
-                        account_id=int(fila["account_id"]),
-                        valor=Decimal(str(round(float(fila["Valor"]), 2))),
-                        tipo=tipo,
-                    )
-                    cambios += 1
-            if cambios:
-                session.commit()
-                st.success(f"{cambios} valor(es) actualizado(s).")
-                st.rerun()
-            else:
-                st.info("No se detectaron cambios.")
+            _guardar_edicion(session, period, tipo, editado, originales, cuentas)
     with col_cancelar:
         if st.button("Cancelar modificaciones", key=f"{key}_cancelar"):
+            st.rerun()
+    _borrar_importe(session, period, tipo, cuentas, originales, moneda, key)
+
+
+def _administrar_ejercicio(session: Session, period: FiscalPeriod) -> None:
+    if period.cerrado:
+        cierre = f" el {period.fecha_cierre:%Y-%m-%d %H:%M} (UTC)" if period.fecha_cierre else ""
+        st.info(f"El ejercicio {period.anio} está CERRADO{cierre}. No admite captura, edición, importación ni borrado.")
+        confirmar = st.checkbox(f"Confirmo que deseo reabrir el ejercicio {period.anio}", key=f"reabrir_conf_{period.id}")
+        if st.button("Reabrir ejercicio", disabled=not confirmar, key=f"reabrir_{period.id}"):
+            reabierto, _ = ejecutar_escritura(
+                session, lambda: reopen_fiscal_period(session, period.id), descripcion=f"reabrir el ejercicio {period.anio}"
+            )
+            if reabierto:
+                st.rerun()
+        return
+
+    st.write(f"El ejercicio {period.anio} está ABIERTO.")
+    st.caption("Cerrar un ejercicio impide modificar, importar o borrar sus importes hasta reabrirlo.")
+    confirmar = st.checkbox(f"Confirmo que deseo cerrar el ejercicio {period.anio}", key=f"cerrar_conf_{period.id}")
+    if st.button("Cerrar ejercicio", disabled=not confirmar, key=f"cerrar_{period.id}"):
+        cerrado, _ = ejecutar_escritura(
+            session, lambda: close_fiscal_period(session, period.id), descripcion=f"cerrar el ejercicio {period.anio}"
+        )
+        if cerrado:
+            st.rerun()
+
+    st.divider()
+    if period_has_entries(session, period.id):
+        st.caption("Este ejercicio tiene importes capturados: no se puede eliminar. Solo se eliminan ejercicios vacíos.")
+        return
+    confirmar_eliminar = st.checkbox(
+        f"Confirmo que deseo eliminar el ejercicio vacío {period.anio}", key=f"eliminar_conf_{period.id}"
+    )
+    if st.button("Eliminar ejercicio", disabled=not confirmar_eliminar, key=f"eliminar_{period.id}"):
+        eliminado, anio = ejecutar_escritura(
+            session, lambda: delete_fiscal_period(session, period.id), descripcion=f"eliminar el ejercicio {period.anio}"
+        )
+        if eliminado:
+            st.success(f"Ejercicio {anio} eliminado.")
             st.rerun()
 
 
@@ -90,8 +212,8 @@ def render(session: Session, company: Company) -> None:
             f"Pasivo+Patrimonio: {format_money(bs.total_pasivo_patrimonio, company.moneda)} · {estado_eq}"
         )
 
-    tab_balance, tab_resultados, tab_historial = st.tabs(
-        ["Balance General", "Estado de Resultados", "Historial de este ejercicio"]
+    tab_balance, tab_resultados, tab_historial, tab_ejercicio = st.tabs(
+        ["Balance General", "Estado de Resultados", "Historial de este ejercicio", "Ejercicio"]
     )
 
     with tab_balance:
@@ -99,27 +221,13 @@ def render(session: Session, company: Company) -> None:
     with tab_resultados:
         _tabla_editable(session, period.id, Tipo.RESULTADOS, company.moneda, key=f"editor_resultados_{period.id}")
     with tab_historial:
-        registros = [
-            h for h in list_history(session, tabla_afectada="balance_entry")
-            + list_history(session, tabla_afectada="income_entry")
-        ]
-        registros.sort(key=lambda h: h.fecha, reverse=True)
+        registros = list_history(session, fiscal_period_id=period.id)
         if not registros:
-            st.info("Sin modificaciones registradas.")
-        else:
-            st.dataframe(
-                pd.DataFrame(
-                    [
-                        {
-                            "Fecha": h.fecha,
-                            "Tabla": h.tabla_afectada,
-                            "Operación": h.operacion,
-                            "Campo": h.campo,
-                            "Valor anterior": h.valor_anterior,
-                            "Valor nuevo": h.valor_nuevo,
-                        }
-                        for h in registros
-                    ]
-                ),
-                width="stretch",
+            st.info(
+                f"Sin modificaciones registradas para el ejercicio {period.anio}. Los cambios anteriores a la "
+                "actualización del historial no identifican el ejercicio; consúltelos en 'Historial de cambios'."
             )
+        else:
+            st.dataframe(historial_dataframe(session, registros), width="stretch")
+    with tab_ejercicio:
+        _administrar_ejercicio(session, period)

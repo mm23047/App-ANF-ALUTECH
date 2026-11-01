@@ -1,9 +1,16 @@
-"""Catalogo de cuentas financieras (seccion 5): alta, edicion, desactivacion."""
+"""Catalogo de cuentas financieras (seccion 5): alta, edicion, desactivacion.
+
+Una cuenta con importes capturados no puede cambiar su clasificacion
+(categoria, subcategoria ni efecto): alteraria los estados de ejercicios
+anteriores (hallazgo C-03). Para reclasificar se crea una cuenta nueva y
+se desactiva la anterior.
+"""
 from __future__ import annotations
 
 import streamlit as st
 from sqlalchemy.orm import Session
 
+from components.transacciones import ejecutar_escritura
 from database.enums import CategoriaPrincipal as Cat
 from database.enums import EfectoCuenta as Efecto
 from database.enums import EstadoCuenta
@@ -82,6 +89,23 @@ def _clasificacion_inputs(prefijo: str, categoria_default=Cat.ACTIVO, sub_defaul
     return categoria, subcategoria, efecto
 
 
+def _clasificacion_bloqueada(cuenta) -> None:
+    sub = f" / {NOMBRES_SUBCATEGORIA[cuenta.subcategoria]}" if cuenta.subcategoria else ""
+    efecto = ""
+    if cuenta.efecto:
+        efecto = " · efecto: " + ("Ingreso (suma)" if cuenta.efecto == Efecto.INGRESO else "Gasto (resta)")
+    st.text_input(
+        "Clasificación (bloqueada)",
+        value=f"{NOMBRES_CATEGORIA[cuenta.categoria_principal]}{sub}{efecto}",
+        disabled=True,
+        key=f"edit_clasif_bloqueada_{cuenta.id}",
+    )
+    st.caption(
+        "Esta cuenta tiene importes capturados: cambiar su clasificación alteraría los estados de ejercicios "
+        "anteriores. Para reclasificar, cree una cuenta nueva con la clasificación correcta y desactive esta."
+    )
+
+
 def render(session: Session) -> None:
     st.header("Catálogo de cuentas")
 
@@ -104,8 +128,9 @@ def render(session: Session) -> None:
             if not codigo.strip() or not nombre.strip():
                 st.error("El código y el nombre de la cuenta son obligatorios.")
             else:
-                try:
-                    create_account(
+                creada, _ = ejecutar_escritura(
+                    session,
+                    lambda: create_account(
                         session,
                         codigo=codigo.strip(),
                         nombre=nombre.strip(),
@@ -114,13 +139,12 @@ def render(session: Session) -> None:
                         naturaleza_saldo=naturaleza,
                         efecto=efecto,
                         orden_presentacion=int(orden),
-                    )
-                    session.commit()
+                    ),
+                    descripcion=f"crear la cuenta {codigo.strip()}",
+                )
+                if creada:
                     st.success(f"Cuenta {codigo} creada.")
                     st.rerun()
-                except ValueError as exc:
-                    session.rollback()
-                    st.error(str(exc))
 
     with tab_lista:
         mostrar_inactivas = st.checkbox("Mostrar cuentas inactivas", value=False)
@@ -132,10 +156,18 @@ def render(session: Session) -> None:
             etiqueta_sub = f" / {NOMBRES_SUBCATEGORIA[cuenta.subcategoria]}" if cuenta.subcategoria else ""
             estado_txt = "🟢 Activa" if cuenta.estado == EstadoCuenta.ACTIVA else "⚪ Inactiva"
             with st.expander(f"{cuenta.codigo} — {cuenta.nombre} ({NOMBRES_CATEGORIA[cuenta.categoria_principal]}{etiqueta_sub}) · {estado_txt}"):
+                tiene_mov = account_has_movements(session, cuenta.id)
                 nombre_edit = st.text_input("Nombre", value=cuenta.nombre, key=f"edit_nombre_{cuenta.id}")
-                categoria_edit, subcategoria_edit, efecto_edit = _clasificacion_inputs(
-                    f"edit_{cuenta.id}", cuenta.categoria_principal, cuenta.subcategoria, cuenta.efecto
-                )
+                if tiene_mov:
+                    _clasificacion_bloqueada(cuenta)
+                    clasificacion = {}
+                else:
+                    categoria_edit, subcategoria_edit, efecto_edit = _clasificacion_inputs(
+                        f"edit_{cuenta.id}", cuenta.categoria_principal, cuenta.subcategoria, cuenta.efecto
+                    )
+                    clasificacion = dict(
+                        categoria_principal=categoria_edit, subcategoria=subcategoria_edit, efecto=efecto_edit
+                    )
                 naturaleza_edit = st.selectbox(
                     "Naturaleza del saldo",
                     list(Nat),
@@ -150,29 +182,32 @@ def render(session: Session) -> None:
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("Guardar cambios", key=f"save_{cuenta.id}"):
-                        try:
-                            update_account(
+                        if not nombre_edit.strip():
+                            st.error("El nombre de la cuenta es obligatorio.")
+                        else:
+                            actualizada, _ = ejecutar_escritura(
                                 session,
-                                cuenta.id,
-                                nombre=nombre_edit.strip(),
-                                categoria_principal=categoria_edit,
-                                subcategoria=subcategoria_edit,
-                                efecto=efecto_edit,
-                                naturaleza_saldo=naturaleza_edit,
-                                orden_presentacion=int(orden_edit),
+                                lambda: update_account(
+                                    session,
+                                    cuenta.id,
+                                    nombre=nombre_edit.strip(),
+                                    naturaleza_saldo=naturaleza_edit,
+                                    orden_presentacion=int(orden_edit),
+                                    **clasificacion,
+                                ),
+                                descripcion=f"actualizar la cuenta {cuenta.codigo}",
                             )
-                            session.commit()
-                            st.success("Cuenta actualizada.")
-                            st.rerun()
-                        except ValueError as exc:
-                            session.rollback()
-                            st.error(str(exc))
+                            if actualizada:
+                                st.success("Cuenta actualizada.")
+                                st.rerun()
                 with col2:
                     if cuenta.estado == EstadoCuenta.ACTIVA:
-                        tiene_mov = account_has_movements(session, cuenta.id)
                         ayuda = " (tiene movimientos históricos; no se elimina, solo se desactiva)" if tiene_mov else ""
                         if st.button(f"Desactivar{ayuda}", key=f"deact_{cuenta.id}"):
-                            deactivate_account(session, cuenta.id)
-                            session.commit()
-                            st.success("Cuenta desactivada.")
-                            st.rerun()
+                            desactivada, _ = ejecutar_escritura(
+                                session, lambda: deactivate_account(session, cuenta.id),
+                                descripcion=f"desactivar la cuenta {cuenta.codigo}",
+                            )
+                            if desactivada:
+                                st.success("Cuenta desactivada.")
+                                st.rerun()

@@ -4,11 +4,16 @@ salvo que se indique lo contrario -- el llamador controla la transaccion.
 """
 from __future__ import annotations
 
+import datetime
+import uuid
+from contextlib import contextmanager
 from decimal import Decimal
 from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+from components.money import parse_anio, parse_importe
 
 from database.enums import (
     CategoriaPrincipal,
@@ -40,9 +45,33 @@ ENTRY_MODEL = {
     TipoEstadoFinanciero.RESULTADOS: IncomeEntry,
 }
 
+TABLA_ENTRADA = {
+    TipoEstadoFinanciero.BALANCE: "balance_entry",
+    TipoEstadoFinanciero.RESULTADOS: "income_entry",
+}
 
-def _to_decimal(valor) -> Decimal:
-    return valor if isinstance(valor, Decimal) else Decimal(str(valor))
+# Campos que determinan como participa una cuenta en los estados financieros
+# (hallazgo C-03). No se pueden cambiar si la cuenta tiene importes.
+CAMPOS_CLASIFICACION = ("categoria_principal", "subcategoria", "efecto")
+
+
+class EjercicioCerradoError(ValueError):
+    """Se intento modificar un ejercicio CERRADO."""
+
+
+class CatalogoProtegidoError(ValueError):
+    """Se intento reclasificar una cuenta que ya tiene importes."""
+
+
+def _verificar_ejercicio_abierto(session: Session, fiscal_period_id: int) -> FiscalPeriod:
+    period = session.get(FiscalPeriod, fiscal_period_id)
+    if period is None:
+        raise ValueError(f"El ejercicio fiscal {fiscal_period_id} no existe.")
+    if period.estado == EstadoEjercicio.CERRADO:
+        raise EjercicioCerradoError(
+            f"El ejercicio {period.anio} está cerrado y no admite cambios. Reábralo primero si necesita modificarlo."
+        )
+    return period
 
 
 # ---------------------------------------------------------------------------
@@ -104,14 +133,68 @@ def get_fiscal_period(session: Session, anio: int) -> FiscalPeriod | None:
 
 
 def get_or_create_fiscal_period(session: Session, anio: int) -> tuple[FiscalPeriod, bool]:
+    anio = parse_anio(anio)
     period = get_fiscal_period(session, anio)
     if period is not None:
         return period, False
     period = FiscalPeriod(anio=anio, estado=EstadoEjercicio.ABIERTO)
     session.add(period)
     session.flush()
-    log_change(session, "fiscal_period", period.id, "creacion", None, str(anio), "CREAR")
+    log_change(session, "fiscal_period", period.id, "creacion", None, str(anio), "CREAR", fiscal_period_id=period.id)
     return period, True
+
+
+def period_has_entries(session: Session, fiscal_period_id: int) -> bool:
+    for model in (BalanceEntry, IncomeEntry, InitialBalance):
+        if session.execute(select(model.id).where(model.fiscal_period_id == fiscal_period_id)).first() is not None:
+            return True
+    return False
+
+
+def close_fiscal_period(session: Session, fiscal_period_id: int) -> FiscalPeriod:
+    """Cierra un ejercicio: desde ese momento no admite captura, edicion,
+    importacion ni borrado de importes (tambien lo impiden disparadores en
+    la BD; ver database/migrations.py)."""
+    period = _verificar_ejercicio_abierto(session, fiscal_period_id)
+    period.estado = EstadoEjercicio.CERRADO
+    period.fecha_cierre = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    log_change(session, "fiscal_period", period.id, "estado", EstadoEjercicio.ABIERTO.value, EstadoEjercicio.CERRADO.value,
+               "CERRAR", fiscal_period_id=period.id)
+    session.flush()
+    return period
+
+
+def reopen_fiscal_period(session: Session, fiscal_period_id: int) -> FiscalPeriod:
+    period = session.get(FiscalPeriod, fiscal_period_id)
+    if period is None:
+        raise ValueError(f"El ejercicio fiscal {fiscal_period_id} no existe.")
+    if period.estado != EstadoEjercicio.CERRADO:
+        raise ValueError(f"El ejercicio {period.anio} no está cerrado.")
+    period.estado = EstadoEjercicio.ABIERTO
+    period.fecha_cierre = None
+    log_change(session, "fiscal_period", period.id, "estado", EstadoEjercicio.CERRADO.value, EstadoEjercicio.ABIERTO.value,
+               "REABRIR", fiscal_period_id=period.id)
+    session.flush()
+    return period
+
+
+def delete_fiscal_period(session: Session, fiscal_period_id: int) -> int:
+    """Elimina un ejercicio abierto que no tiene importes (balance,
+    resultados ni saldos iniciales). Devuelve el año eliminado."""
+    period = _verificar_ejercicio_abierto(session, fiscal_period_id)
+    if period_has_entries(session, fiscal_period_id):
+        raise ValueError(
+            f"El ejercicio {period.anio} tiene importes capturados y no se puede eliminar. "
+            "Solo se eliminan ejercicios vacíos."
+        )
+    anio = period.anio
+    for status in list(period.statement_statuses):
+        log_change(session, "statement_status", status.id, f"estado_{status.tipo.value}", status.estado.value, None,
+                   "ELIMINAR", fiscal_period_id=period.id)
+    log_change(session, "fiscal_period", period.id, "creacion", str(anio), None, "ELIMINAR", fiscal_period_id=period.id)
+    session.delete(period)
+    session.flush()
+    return anio
 
 
 def get_previous_period(session: Session, anio: int) -> FiscalPeriod | None:
@@ -212,7 +295,7 @@ def create_account(
     )
     session.add(account)
     session.flush()
-    log_change(session, "account", account.id, "creacion", None, f"{codigo} - {nombre}", "CREAR")
+    log_change(session, "account", account.id, "creacion", None, f"{codigo} - {nombre}", "CREAR", account_id=account.id)
     return account
 
 
@@ -231,6 +314,14 @@ def update_account(session: Session, account_id: int, **cambios) -> Account:
     if account is None:
         raise ValueError(f"Cuenta {account_id} no encontrada.")
 
+    reclasificados = [c for c in CAMPOS_CLASIFICACION if c in cambios and cambios[c] != getattr(account, c)]
+    if reclasificados and account_has_movements(session, account_id):
+        raise CatalogoProtegidoError(
+            f"La cuenta {account.codigo} — {account.nombre} tiene importes capturados: no se puede cambiar "
+            f"{', '.join(reclasificados)} porque alteraría los estados de ejercicios anteriores. Para reclasificar, "
+            "cree una cuenta nueva con la clasificación correcta y desactive esta."
+        )
+
     categoria = cambios.get("categoria_principal", account.categoria_principal)
     subcategoria = cambios.get("subcategoria", account.subcategoria)
     efecto = cambios.get("efecto", account.efecto)
@@ -245,7 +336,8 @@ def update_account(session: Session, account_id: int, **cambios) -> Account:
     for campo, nuevo_valor in cambios.items():
         anterior = getattr(account, campo)
         if anterior != nuevo_valor:
-            log_change(session, "account", account.id, campo, str(anterior), str(nuevo_valor), "EDITAR")
+            log_change(session, "account", account.id, campo, _texto(anterior), _texto(nuevo_valor), "EDITAR",
+                       account_id=account.id)
             setattr(account, campo, nuevo_valor)
     return account
 
@@ -255,7 +347,8 @@ def deactivate_account(session: Session, account_id: int) -> Account:
     if account is None:
         raise ValueError(f"Cuenta {account_id} no encontrada.")
     if account.estado != EstadoCuenta.INACTIVA:
-        log_change(session, "account", account.id, "estado", account.estado.value, EstadoCuenta.INACTIVA.value, "DESACTIVAR")
+        log_change(session, "account", account.id, "estado", account.estado.value, EstadoCuenta.INACTIVA.value, "DESACTIVAR",
+                   account_id=account.id)
         account.estado = EstadoCuenta.INACTIVA
     return account
 
@@ -287,6 +380,43 @@ def list_entries(
     return [(account, valor) for account, valor in rows]
 
 
+def _upsert_importe(session: Session, model, tabla: str, *, fiscal_period_id: int, account_id: int, valor) -> str | None:
+    """Crea o actualiza un importe. El valor se valida con parse_importe
+    (sin redondeo). Devuelve "CREAR", "EDITAR" o None si no cambio."""
+    valor = parse_importe(valor)
+    _verificar_ejercicio_abierto(session, fiscal_period_id)
+    existente = session.execute(
+        select(model).where(model.fiscal_period_id == fiscal_period_id, model.account_id == account_id)
+    ).scalars().first()
+    if existente is None:
+        entrada = model(fiscal_period_id=fiscal_period_id, account_id=account_id, valor=valor)
+        session.add(entrada)
+        session.flush()
+        log_change(session, tabla, entrada.id, "valor", None, str(valor), "CREAR",
+                   fiscal_period_id=fiscal_period_id, account_id=account_id)
+        return "CREAR"
+    if existente.valor != valor:
+        log_change(session, tabla, existente.id, "valor", str(existente.valor), str(valor), "EDITAR",
+                   fiscal_period_id=fiscal_period_id, account_id=account_id)
+        existente.valor = valor
+        return "EDITAR"
+    return None
+
+
+def _delete_importe(session: Session, model, tabla: str, *, fiscal_period_id: int, account_id: int) -> bool:
+    _verificar_ejercicio_abierto(session, fiscal_period_id)
+    existente = session.execute(
+        select(model).where(model.fiscal_period_id == fiscal_period_id, model.account_id == account_id)
+    ).scalars().first()
+    if existente is None:
+        return False
+    log_change(session, tabla, existente.id, "valor", str(existente.valor), None, "ELIMINAR",
+               fiscal_period_id=fiscal_period_id, account_id=account_id)
+    session.delete(existente)
+    session.flush()
+    return True
+
+
 def upsert_entry(
     session: Session,
     *,
@@ -294,35 +424,15 @@ def upsert_entry(
     account_id: int,
     valor,
     tipo: TipoEstadoFinanciero,
-) -> None:
-    model = ENTRY_MODEL[tipo]
-    valor = _to_decimal(valor)
-    existente = session.execute(
-        select(model).where(
-            model.fiscal_period_id == fiscal_period_id, model.account_id == account_id
-        )
-    ).scalars().first()
-
-    tabla = "balance_entry" if tipo == TipoEstadoFinanciero.BALANCE else "income_entry"
-    if existente is None:
-        session.add(model(fiscal_period_id=fiscal_period_id, account_id=account_id, valor=valor))
-        log_change(session, tabla, account_id, "valor", None, str(valor), "CREAR")
-    elif existente.valor != valor:
-        log_change(session, tabla, existente.id, "valor", str(existente.valor), str(valor), "EDITAR")
-        existente.valor = valor
+) -> str | None:
+    return _upsert_importe(session, ENTRY_MODEL[tipo], TABLA_ENTRADA[tipo],
+                           fiscal_period_id=fiscal_period_id, account_id=account_id, valor=valor)
 
 
-def delete_entry(session: Session, *, fiscal_period_id: int, account_id: int, tipo: TipoEstadoFinanciero) -> None:
-    model = ENTRY_MODEL[tipo]
-    existente = session.execute(
-        select(model).where(
-            model.fiscal_period_id == fiscal_period_id, model.account_id == account_id
-        )
-    ).scalars().first()
-    if existente is not None:
-        tabla = "balance_entry" if tipo == TipoEstadoFinanciero.BALANCE else "income_entry"
-        log_change(session, tabla, existente.id, "valor", str(existente.valor), None, "ELIMINAR")
-        session.delete(existente)
+def delete_entry(session: Session, *, fiscal_period_id: int, account_id: int, tipo: TipoEstadoFinanciero) -> bool:
+    """Borra un importe (queda como "sin dato"), con registro en el historial."""
+    return _delete_importe(session, ENTRY_MODEL[tipo], TABLA_ENTRADA[tipo],
+                           fiscal_period_id=fiscal_period_id, account_id=account_id)
 
 
 # ---------------------------------------------------------------------------
@@ -338,20 +448,14 @@ def get_initial_balances_map(session: Session, fiscal_period_id: int) -> dict[in
     return {account_id: valor for account_id, valor in rows}
 
 
-def upsert_initial_balance(session: Session, *, fiscal_period_id: int, account_id: int, valor) -> None:
-    valor = _to_decimal(valor)
-    existente = session.execute(
-        select(InitialBalance).where(
-            InitialBalance.fiscal_period_id == fiscal_period_id,
-            InitialBalance.account_id == account_id,
-        )
-    ).scalars().first()
-    if existente is None:
-        session.add(InitialBalance(fiscal_period_id=fiscal_period_id, account_id=account_id, valor=valor))
-        log_change(session, "initial_balance", account_id, "valor", None, str(valor), "CREAR")
-    elif existente.valor != valor:
-        log_change(session, "initial_balance", existente.id, "valor", str(existente.valor), str(valor), "EDITAR")
-        existente.valor = valor
+def upsert_initial_balance(session: Session, *, fiscal_period_id: int, account_id: int, valor) -> str | None:
+    return _upsert_importe(session, InitialBalance, "initial_balance",
+                           fiscal_period_id=fiscal_period_id, account_id=account_id, valor=valor)
+
+
+def delete_initial_balance(session: Session, *, fiscal_period_id: int, account_id: int) -> bool:
+    return _delete_importe(session, InitialBalance, "initial_balance",
+                           fiscal_period_id=fiscal_period_id, account_id=account_id)
 
 
 # ---------------------------------------------------------------------------
@@ -379,17 +483,43 @@ def set_statement_status(
             StatementStatus.tipo == tipo,
         )
     ).scalars().first()
+    _verificar_ejercicio_abierto(session, fiscal_period_id)
     if status is None:
-        session.add(StatementStatus(fiscal_period_id=fiscal_period_id, tipo=tipo, estado=estado))
-        log_change(session, "statement_status", fiscal_period_id, f"estado_{tipo.value}", None, estado.value, "CREAR")
+        status = StatementStatus(fiscal_period_id=fiscal_period_id, tipo=tipo, estado=estado)
+        session.add(status)
+        session.flush()
+        log_change(session, "statement_status", status.id, f"estado_{tipo.value}", None, estado.value, "CREAR",
+                   fiscal_period_id=fiscal_period_id)
     elif status.estado != estado:
-        log_change(session, "statement_status", fiscal_period_id, f"estado_{tipo.value}", status.estado.value, estado.value, "EDITAR")
+        log_change(session, "statement_status", status.id, f"estado_{tipo.value}", status.estado.value, estado.value,
+                   "EDITAR", fiscal_period_id=fiscal_period_id)
         status.estado = estado
 
 
 # ---------------------------------------------------------------------------
 # Change history (secciones 8 y 17)
 # ---------------------------------------------------------------------------
+
+def _texto(valor) -> str | None:
+    if valor is None:
+        return None
+    return valor.value if hasattr(valor, "value") else str(valor)
+
+
+@contextmanager
+def lote(session: Session):
+    """Agrupa con un mismo lote_id los cambios del historial hechos dentro
+    del bloque (un guardado, una importacion). Devuelve el lote_id."""
+    anterior = session.info.get("lote_id")
+    session.info["lote_id"] = uuid.uuid4().hex
+    try:
+        yield session.info["lote_id"]
+    finally:
+        if anterior is None:
+            session.info.pop("lote_id", None)
+        else:
+            session.info["lote_id"] = anterior
+
 
 def log_change(
     session: Session,
@@ -399,7 +529,11 @@ def log_change(
     valor_anterior: str | None,
     valor_nuevo: str | None,
     operacion: str,
+    *,
+    fiscal_period_id: int | None = None,
+    account_id: int | None = None,
 ) -> None:
+    """registro_id debe ser siempre el id de la fila de `tabla_afectada`."""
     session.add(
         ChangeHistory(
             tabla_afectada=tabla_afectada,
@@ -408,17 +542,29 @@ def log_change(
             valor_anterior=valor_anterior,
             valor_nuevo=valor_nuevo,
             operacion=operacion,
+            fiscal_period_id=fiscal_period_id,
+            account_id=account_id,
+            lote_id=session.info.get("lote_id"),
         )
     )
 
 
 def list_history(
-    session: Session, tabla_afectada: str | None = None, registro_id: int | None = None
+    session: Session,
+    tabla_afectada: str | None = None,
+    registro_id: int | None = None,
+    *,
+    fiscal_period_id: int | None = None,
+    account_id: int | None = None,
 ) -> list[ChangeHistory]:
     stmt = select(ChangeHistory)
     if tabla_afectada is not None:
         stmt = stmt.where(ChangeHistory.tabla_afectada == tabla_afectada)
     if registro_id is not None:
         stmt = stmt.where(ChangeHistory.registro_id == registro_id)
-    stmt = stmt.order_by(ChangeHistory.fecha.desc())
+    if fiscal_period_id is not None:
+        stmt = stmt.where(ChangeHistory.fiscal_period_id == fiscal_period_id)
+    if account_id is not None:
+        stmt = stmt.where(ChangeHistory.account_id == account_id)
+    stmt = stmt.order_by(ChangeHistory.fecha.desc(), ChangeHistory.id.desc())
     return list(session.execute(stmt).scalars())

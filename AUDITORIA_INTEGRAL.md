@@ -9,6 +9,37 @@ Documentos relacionados: `PLAN_DE_CORRECCION.md`, `MATRIZ_DE_PRUEBAS.md`, `INVEN
 
 ---
 
+## 0. Estado de corrección (actualizado 2026-11-01, tras la fase 1)
+
+Los hallazgos originales se conservan sin cambios en las secciones siguientes. Esta tabla registra su estado.
+
+| ID | Estado | Evidencia |
+|---|---|---|
+| C-01 | CORREGIDO | `database/backup_utils.py`, `app.py`, `modules/backup.py`. H01 y H02 aprueban; `tests/test_fase1_restauracion.py` |
+| C-02 | CORREGIDO | `modules/excel_import.py` (vista previa solo de lectura), `app.py` (`render_scope`). D01 y D02 aprueban |
+| C-03 | CORREGIDO (bloqueo simple) | `database/repositories.update_account`, `modules/accounts.py`. B01–B03 aprueban |
+| A-03 | CORREGIDO | `modules/data_entry.py`: campos vacíos, solo se guardan importes informados. I01 aprueba. Los 19 ceros heredados de 2021 se conservan por decisión del usuario |
+| A-07 | CORREGIDO | `components/money.py` + `components/transacciones.py`. D03, D04 e I02 aprueban |
+| A-08 | CORREGIDO | `change_history.fiscal_period_id/account_id/lote_id`; id real del registro; filtros. C01 aprueba. Las 52 filas heredadas no se reescriben (sus columnas nuevas quedan en NULL) |
+| M-01 | CORREGIDO | `parse_anio` (1990–2100, entero exacto). D05 y D06 aprueban |
+| M-02 | CORREGIDO | Importes en centavos enteros (`Centavos`) + `parse_importe`. D07 e I03 aprueban; E01 y E02 siguen aprobando |
+| M-05 | CORREGIDO | Cierre, reapertura, borrado de importes y de ejercicios vacíos; disparadores en la BD |
+| M-06 | CORREGIDO | `render_scope` y `ejecutar_escritura` |
+| M-09 | CORREGIDO | `database/migrations.py` (user_version) y `sqlite3.backup` con verificación |
+| M-10 | PARCIAL | Servidor solo en localhost (fase 0). Falta la confirmación de cambios masivos (fase 4.2) |
+| B-08 | CORREGIDO | `parse_importe(..., redondear=True)` con HALF_UP. E03 aprueba |
+| Resto | PENDIENTE | A-01, A-02, A-04, A-05, A-06, M-03, M-04, M-07, M-08, B-01–B07, B-09 |
+
+**Hallazgo nuevo M-11 (preexistente, detectado en la fase 1).** Verificación: COMPROBADO (prueba de humo con `AppTest`).
+- **Archivo:** `reports/vertical_report.py` (líneas 22–23 y 46–48; igual en el reporte de resultados).
+- **Problema:** convierte los importes a `float` y después llama a `format_money(float)`, que usa `Decimal.quantize`.
+- **Consecuencia:** las páginas "Análisis Vertical del Balance General" y "del Estado de Resultados" fallan con `AttributeError: 'float' object has no attribute 'quantize'` en cuanto el ejercicio tiene importes. Con la BD actual (solo ceros) no se manifiesta, porque la base es 0 y el reporte termina antes.
+- **Antigüedad:** el archivo no cambió respecto a la línea base (`git diff 2913c49`), y el `format_money` original también falla con un `float`.
+- **Solución propuesta:** se corrige junto con M-03 en la fase 3.
+- **Prueba:** `tests/test_fase1_paginas.py` (2 casos fallan hoy).
+
+---
+
 ## 1. Resumen ejecutivo
 
 La aplicación tiene una base razonable:

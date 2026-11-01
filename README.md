@@ -44,18 +44,54 @@ la terminal no borra la información.
 **Primer uso:** la aplicación pedirá registrar los datos de la empresa
 antes de habilitar el resto de los módulos (menú "Datos de la empresa").
 
+El servidor solo escucha en `localhost` (`.streamlit/config.toml`): la
+aplicación no tiene autenticación y no debe ser accesible desde la red.
+
+**Actualización de la base de datos:** al arrancar, la aplicación lleva la
+BD a la versión de esquema vigente (`PRAGMA user_version`, ver
+`database/migrations.py`). Si hay que migrar una BD con datos, antes crea
+y verifica una copia en `data/backups/financiera_pre_migracion_*.db`. Si
+algún importe no puede convertirse sin redondear, la migración se detiene
+y la BD no cambia.
+
 ## 4. Copias de seguridad
 
 Desde el menú "Copias de seguridad":
 
-- **Crear copia de seguridad ahora**: guarda una copia con marca de tiempo
-  en `data/backups/`, descargable desde la misma pantalla.
-- **Restaurar**: selecciona una copia existente o sube un archivo `.db`,
-  confirma la advertencia (la restauración sobrescribe todos los datos
-  actuales) y la aplicación se reinicia con esos datos.
+- **Crear copia de seguridad ahora**: guarda en `data/backups/` una copia
+  hecha con la API de respaldo de SQLite y verificada (`integrity_check`
+  y conteo de filas).
+- **Restaurar**: selecciona una copia existente o sube un archivo `.db`.
+  La aplicación valida que sea una SQLite íntegra de esta aplicación y
+  muestra su contenido (empresa, ejercicios, registros) antes de pedir la
+  confirmación. Al restaurar, guarda primero una copia exacta de la BD
+  actual (`financiera_pre_restauracion_*.db`). Si algo falla, la BD actual
+  queda igual que antes. Si otra pestaña tiene la BD abierta, la
+  restauración se rechaza: cierre las demás pestañas y repita.
 
 También puedes respaldar manualmente copiando el archivo
 `data/financiera.db` mientras la aplicación está cerrada.
+
+## 4.1 Captura, ejercicios e historial
+
+- Un campo de importe vacío significa **sin dato** y no se guarda. Un `0`
+  escrito explícitamente se guarda como importe cero. Vaciar un campo no
+  borra el importe guardado: use "Borrar importe" (Modificación de datos).
+- Los importes se guardan como centavos enteros. Se aceptan como máximo dos
+  decimales: en la captura manual un tercer decimal se redondea (redondeo
+  comercial) con aviso; en la importación Excel se rechaza, salvo el ruido
+  binario de Excel (p. ej. 0.30000000000000004), que se redondea con aviso
+  en la vista previa.
+- La vista previa de la importación no modifica la BD: indica qué
+  ejercicios se crearían. Al confirmar se importa todo o nada.
+- "Modificación de datos › Ejercicio" permite cerrar un ejercicio, lo que
+  bloquea su captura, edición, importación y borrado (también desde la BD
+  mediante disparadores), reabrirlo y eliminar ejercicios vacíos.
+- Una cuenta con importes no puede cambiar su categoría, subcategoría ni
+  efecto. Para reclasificar, cree una cuenta nueva y desactive la anterior.
+- El historial registra fecha, operación, tabla, id real del registro,
+  ejercicio, cuenta, valores anterior y nuevo y lote de cada guardado o
+  importación.
 
 ## 5. Pruebas automatizadas
 
@@ -63,14 +99,21 @@ También puedes respaldar manualmente copiando el archivo
 pytest tests/ -v
 ```
 
-Las pruebas usan bases de datos SQLite temporales y datos sintéticos
-(nunca tocan `data/financiera.db`). Cubren los 18 casos requeridos:
-registro/modificación de cuentas, registro de ejercicios, persistencia,
-cálculo de activos/pasivos/patrimonio, validación de la ecuación contable,
-cálculo de utilidad neta, análisis vertical (balance y resultados), margen
-neto, rotación de activos, multiplicador del capital, ROE DuPont y su
-coincidencia con el ROE directo, importación de Excel y exportación a
-PDF/Excel.
+Las pruebas usan bases de datos SQLite temporales y datos sintéticos.
+`tests/conftest.py` redirige la ruta de la BD a un archivo temporal y hace
+fallar la ejecución si cambia el SHA-256 de `data/financiera.db`.
+
+Estado actual (2026-11-01, tras la fase 1 del `PLAN_DE_CORRECCION.md`):
+**185 aprobadas y 15 fallidas de 200**.
+- 30 pruebas originales: todas aprueban.
+- 47 pruebas de la auditoría (`tests/test_auditoria.py`): 34 aprueban. Las
+  13 que fallan corresponden a defectos aún no corregidos (fases 2 a 4).
+- 123 pruebas de la fase 1 (`tests/test_fase1_*.py`): 121 aprueban. Las 2
+  que fallan detectan el hallazgo M-11 (páginas de análisis vertical).
+
+Que una prueba falle significa que el defecto que describe sigue presente.
+Detalle en `MATRIZ_DE_PRUEBAS.md`. Las cifras de los reportes todavía no se
+han conciliado con los estados publicados de Alutech.
 
 ## 6. Plantillas de Excel
 

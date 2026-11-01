@@ -3,7 +3,33 @@
 **Fecha de ejecución:** 2026-11-01 · **Entorno:** Windows 11, Python 3.12.10 (`.venv`), pytest 8.4.2, Streamlit 1.66.1, SQLAlchemy 2.0.55
 **Base de datos:** todas las pruebas usan SQLite temporales. El hash de `data/financiera.db` fue el mismo antes y después (`f026863d…630a82d`).
 
-## Resumen
+## Estado tras la fase 1 (2026-11-01)
+
+Comando: `.venv\Scripts\python -m pytest tests/ -q` → **185 aprobadas, 15 fallidas** (200 pruebas).
+
+| Conjunto | Ejecutadas | Aprobadas | Fallidas | Fallidas (motivo) |
+|---|---|---|---|---|
+| Originales (6 archivos) | 30 | 30 | 0 | — |
+| Auditoría (`tests/test_auditoria.py`) | 47 | 34 | 13 | A01–A04, A06, F01, F03, F08 (fase 2); F06, F07, G01, G02 (fase 3); D08 (fase 4) |
+| Nuevas de la fase 1 | 123 | 121 | 2 | Páginas de análisis vertical: hallazgo nuevo M-11, preexistente (fase 3) |
+
+Las 17 pruebas de auditoría que corresponden a la fase 1 pasaron de FALLIDO a APROBADO: B01–B03, C01, D01–D07, E03, H01, H02, I01–I03.
+
+Pruebas nuevas de la fase 1:
+
+| Archivo | Pruebas | Cubre |
+|---|---|---|
+| `tests/test_fase1_money.py` | 50 | `parse_importe` (vacío, NaN, ±inf, comas, >2 decimales, HALF_UP con aviso, rango NUMERIC(18,2), floats de más de 15 dígitos, numpy) y `parse_anio` |
+| `tests/test_fase1_migracion.py` | 12 | Migración v0 → v3 sin pérdida (comparación fila por fila), conservación de 19 ceros, copia previa íntegra, idempotencia, mismo esquema que una BD nueva, detención ante importes ambiguos con BD intacta (mismo SHA-256), historial heredado sin reescribir, esquema futuro rechazado |
+| `tests/test_fase1_restauracion.py` | 17 | Copia con API SQLite, inspección, 7 tipos de archivo inválido, restauración válida con copia previa de mismo SHA-256, restauración de copias v0, reemplazo bloqueado (simulado y bloqueo real de Windows), diario pendiente, reversión tras fallo posterior |
+| `tests/test_fase1_integridad.py` | 27 | `render_scope` sin commit, `ejecutar_escritura`, catálogo protegido, cierre/reapertura (repositorio y disparadores), eliminación de ejercicios vacíos, borrado de importes, historial (id real, ejercicio, cuenta, lote, filtros), captura sin ceros implícitos, edición e importación en ejercicio cerrado, importación todo-o-nada, ruido binario frente a tercer decimal |
+| `tests/test_fase1_paginas.py` | 17 | Las 16 páginas del `app.py` real con `AppTest` (en subproceso) sin excepciones y sin modificar la BD |
+
+Verificaciones no ejecutadas: siguen pendientes N-01, N-04, N-05, N-06 y N-07. N-02 está cubierta en parte (las 16 páginas se renderizan con `AppTest`, sin navegador). En N-03 se verificó el bloqueo de archivo con otra conexión abierta, no con dos pestañas reales. N-08: el servidor escucha solo en 127.0.0.1 (fase 0), sin prueba desde un segundo equipo.
+
+---
+
+## Resumen (auditoría original)
 
 | Conjunto | Ejecutadas | Aprobadas | Fallidas | No ejecutadas |
 |---|---|---|---|---|
@@ -69,27 +95,27 @@
 | A07 | DuPont | Ingresos = 0 | I 0 | No disponible | No disponible | APROBADO | — |
 | A08 | DuPont | Activo promedio = 0 | A 0 | No disponible | No disponible | APROBADO | — |
 | A09 | DuPont | Utilidad negativa | A 1.000, P 500, UN −100 | ROE −20%, margen −10% | Correcto | APROBADO | — |
-| B01 | Catálogo | Reclasificar ACTIVO → INGRESOS con saldo | 1001 = 500 en 2021 | Bloqueado o importe conservado | Activo 500 → 0; ingresos 0: **el importe desaparece** | FALLIDO | C-03 |
-| B02 | Catálogo | Cambiar efecto INGRESO → GASTO | 6003 = 100 en 2021 | UN 2021 sin cambio | UN 1.100 → 900 | FALLIDO | C-03 |
-| B03 | Catálogo | CORRIENTE → NO_CORRIENTE | 1003 = 400 | AC 2021 sin cambio | AC 400 → 0 | FALLIDO | C-03 |
+| B01 | Catálogo | Reclasificar ACTIVO → INGRESOS con saldo | 1001 = 500 en 2021 | Bloqueado o importe conservado | Activo 500 → 0; ingresos 0: **el importe desaparece** | APROBADO (fase 1; antes FALLIDO) | C-03 |
+| B02 | Catálogo | Cambiar efecto INGRESO → GASTO | 6003 = 100 en 2021 | UN 2021 sin cambio | UN 1.100 → 900 | APROBADO (fase 1; antes FALLIDO) | C-03 |
+| B03 | Catálogo | CORRIENTE → NO_CORRIENTE | 1003 = 400 | AC 2021 sin cambio | AC 400 → 0 | APROBADO (fase 1; antes FALLIDO) | C-03 |
 | B04 | BD | Importe con ejercicio inexistente | `fiscal_period_id=999` | IntegrityError | IntegrityError | APROBADO | — |
 | B05 | BD | Importe duplicado cuenta/ejercicio | 2 filas iguales | IntegrityError | IntegrityError | APROBADO | — |
 | B06 | BD | Modificar 2022 no altera 2021 | 2022: 1001 = 1.500 | Activo 2021 = 1.000 | 1.000 | APROBADO | — |
-| C01 | Historial | CREAR identifica registro y ejercicio | 1002 = 10 | `registro_id` = id del registro; columna de ejercicio | `registro_id=2` (id de cuenta) y entry.id=1; sin columna de ejercicio | FALLIDO | A-08 |
-| D01 | Importación | Solo vista previa (sin confirmar) | XLSX período 2024 | No se crea 2024 | **Ejercicio 2024 creado** + 1 registro en el historial | FALLIDO | C-02 |
-| D02 | Importación | Cancelar | XLSX período 2025 + "Cancelar" | No se crea 2025 | **Ejercicio 2025 creado** | FALLIDO | C-02 |
-| D03 | Importación | Valor vacío | Celda vacía | Estado ≠ OK | Estado **OK**, valor `NaN` | FALLIDO | A-07 |
-| D04 | Importación | Confirmar con valor vacío | Igual + Confirmar | Error controlado, nada guardado | **IntegrityError no controlado** (NOT NULL) | FALLIDO | A-07 |
-| D05 | Importación | Período decimal | 2021.9 | Rechazado | OK, período 2021 | FALLIDO | M-01 |
-| D06 | Importación | Período fuera de rango | 21 | Rechazado | OK | FALLIDO | M-01 |
-| D07 | Importación | Más de 2 decimales | 0,1 + 0,2 | Rechazado o cuantizado | 0.30000000000000004, OK | FALLIDO | M-02 |
+| C01 | Historial | CREAR identifica registro y ejercicio | 1002 = 10 | `registro_id` = id del registro; columna de ejercicio | `registro_id=2` (id de cuenta) y entry.id=1; sin columna de ejercicio | APROBADO (fase 1; antes FALLIDO) | A-08 |
+| D01 | Importación | Solo vista previa (sin confirmar) | XLSX período 2024 | No se crea 2024 | **Ejercicio 2024 creado** + 1 registro en el historial | APROBADO (fase 1; antes FALLIDO) | C-02 |
+| D02 | Importación | Cancelar | XLSX período 2025 + "Cancelar" | No se crea 2025 | **Ejercicio 2025 creado** | APROBADO (fase 1; antes FALLIDO) | C-02 |
+| D03 | Importación | Valor vacío | Celda vacía | Estado ≠ OK | Estado **OK**, valor `NaN` | APROBADO (fase 1; antes FALLIDO) | A-07 |
+| D04 | Importación | Confirmar con valor vacío | Igual + Confirmar | Error controlado, nada guardado | **IntegrityError no controlado** (NOT NULL) | APROBADO (fase 1; antes FALLIDO) | A-07 |
+| D05 | Importación | Período decimal | 2021.9 | Rechazado | OK, período 2021 | APROBADO (fase 1; antes FALLIDO) | M-01 |
+| D06 | Importación | Período fuera de rango | 21 | Rechazado | OK | APROBADO (fase 1; antes FALLIDO) | M-01 |
+| D07 | Importación | Más de 2 decimales | 0,1 + 0,2 | Rechazado o cuantizado | 0.30000000000000004, OK | APROBADO (fase 1; antes FALLIDO) | M-02 |
 | D08 | Importación | Código numérico | 1001.0 | OK | CUENTA_DESCONOCIDA | FALLIDO | B-06 |
 | D09 | Importación | Duplicado dentro del archivo | 1001/2021 × 2 | OK + DUPLICADA | Correcto | APROBADO | — |
 | D10 | Importación | Errores parciales | 1 válida + 1 inexistente | Solo se importa la válida | {1001: 100,00} | APROBADO | — |
 | D11 | Importación | Reimportar el mismo archivo | 2 veces | 1 registro | 1 | APROBADO | — |
 | E01 | Precisión | Importe grande | 123.456.789.012.345,67 | Exacto tras reabrir | Exacto | APROBADO | — |
 | E02 | Precisión | Importes típicos | 0,10; 0,20; 1.234.567,89; −98.765,43; 99.999.999,99 | Suma exacta | 101.135.802,75 exacto | APROBADO | — |
-| E03 | Precisión | Conversión de float en la captura | 2,675 | 2,68 (HALF_UP) | 2,67 | FALLIDO | B-08 |
+| E03 | Precisión | Conversión de float en la captura | 2,675 | 2,68 (HALF_UP) | 2,67 | APROBADO (fase 1; antes FALLIDO) | B-08 |
 | F01 | Balance | Depreciación positiva | PPE 1.000, dep. +300 | ANC 700 o rechazo | ANC **1.300** | FALLIDO | A-05 |
 | F02 | Balance | Depreciación negativa | PPE 1.000, dep. −300 | ANC 700 | 700 | APROBADO | — |
 | F03 | ER | Costo capturado negativo | I 1.000, CV −600 | UB 400 o rechazo | UB **1.600** | FALLIDO | A-05 |
@@ -102,11 +128,11 @@
 | G02 | Excel | ER sin gastos ni ISR | I 1.000, CV 600 | Sin circulares | `C18`, `C20`, `C22 =C20-C22` circulares | FALLIDO | A-06 |
 | G03 | PDF | Nombre con "&" | "Acero & Aluminio, S. A. de C. V." | PDF válido | Válido | APROBADO | — |
 | G04 | Exportación | No modifica la BD | Exportar los 4 archivos | Hash igual | Igual | APROBADO | — |
-| H01 | Restauración | Archivo corrupto (`app.py` real con AppTest) | Bytes no SQLite | BD intacta | **BD sobrescrita**; `DatabaseError: file is not a database` | FALLIDO | C-01 |
-| H02 | Restauración | SQLite ajena | BD con tabla `x` | Rechazada | "Base de datos restaurada correctamente."; **empresa = None** | FALLIDO | C-01 |
-| I01 | Captura | Guardar el formulario sin completar | Formulario Balance 2021 | Sin registros fantasma | 19 registros 0,00; "tiene datos" y "cuadra" | FALLIDO | A-03 |
-| I02 | Edición | Vaciar una celda | 1001 = 100 → NaN | Error controlado | **IntegrityError no controlado** | FALLIDO | A-07 |
-| I03 | Persistencia | Tipo almacenado | 1.234,56 | Decimal exacto (text/integer) | `real` | FALLIDO | M-02 |
+| H01 | Restauración | Archivo corrupto (`app.py` real con AppTest) | Bytes no SQLite | BD intacta | **BD sobrescrita**; `DatabaseError: file is not a database` | APROBADO (fase 1; antes FALLIDO) | C-01 |
+| H02 | Restauración | SQLite ajena | BD con tabla `x` | Rechazada | "Base de datos restaurada correctamente."; **empresa = None** | APROBADO (fase 1; antes FALLIDO) | C-01 |
+| I01 | Captura | Guardar el formulario sin completar | Formulario Balance 2021 | Sin registros fantasma | 19 registros 0,00; "tiene datos" y "cuadra" | APROBADO (fase 1; antes FALLIDO) | A-03 |
+| I02 | Edición | Vaciar una celda | 1001 = 100 → NaN | Error controlado | **IntegrityError no controlado** | APROBADO (fase 1; antes FALLIDO) | A-07 |
+| I03 | Persistencia | Tipo almacenado | 1.234,56 | Decimal exacto (text/integer) | `real` | APROBADO (fase 1; antes FALLIDO) | M-02 |
 
 **Simulaciones usadas:**
 - D01, D02, D04, D10, D11: `st.file_uploader`, `st.button` y `st.checkbox`.

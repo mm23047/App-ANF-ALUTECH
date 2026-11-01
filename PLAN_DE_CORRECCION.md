@@ -1,7 +1,7 @@
 # Plan de corrección
 
 **Base:** `AUDITORIA_INTEGRAL.md` (2026-11-01). Los identificadores (C-, A-, M-, B-) remiten a los hallazgos de ese documento.
-**Estado:** Fase 0 completada (2026-11-01). Fases 1–5 pendientes de autorización.
+**Estado:** Fases 0 y 1 completadas (2026-11-01). Fases 2–5 pendientes de autorización.
 
 ## Principios de orden
 
@@ -48,6 +48,25 @@
 ---
 
 ## FASE 1. Integridad y protección de datos
+
+**Estado: COMPLETADA (2026-11-01).** Decisiones aprobadas por el usuario: conservar intactos los 19 importes 0.00 de 2021; migrar los importes a centavos enteros (primero sobre una copia, con comprobación fila por fila); bloqueo simple del catálogo (opción a de 1.4).
+
+| Paso | Resultado | Evidencia |
+|---|---|---|
+| 1.1 | `database/migrations.py`: `PRAGMA user_version` (v0 → v3), pasos idempotentes en **una sola transacción**, copia previa verificada (`data/backups/financiera_pre_migracion_v0_*.db`), detención ante cualquier importe ambiguo. v1: `change_history.fiscal_period_id/account_id/lote_id` + tabla `schema_migration`. v2: importes en centavos (`Centavos`, `BIGINT`). v3: `fiscal_period.fecha_cierre` + 13 disparadores `EJERCICIO_CERRADO` | `tests/test_fase1_migracion.py` (12); migración de la BD real: 0 diferencias (ver abajo) |
+| 1.2 | `components/money.py`: `parse_importe`, `parse_importe_con_aviso`, `parse_anio`, `es_vacio`. Usados en captura, edición, importación y en los repositorios | D03, D05–D07, E03 aprobadas; `tests/test_fase1_money.py` (50) |
+| 1.3 | `render_scope` (rollback siempre) en `app.py`; `components/transacciones.ejecutar_escritura` para cada escritura (lote, commit, rollback, log y mensaje claro). La vista previa Excel solo lee; los ejercicios se crean al confirmar; importación todo-o-nada | D01, D02, D04, D10, D11 aprobadas; pruebas de transacciones e importación en `tests/test_fase1_integridad.py` |
+| 1.4 | `update_account` rechaza cambiar categoría, subcategoría o efecto si la cuenta tiene importes (`CatalogoProtegidoError`); la interfaz muestra la clasificación bloqueada | B01–B03 aprobadas |
+| 1.5 | Campos vacíos por defecto; solo se guardan importes nuevos o modificados; vaciar no borra; "Borrar importe" explícito; cierre, reapertura y eliminación de ejercicios vacíos (pestaña "Ejercicio" de Modificación de datos) | I01, I02 aprobadas; pruebas de cierre y captura en `tests/test_fase1_integridad.py` |
+| 1.6 | Historial con id real, ejercicio, cuenta y lote; pestaña del ejercicio filtrada; historial global con filtros por ejercicio y cuenta | C01 aprobada; pruebas de historial |
+| 1.7 | `database/backup_utils.py`: copia con `sqlite3.backup` + `integrity_check` + conteos; validación de encabezado, tablas, columnas, versión y empresa; copia previa byte a byte (`financiera_pre_restauracion_*`), `os.replace` con reintentos y reversión | H01, H02 aprobadas; `tests/test_fase1_restauracion.py` (17), incluido un bloqueo real de archivo en Windows |
+
+**Migración de la BD de trabajo (`data/financiera.db`)**
+1. Ensayo sobre una copia del respaldo de la fase 0: 0 diferencias.
+2. Migración real: SHA-256 antes `f026863d00f841c042c996e0ccb12a1317992ede97d2e544f4cba5955630a82d` (v0), después `ffc23c08ac19d71050254edba6d5a7dc9a2508aacf45222056f8a93b9f05c7c8` (v3). Filas iguales en todas las tablas (30 cuentas, 19 importes de balance, 52 historial, 1 empresa, 1 ejercicio, 1 estado). Los 19 importes conservan id, ejercicio, cuenta y valor (0 → 0 centavos). `integrity_check = ok`.
+3. Copia previa automática `data/backups/financiera_pre_migracion_v0_20261101_110247_634176.db`: contenido idéntico al original (comparación fila por fila).
+
+**Pendiente de fases posteriores:** M-10 (confirmación de cambios masivos, fase 4.2). Hallazgo nuevo M-11 (ver `AUDITORIA_INTEGRAL.md`), propuesto para la fase 3.
 
 ### 1.1 Esquema y migraciones (M-09, A-08, M-05)
 - **Archivos:** `database/models.py`, `database/connection.py`, un nuevo `database/migrations.py` (o Alembic).

@@ -4,8 +4,10 @@ from __future__ import annotations
 import streamlit as st
 from sqlalchemy.orm import Session
 
+from components.money import ANIO_MAXIMO, ANIO_MINIMO
+from components.transacciones import ejecutar_escritura
 from database.models import FiscalPeriod
-from database.repositories import get_or_create_fiscal_period, list_fiscal_periods
+from database.repositories import get_fiscal_period, get_or_create_fiscal_period, list_fiscal_periods
 
 PAGINAS: list[tuple[str, str]] = [
     ("Dashboard", "dashboard"),
@@ -51,16 +53,23 @@ def select_fiscal_period(session: Session, *, key: str = "periodo_fiscal", allow
 
         company = get_company(session)
         anio_sugerido = max((p.anio for p in periodos), default=(company.anio_inicial_analisis - 1 if company else 2020)) + 1
+        anio_sugerido = min(max(anio_sugerido, ANIO_MINIMO), ANIO_MAXIMO)
         with st.expander("Crear nuevo ejercicio fiscal"):
-            nuevo_anio = st.number_input("Año", min_value=1900, max_value=2200, value=anio_sugerido, step=1, key=f"{key}_nuevo_anio")
+            nuevo_anio = st.number_input(
+                "Año", min_value=ANIO_MINIMO, max_value=ANIO_MAXIMO, value=anio_sugerido, step=1, key=f"{key}_nuevo_anio"
+            )
             if st.button("Crear ejercicio", key=f"{key}_crear_btn"):
-                _, creado = get_or_create_fiscal_period(session, int(nuevo_anio))
-                session.commit()
-                if creado:
-                    st.success(f"Ejercicio {nuevo_anio} creado.")
-                    st.rerun()
+                if get_fiscal_period(session, int(nuevo_anio)) is not None:
+                    st.warning(f"El ejercicio {int(nuevo_anio)} ya existe.")
                 else:
-                    st.warning(f"El ejercicio {nuevo_anio} ya existe.")
+                    creado, _ = ejecutar_escritura(
+                        session,
+                        lambda: get_or_create_fiscal_period(session, int(nuevo_anio)),
+                        descripcion=f"crear el ejercicio {int(nuevo_anio)}",
+                    )
+                    if creado:
+                        st.success(f"Ejercicio {int(nuevo_anio)} creado.")
+                        st.rerun()
 
     periodos = list_fiscal_periods(session)
     if not periodos:
@@ -68,6 +77,13 @@ def select_fiscal_period(session: Session, *, key: str = "periodo_fiscal", allow
         return None
 
     opciones = [p.anio for p in periodos]
+    cerrados = {p.anio for p in periodos if p.cerrado}
     default_index = len(opciones) - 1
-    anio_sel = st.selectbox("Ejercicio fiscal", opciones, index=default_index, key=f"{key}_select")
+    anio_sel = st.selectbox(
+        "Ejercicio fiscal",
+        opciones,
+        index=default_index,
+        format_func=lambda a: f"{a} (cerrado)" if a in cerrados else str(a),
+        key=f"{key}_select",
+    )
     return next(p for p in periodos if p.anio == anio_sel)
