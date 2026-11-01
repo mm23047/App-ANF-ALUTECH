@@ -13,7 +13,27 @@ from components.navigation import select_fiscal_period
 from database.models import Company
 
 
+def _tabla_presentacion(filas, moneda: str) -> pd.DataFrame:
+    """Tabla de pantalla formateada directamente desde los Decimal del
+    calculo (hallazgo M-11: antes se formateaba desde floats y fallaba).
+    Un porcentaje None (base igual a cero) se muestra como "No disponible"."""
+    return pd.DataFrame(
+        [
+            {
+                "Código": f.cuenta.codigo,
+                "Cuenta": f.cuenta.nombre,
+                "Valor": format_money(f.valor, moneda),
+                "Participación %": format_percent(f.porcentaje),
+            }
+            for f in filas
+        ],
+        columns=["Código", "Cuenta", "Valor", "Participación %"],
+    )
+
+
 def _tabla(filas) -> pd.DataFrame:
+    """Tabla numerica solo para el grafico y la exportacion Excel
+    (presentacion; los calculos se hacen con Decimal)."""
     return pd.DataFrame(
         [
             {
@@ -41,14 +61,9 @@ def render_balance(session: Session, company: Company) -> None:
     st.caption(
         f"Base (100%): Total Activo = {format_money(resultado.base_total_activo, company.moneda)}"
     )
-    df = _tabla(resultado.filas)
-    df_mostrar = df.copy()
-    df_mostrar["Valor"] = df_mostrar["Valor"].map(lambda v: format_money(v, company.moneda))
-    df_mostrar["Participación %"] = df_mostrar["Participación %"].map(
-        lambda v: format_percent(v) if v is not None else "No disponible"
-    )
-    st.dataframe(df_mostrar, hide_index=True, width="stretch")
+    st.dataframe(_tabla_presentacion(resultado.filas, company.moneda), hide_index=True, width="stretch")
 
+    df = _tabla(resultado.filas)
     fig = px.bar(df, x="Cuenta", y="Participación %", title="Participación porcentual sobre el Total Activo")
     st.plotly_chart(fig, width="stretch")
 
@@ -76,14 +91,9 @@ def render_income(session: Session, company: Company) -> None:
     st.caption(
         f"Base (100%): Ingresos Netos = {format_money(resultado.base_ingresos_netos, company.moneda)}"
     )
-    df = _tabla(resultado.filas)
-    df_mostrar = df.copy()
-    df_mostrar["Valor"] = df_mostrar["Valor"].map(lambda v: format_money(v, company.moneda))
-    df_mostrar["Participación %"] = df_mostrar["Participación %"].map(
-        lambda v: format_percent(v) if v is not None else "No disponible"
-    )
-    st.dataframe(df_mostrar, hide_index=True, width="stretch")
+    st.dataframe(_tabla_presentacion(resultado.filas, company.moneda), hide_index=True, width="stretch")
 
+    df = _tabla(resultado.filas)
     fig = px.bar(df, x="Cuenta", y="Participación %", title="Participación porcentual sobre los Ingresos Netos")
     st.plotly_chart(fig, width="stretch")
 

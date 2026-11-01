@@ -103,13 +103,13 @@ Las pruebas usan bases de datos SQLite temporales y datos sintéticos.
 `tests/conftest.py` redirige la ruta de la BD a un archivo temporal y hace
 fallar la ejecución si cambia el SHA-256 de `data/financiera.db`.
 
-Estado actual (2026-11-01, tras la fase 1 del `PLAN_DE_CORRECCION.md`):
-**185 aprobadas y 15 fallidas de 200**.
+Estado actual (2026-11-01, tras la fase 1 y la corrección de M-11 del
+`PLAN_DE_CORRECCION.md`): **196 aprobadas y 13 fallidas de 209**.
 - 30 pruebas originales: todas aprueban.
 - 47 pruebas de la auditoría (`tests/test_auditoria.py`): 34 aprueban. Las
   13 que fallan corresponden a defectos aún no corregidos (fases 2 a 4).
-- 123 pruebas de la fase 1 (`tests/test_fase1_*.py`): 121 aprueban. Las 2
-  que fallan detectan el hallazgo M-11 (páginas de análisis vertical).
+- 125 pruebas de la fase 1 (`tests/test_fase1_*.py`) y 7 de M-11
+  (`tests/test_m11_vertical.py`): todas aprueban.
 
 Que una prueba falle significa que el defecto que describe sigue presente.
 Detalle en `MATRIZ_DE_PRUEBAS.md`. Las cifras de los reportes todavía no se

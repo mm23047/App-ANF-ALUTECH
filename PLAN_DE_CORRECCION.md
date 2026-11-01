@@ -1,7 +1,7 @@
 # Plan de corrección
 
 **Base:** `AUDITORIA_INTEGRAL.md` (2026-11-01). Los identificadores (C-, A-, M-, B-) remiten a los hallazgos de ese documento.
-**Estado:** Fases 0 y 1 completadas (2026-11-01). Fases 2–5 pendientes de autorización.
+**Estado:** Fases 0 y 1 completadas y M-11 corregido (2026-11-01). Fases 2–5 pendientes de autorización.
 
 ## Principios de orden
 
@@ -66,7 +66,14 @@
 2. Migración real: SHA-256 antes `f026863d00f841c042c996e0ccb12a1317992ede97d2e544f4cba5955630a82d` (v0), después `ffc23c08ac19d71050254edba6d5a7dc9a2508aacf45222056f8a93b9f05c7c8` (v3). Filas iguales en todas las tablas (30 cuentas, 19 importes de balance, 52 historial, 1 empresa, 1 ejercicio, 1 estado). Los 19 importes conservan id, ejercicio, cuenta y valor (0 → 0 centavos). `integrity_check = ok`.
 3. Copia previa automática `data/backups/financiera_pre_migracion_v0_20261101_110247_634176.db`: contenido idéntico al original (comparación fila por fila).
 
-**Pendiente de fases posteriores:** M-10 (confirmación de cambios masivos, fase 4.2). Hallazgo nuevo M-11 (ver `AUDITORIA_INTEGRAL.md`), propuesto para la fase 3.
+**Pendiente de fases posteriores:** M-10 (confirmación de cambios masivos, fase 4.2).
+
+### Corrección adelantada: M-11 (autorizada por el usuario antes de la fase 2)
+- **Defecto:** las páginas de análisis vertical fallaban con importes distintos de cero (`'float' object has no attribute 'quantize'`).
+- **Causa:** `reports/vertical_report.py` convertía los importes a `float` para el gráfico y reutilizaba esa tabla para formatear la vista con `format_money` y `format_percent`, que esperan `Decimal`. Además, un porcentaje `None` en una columna `float` se volvía `NaN` y también habría fallado.
+- **Solución:** la tabla de pantalla se formatea directamente desde los `Decimal` del cálculo (`_tabla_presentacion`), y un porcentaje `None` se muestra como "No disponible". No se tocó `calculations/vertical_analysis.py`, que ya era correcto (Decimal, HALF_UP, `None` con base 0). La tabla numérica del gráfico y del Excel no cambia: su revisión corresponde a la fase 3 (B-03, M-03).
+- **Archivos:** `reports/vertical_report.py`; pruebas nuevas en `tests/test_m11_vertical.py` (7); `tests/test_fase1_paginas.py` añade 2 comprobaciones del contenido mostrado; `tests/humo_paginas.py` devuelve también las tablas renderizadas.
+- **Verificación:** con el código anterior, las 4 pruebas de página de los reportes verticales fallan; con la corrección, aprueban. Suite: 196 aprobadas y 13 fallidas, las mismas 13 de auditoría de las fases 2–4. BD de trabajo sin cambios (`ffc23c08…05c7c8`).
 
 ### 1.1 Esquema y migraciones (M-09, A-08, M-05)
 - **Archivos:** `database/models.py`, `database/connection.py`, un nuevo `database/migrations.py` (o Alembic).

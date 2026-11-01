@@ -3,6 +3,27 @@
 **Fecha de ejecución:** 2026-11-01 · **Entorno:** Windows 11, Python 3.12.10 (`.venv`), pytest 8.4.2, Streamlit 1.66.1, SQLAlchemy 2.0.55
 **Base de datos:** todas las pruebas usan SQLite temporales. El hash de `data/financiera.db` fue el mismo antes y después (`f026863d…630a82d`).
 
+## Estado tras la corrección de M-11 (2026-11-01)
+
+Comando: `.venv\Scripts\python -m pytest tests/ -q` → **196 aprobadas, 13 fallidas** (209 pruebas).
+
+| Conjunto | Ejecutadas | Aprobadas | Fallidas |
+|---|---|---|---|
+| Originales | 30 | 30 | 0 |
+| Auditoría | 47 | 34 | 13 (las mismas de fases 2–4) |
+| Fase 1 (123 + 2 comprobaciones del contenido de las páginas verticales) | 125 | 125 | 0 |
+| M-11 (`tests/test_m11_vertical.py`) | 7 | 7 | 0 |
+
+`tests/test_m11_vertical.py` cubre:
+- El análisis vertical del Balance y del Estado de Resultados con importes positivos, negativos (depreciación, patrimonio, ISR) y cero.
+- Un ejercicio sin datos.
+- Base igual a cero (porcentaje `None`).
+- Redondeo HALF_UP (0.125 → 0.13).
+- La tabla de pantalla formateada desde `Decimal`, incluido "No disponible".
+- Que los centavos almacenados no cambian al calcular ni al presentar.
+
+Las 2 páginas verticales, que antes fallaban por M-11, ahora aprueban en `tests/test_fase1_paginas.py`, y también se comprueban los importes y porcentajes que muestran.
+
 ## Estado tras la fase 1 (2026-11-01)
 
 Comando: `.venv\Scripts\python -m pytest tests/ -q` → **185 aprobadas, 15 fallidas** (200 pruebas).

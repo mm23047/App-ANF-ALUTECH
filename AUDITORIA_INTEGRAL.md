@@ -28,6 +28,7 @@ Los hallazgos originales se conservan sin cambios en las secciones siguientes. E
 | M-09 | CORREGIDO | `database/migrations.py` (user_version) y `sqlite3.backup` con verificación |
 | M-10 | PARCIAL | Servidor solo en localhost (fase 0). Falta la confirmación de cambios masivos (fase 4.2) |
 | B-08 | CORREGIDO | `parse_importe(..., redondear=True)` con HALF_UP. E03 aprueba |
+| M-11 | CORREGIDO | `reports/vertical_report.py` (tabla formateada desde Decimal). `tests/test_m11_vertical.py` y las páginas verticales de `tests/test_fase1_paginas.py` aprueban |
 | Resto | PENDIENTE | A-01, A-02, A-04, A-05, A-06, M-03, M-04, M-07, M-08, B-01–B07, B-09 |
 
 **Hallazgo nuevo M-11 (preexistente, detectado en la fase 1).** Verificación: COMPROBADO (prueba de humo con `AppTest`).
@@ -36,7 +37,8 @@ Los hallazgos originales se conservan sin cambios en las secciones siguientes. E
 - **Consecuencia:** las páginas "Análisis Vertical del Balance General" y "del Estado de Resultados" fallan con `AttributeError: 'float' object has no attribute 'quantize'` en cuanto el ejercicio tiene importes. Con la BD actual (solo ceros) no se manifiesta, porque la base es 0 y el reporte termina antes.
 - **Antigüedad:** el archivo no cambió respecto a la línea base (`git diff 2913c49`), y el `format_money` original también falla con un `float`.
 - **Solución propuesta:** se corrige junto con M-03 en la fase 3.
-- **Prueba:** `tests/test_fase1_paginas.py` (2 casos fallan hoy).
+- **Prueba:** `tests/test_fase1_paginas.py`.
+- **Estado:** CORREGIDO antes de la fase 2, con autorización del usuario (ver `PLAN_DE_CORRECCION.md`).
 
 ---
 

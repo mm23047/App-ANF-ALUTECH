@@ -31,5 +31,6 @@ for etiqueta, _ in PAGINAS:
         "pagina": at.sidebar.radio[0].value,
         "encabezados": [h.value for h in at.header],
         "excepciones": [e.value for e in at.exception],
+        "tablas": [t.value.astype(str).to_dict("records") for t in at.dataframe],
     }
 print(json.dumps(resultados))

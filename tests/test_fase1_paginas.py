@@ -68,3 +68,19 @@ def test_pagina_se_renderiza_sin_errores(resultado_humo, etiqueta):
     if etiqueta != "Dashboard":
         assert resultado["encabezados"] != ["Dashboard"]
     assert not resultado["excepciones"], resultado["excepciones"]
+
+
+@pytest.mark.parametrize("etiqueta, esperado", [
+    # Ejercicio 2022 (el ultimo, seleccionado por defecto): activo 1000, pasivo 400, patrimonio 600.
+    ("Reportes › Análisis Vertical del Balance General",
+     {"1001": ("USD 1,000.00", "100.00%"), "2001": ("USD 400.00", "40.00%"), "3001": ("USD 600.00", "60.00%")}),
+    # Ingresos 1000 (base); ISR 900.
+    ("Reportes › Análisis Vertical del Estado de Resultados", {"8001": ("USD 900.00", "90.00%")}),
+])
+def test_paginas_verticales_muestran_importes_y_porcentajes(resultado_humo, etiqueta, esperado):
+    """Hallazgo M-11: con importes distintos de cero la pagina se renderiza
+    y muestra los valores calculados con Decimal."""
+    tablas = resultado_humo[0][etiqueta]["tablas"]
+    assert len(tablas) == 1
+    filas = {f["Código"]: (f["Valor"], f["Participación %"]) for f in tablas[0]}
+    assert filas == esperado
