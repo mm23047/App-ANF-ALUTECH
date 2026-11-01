@@ -1,7 +1,7 @@
 # Plan de corrección
 
 **Base:** `AUDITORIA_INTEGRAL.md` (2026-11-01). Los identificadores (C-, A-, M-, B-) remiten a los hallazgos de ese documento.
-**Estado:** propuesta. **No se ha implementado nada.** Cada fase requiere autorización.
+**Estado:** Fase 0 completada (2026-11-01). Fases 1–5 pendientes de autorización.
 
 ## Principios de orden
 
@@ -34,6 +34,16 @@
 | 0.4 | Agregar `.streamlit/config.toml` con `server.address = "localhost"` (M-10). No toca código |
 
 **Aceptación:** `pytest tests/` muestra 30 + 17 aprobadas y 30 fallidas (línea base reproducible).
+
+**Estado: COMPLETADA (2026-11-01).**
+
+| Paso | Resultado | Evidencia |
+|---|---|---|
+| 0.1 | Copia byte a byte en `C:\Users\estua\Documents\ANF\respaldos_appfinanciera\financiera_ORIGINAL_fase0_20261101.db` (fuera del proyecto, solo lectura) | SHA-256 de original y copia: `f026863d00f841c042c996e0ccb12a1317992ede97d2e544f4cba5955630a82d`; `cmp` sin diferencias; `PRAGMA integrity_check` de la copia = `ok` |
+| 0.2 | Repositorio Git creado (rama `main` = línea base auditada; correcciones en la rama `correcciones-auditoria`). Se excluyen `data/*.db`, `documentos/` y `streamlit_run.*` | Commit `2913c49` |
+| 0.3 | `tests/test_auditoria.py` incorporado. Solo cambió la cabecera (ruta relativa); los 47 cuerpos de prueba son los originales. `tests/conftest.py` redirige `DB_PATH` a un archivo temporal en cada prueba y falla si cambia el hash de `data/financiera.db` | SHA-256 del archivo original: `d9cb83a8…c018266c` |
+| 0.4 | `.streamlit/config.toml` con `server.address = "localhost"` | Prueba con una app mínima: escucha en `127.0.0.1:8599`; HTTP 200 por localhost; conexión por la IP de red rechazada |
+| Línea base | `pytest tests/` → **47 aprobadas, 30 fallidas** (las mismas 30 IDs de `MATRIZ_DE_PRUEBAS.md`) | Hash de la BD igual antes y después |
 
 ---
 

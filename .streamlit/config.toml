@@ -1,0 +1,4 @@
+# Configuración local del servidor (hallazgo M-10 de AUDITORIA_INTEGRAL.md).
+# La aplicación no tiene autenticación: solo debe ser accesible desde este equipo.
+[server]
+address = "localhost"
