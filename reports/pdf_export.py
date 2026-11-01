@@ -169,9 +169,10 @@ def export_dupont_pdf(company, period, resultado) -> bytes:
         ["Patrimonio inicial", format_money(resultado.patrimonio_inicial, company.moneda)],
         ["Patrimonio final", format_money(resultado.patrimonio_final, company.moneda)],
         ["Patrimonio promedio", format_money(resultado.patrimonio_promedio, company.moneda)],
-        ["Margen neto", format_percent(resultado.margen_neto * 100)],
-        ["Rotación de activos", format_ratio(resultado.rotacion_activos)],
-        ["Multiplicador del capital", format_ratio(resultado.multiplicador_capital)],
+        # 4 decimales: el producto de los factores reproduce el ROE mostrado (B-01).
+        ["Margen neto", format_percent(resultado.margen_neto * 100, 4)],
+        ["Rotación de activos", format_ratio(resultado.rotacion_activos, 4)],
+        ["Multiplicador del capital", format_ratio(resultado.multiplicador_capital, 4)],
         ["ROE (DuPont)", format_percent(resultado.roe_dupont_pct)],
         ["ROE directo", format_percent(resultado.roe_directo_pct)],
     ]

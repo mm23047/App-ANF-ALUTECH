@@ -93,6 +93,26 @@ También puedes respaldar manualmente copiando el archivo
   ejercicio, cuenta, valores anterior y nuevo y lote de cada guardado o
   importación.
 
+## 4.2 Convención de signos, completitud y DuPont
+
+- **Signos:** ingresos, costos, gastos e impuestos se capturan en positivo
+  (los cálculos restan costos y gastos). Activos, pasivos y patrimonio, en
+  positivo. Las cuentas correctoras del activo (depreciación acumulada), en
+  negativo. Los resultados acumulados o del ejercicio pueden ser negativos.
+  Un importe con otro signo se advierte y requiere confirmación; nunca se
+  invierte.
+- **Completitud:** un estado está INCOMPLETO si una categoría obligatoria
+  no tiene ninguna cuenta capturada. Balance: Activo, Pasivo y Patrimonio.
+  Resultados: Ingresos, Costo de ventas, Gastos operativos e ISR. Un 0
+  escrito cuenta como dato.
+- **Conciliación:** se compara el "Resultado del ejercicio" del patrimonio
+  con la utilidad neta, y se muestra la diferencia sin corregir nada.
+- **DuPont:** el saldo inicial es el Balance del ejercicio inmediatamente
+  anterior (completo y cuadrado), o bien saldos manuales completos. Si no
+  hay ninguno, el ROE se marca como APROXIMADO e indica la causa. Si el
+  patrimonio inicial, final o promedio es ≤ 0, el ROE es NO INTERPRETABLE.
+  El ROE usa el patrimonio total.
+
 ## 5. Pruebas automatizadas
 
 ```bash
@@ -103,13 +123,14 @@ Las pruebas usan bases de datos SQLite temporales y datos sintéticos.
 `tests/conftest.py` redirige la ruta de la BD a un archivo temporal y hace
 fallar la ejecución si cambia el SHA-256 de `data/financiera.db`.
 
-Estado actual (2026-11-01, tras la fase 1 y la corrección de M-11 del
-`PLAN_DE_CORRECCION.md`): **196 aprobadas y 13 fallidas de 209**.
-- 30 pruebas originales: todas aprueban.
-- 47 pruebas de la auditoría (`tests/test_auditoria.py`): 34 aprueban. Las
-  13 que fallan corresponden a defectos aún no corregidos (fases 2 a 4).
-- 125 pruebas de la fase 1 (`tests/test_fase1_*.py`) y 7 de M-11
-  (`tests/test_m11_vertical.py`): todas aprueban.
+Estado actual (2026-11-01, tras las fases 1 y 2 del `PLAN_DE_CORRECCION.md`):
+**248 aprobadas y 8 fallidas de 256**.
+- 30 pruebas originales: 29 aprueban. T-15 falla porque exige el factor
+  DuPont redondeado a 2 decimales, contrario a B-01 (decisión pendiente).
+- 47 pruebas de la auditoría: 40 aprueban. F01 y F03 fallan por diseño (el
+  signo no se invierte: se advierte y se pide confirmación). F06, F07, G01,
+  G02 y D08 corresponden a las fases 3 y 4.
+- 132 pruebas de la fase 1 y de M-11, y 47 de la fase 2: todas aprueban.
 
 Que una prueba falle significa que el defecto que describe sigue presente.
 Detalle en `MATRIZ_DE_PRUEBAS.md`. Las cifras de los reportes todavía no se

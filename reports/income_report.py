@@ -4,7 +4,11 @@ from __future__ import annotations
 import streamlit as st
 from sqlalchemy.orm import Session
 
+from calculations.balance_sheet import compute_balance_sheet
+from calculations.controls import conciliar_resultado
 from calculations.income_statement import compute_income_statement
+from calculations.validation import CONVENCION_SIGNOS
+from components.avisos import mostrar_avisos_signo, mostrar_completitud, mostrar_conciliacion
 from components.navigation import select_fiscal_period
 from components.tables import mostrar_grupo, mostrar_total
 from database.models import Company
@@ -22,7 +26,9 @@ def render(session: Session, company: Company) -> None:
         return
 
     st.subheader(f"{company.nombre_legal} — Estado de Resultados del ejercicio {period.anio}")
-    st.caption(f"Moneda: {company.moneda}")
+    st.caption(f"Moneda: {company.moneda} · Los costos, gastos e impuestos se capturan en positivo y se restan.")
+    mostrar_completitud(inc, "Estado de Resultados")
+    mostrar_avisos_signo(inc)
 
     mostrar_grupo(inc.ingresos_netos, company.moneda)
     mostrar_grupo(inc.costo_ventas, company.moneda)
@@ -47,6 +53,9 @@ def render(session: Session, company: Company) -> None:
 
     mostrar_grupo(inc.impuesto_renta, company.moneda)
     mostrar_total("Utilidad neta", inc.utilidad_neta, company.moneda)
+
+    mostrar_conciliacion(conciliar_resultado(compute_balance_sheet(session, period.id), inc), company.moneda)
+    st.caption(CONVENCION_SIGNOS)
 
     st.markdown("### Exportar")
     col1, col2 = st.columns(2)

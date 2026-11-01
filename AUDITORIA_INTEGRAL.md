@@ -9,7 +9,7 @@ Documentos relacionados: `PLAN_DE_CORRECCION.md`, `MATRIZ_DE_PRUEBAS.md`, `INVEN
 
 ---
 
-## 0. Estado de corrección (actualizado 2026-11-01, tras la fase 1)
+## 0. Estado de corrección (actualizado 2026-11-01, tras la fase 2)
 
 Los hallazgos originales se conservan sin cambios en las secciones siguientes. Esta tabla registra su estado.
 
@@ -29,7 +29,15 @@ Los hallazgos originales se conservan sin cambios en las secciones siguientes. E
 | M-10 | PARCIAL | Servidor solo en localhost (fase 0). Falta la confirmación de cambios masivos (fase 4.2) |
 | B-08 | CORREGIDO | `parse_importe(..., redondear=True)` con HALF_UP. E03 aprueba |
 | M-11 | CORREGIDO | `reports/vertical_report.py` (tabla formateada desde Decimal). `tests/test_m11_vertical.py` y las páginas verticales de `tests/test_fase1_paginas.py` aprueban |
-| Resto | PENDIENTE | A-01, A-02, A-04, A-05, A-06, M-03, M-04, M-07, M-08, B-01–B07, B-09 |
+| A-01 | CORREGIDO | `calculations/dupont.py`: solo N-1. A01 aprueba |
+| A-02 | CORREGIDO | N-1 utilizable solo si está completo, con activo > 0 y cuadra; saldos manuales solo si son completos; si no, aproximado con la causa. A03 y A04 aprueban |
+| A-04 | CORREGIDO | Patrimonio inicial, final o promedio ≤ 0: ROE NO INTERPRETABLE, sin interpretación. A02 aprueba |
+| A-05 | CORREGIDO (advertencia y confirmación) | `calculations/validation.py`; avisos en los reportes; confirmación en captura, edición e importación. El signo nunca se invierte. F01 y F03 siguen fallando por diseño: su expectativa exigiría invertir el signo |
+| M-04 | CORREGIDO (pantalla) | `completo`, `categorias_faltantes` y `cuentas_sin_dato`; aviso INCOMPLETO en los reportes de pantalla. F08 aprueba. En PDF, Excel y Dashboard: fase 3 |
+| M-07 | CORREGIDO | `calculations/controls.py`; conciliación en los reportes de Balance y Resultados y como control en DuPont |
+| B-01 | CORREGIDO | DuPont sin redondeo intermedio; factores con 4 decimales en pantalla y PDF. A06 aprueba. La prueba original T-15, que exige el factor redondeado, falla: decisión pendiente |
+| B-02 | CORREGIDO | La coincidencia tautológica se reemplazó por 7 controles útiles |
+| Resto | PENDIENTE | A-06, M-03, M-08, B-03–B07, B-09 |
 
 **Hallazgo nuevo M-11 (preexistente, detectado en la fase 1).** Verificación: COMPROBADO (prueba de humo con `AppTest`).
 - **Archivo:** `reports/vertical_report.py` (líneas 22–23 y 46–48; igual en el reporte de resultados).

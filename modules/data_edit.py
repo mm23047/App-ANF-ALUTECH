@@ -16,6 +16,7 @@ import streamlit as st
 from sqlalchemy.orm import Session
 
 from calculations.balance_sheet import compute_balance_sheet
+from calculations.validation import CONVENCION_SIGNOS, aviso_signo
 from components.money import ImporteInvalido, es_vacio, format_money, parse_importe_con_aviso
 from components.navigation import select_fiscal_period
 from components.transacciones import ejecutar_escritura
@@ -41,9 +42,11 @@ def _guardar_edicion(
     editado: pd.DataFrame,
     originales: dict[int, Decimal],
     cuentas: dict[int, Account],
+    confirmar_signos: bool = False,
 ) -> None:
     errores: list[str] = []
     avisos: list[str] = []
+    avisos_signo: list[str] = []
     cambios: list[tuple[int, Decimal]] = []
     for _, fila in editado.iterrows():
         account_id = int(fila["account_id"])
@@ -65,12 +68,22 @@ def _guardar_edicion(
             avisos.append(f"{cuenta.codigo} — {cuenta.nombre}: {aviso}")
         if importe != originales[account_id]:
             cambios.append((account_id, importe))
+            signo = aviso_signo(cuenta, importe)
+            if signo:
+                avisos_signo.append(signo)
 
     if errores:
         st.error("No se guardó ningún cambio. Corrija:\n" + "\n".join(f"- {e}" for e in errores))
         return
     if not cambios:
         st.info("No se detectaron cambios.")
+        return
+    if avisos_signo and not confirmar_signos:
+        st.warning(
+            "No se guardó ningún cambio. Estos importes tienen un signo distinto a la convención:\n"
+            + "\n".join(f"- {a}" for a in avisos_signo)
+            + "\n\nCorríjalos, o marque la casilla de confirmación y guarde de nuevo."
+        )
         return
     guardado, _ = ejecutar_escritura(
         session,
@@ -149,10 +162,12 @@ def _tabla_editable(session: Session, period_id: int, tipo: Tipo, moneda: str, k
         st.caption(f"El ejercicio {period.anio} está cerrado: solo lectura.")
         return
 
+    st.caption(CONVENCION_SIGNOS)
+    confirmar_signos = st.checkbox("Confirmo los importes con signo distinto a la convención", key=f"{key}_confirmar_signos")
     col_guardar, col_cancelar = st.columns(2)
     with col_guardar:
         if st.button("Guardar cambios", key=f"{key}_guardar"):
-            _guardar_edicion(session, period, tipo, editado, originales, cuentas)
+            _guardar_edicion(session, period, tipo, editado, originales, cuentas, confirmar_signos)
     with col_cancelar:
         if st.button("Cancelar modificaciones", key=f"{key}_cancelar"):
             st.rerun()

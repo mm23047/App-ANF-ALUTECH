@@ -5,6 +5,9 @@ import streamlit as st
 from sqlalchemy.orm import Session
 
 from calculations.balance_sheet import compute_balance_sheet
+from calculations.controls import conciliar_resultado
+from calculations.income_statement import compute_income_statement
+from components.avisos import mostrar_avisos_signo, mostrar_completitud, mostrar_conciliacion
 from components.money import format_money
 from components.navigation import select_fiscal_period
 from components.tables import mostrar_grupo, mostrar_total
@@ -32,6 +35,8 @@ def render(session: Session, company: Company) -> None:
             f"La ecuación contable NO cuadra. Diferencia: {format_money(bs.diferencia, company.moneda)} "
             "(Activo total − (Pasivo total + Patrimonio total))."
         )
+    mostrar_completitud(bs, "Balance General")
+    mostrar_avisos_signo(bs)
 
     st.markdown("### Activo")
     mostrar_grupo(bs.activo_corriente, company.moneda)
@@ -49,6 +54,8 @@ def render(session: Session, company: Company) -> None:
     mostrar_total("Total Patrimonio", bs.total_patrimonio, company.moneda)
 
     mostrar_total("Total Pasivo + Patrimonio", bs.total_pasivo_patrimonio, company.moneda)
+
+    mostrar_conciliacion(conciliar_resultado(bs, compute_income_statement(session, period.id)), company.moneda)
 
     st.markdown("### Exportar")
     col1, col2 = st.columns(2)

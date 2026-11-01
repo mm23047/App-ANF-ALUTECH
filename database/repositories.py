@@ -197,18 +197,6 @@ def delete_fiscal_period(session: Session, fiscal_period_id: int) -> int:
     return anio
 
 
-def get_previous_period(session: Session, anio: int) -> FiscalPeriod | None:
-    """Ejercicio fiscal mas reciente estrictamente anterior a `anio`.
-
-    Soporta huecos: si no existe anio-1 pero existe anio-3, se devuelve ese.
-    """
-    return session.execute(
-        select(FiscalPeriod)
-        .where(FiscalPeriod.anio < anio)
-        .order_by(FiscalPeriod.anio.desc())
-    ).scalars().first()
-
-
 # ---------------------------------------------------------------------------
 # Accounts (seccion 5)
 # ---------------------------------------------------------------------------

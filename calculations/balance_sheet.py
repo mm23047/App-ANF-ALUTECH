@@ -2,20 +2,27 @@
 
 Los subtotales y totales se derivan en memoria a partir de los
 balance_entry vigentes -- nunca se almacenan (seccion 12).
+
+Una cuenta sin importe no es un cero: `completo` indica si cada categoria
+obligatoria (Activo, Pasivo, Patrimonio) tiene al menos una cuenta
+capturada, y `cuentas_sin_dato` lista las cuentas activas sin importe
+(hallazgo M-04). `advertencias_signo` aplica la convencion de signos sin
+modificar ningun importe (A-05).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from calculations.validation import OBLIGATORIAS_BALANCE, aviso_signo, categorias_faltantes, cuentas_sin_dato
 from components.money import q2
 from database.enums import CategoriaPrincipal as Cat
 from database.enums import Subcategoria as Sub
 from database.enums import TipoEstadoFinanciero
 from database.models import Account
-from database.repositories import list_entries
+from database.repositories import list_accounts, list_entries
 
 CERO = Decimal("0.00")
 
@@ -55,6 +62,10 @@ class BalanceSheetResult:
     total_pasivo_patrimonio: Decimal
     diferencia: Decimal
     cuadra: bool
+    completo: bool = False
+    categorias_faltantes: list[str] = field(default_factory=list)
+    cuentas_sin_dato: list[Account] = field(default_factory=list)
+    advertencias_signo: list[str] = field(default_factory=list)
 
 
 def _grupo(nombre: str, lineas: list[Linea]) -> Grupo:
@@ -89,6 +100,7 @@ def compute_balance_sheet(session: Session, fiscal_period_id: int) -> BalanceShe
     total_pasivo_patrimonio = q2(total_pasivo + total_patrimonio)
     diferencia = q2(total_activo - total_pasivo_patrimonio)
     cuadra = diferencia == CERO
+    faltantes = categorias_faltantes(entries, OBLIGATORIAS_BALANCE)
 
     return BalanceSheetResult(
         tiene_datos=len(entries) > 0,
@@ -103,4 +115,8 @@ def compute_balance_sheet(session: Session, fiscal_period_id: int) -> BalanceShe
         total_pasivo_patrimonio=total_pasivo_patrimonio,
         diferencia=diferencia,
         cuadra=cuadra,
+        completo=not faltantes,
+        categorias_faltantes=faltantes,
+        cuentas_sin_dato=cuentas_sin_dato(list_accounts(session, solo_activas=True), entries, OBLIGATORIAS_BALANCE),
+        advertencias_signo=[a for a in (aviso_signo(c, v) for c, v in entries) if a],
     )

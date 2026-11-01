@@ -3,6 +3,28 @@
 **Fecha de ejecución:** 2026-11-01 · **Entorno:** Windows 11, Python 3.12.10 (`.venv`), pytest 8.4.2, Streamlit 1.66.1, SQLAlchemy 2.0.55
 **Base de datos:** todas las pruebas usan SQLite temporales. El hash de `data/financiera.db` fue el mismo antes y después (`f026863d…630a82d`).
 
+## Estado tras la fase 2 (2026-11-01)
+
+Comando: `.venv\Scripts\python -m pytest tests/ -q` → **248 aprobadas, 8 fallidas** (256 pruebas).
+
+| Conjunto | Ejecutadas | Aprobadas | Fallidas | Fallidas (motivo) |
+|---|---|---|---|---|
+| Originales | 30 | 29 | 1 | T-15: conflicto con B-01, decisión pendiente (ver `PLAN_DE_CORRECCION.md`) |
+| Auditoría | 47 | 40 | 7 | F01 y F03 (por diseño); F06, F07, G01 y G02 (fase 3); D08 (fase 4) |
+| Fase 1 + M-11 | 132 | 132 | 0 | — |
+| Fase 2 (`tests/test_fase2.py`) | 47 | 47 | 0 | — |
+
+Las 6 pruebas de auditoría que corresponden a la fase 2 pasaron de FALLIDO a APROBADO: A01, A02, A03, A04, A06 y F08.
+
+`tests/test_fase2.py` cubre:
+- Saldos iniciales: N-1 completo; ejercicio inexistente, incompleto, descuadrado y en ceros (siempre aproximado y con la causa); saldos manuales completos y parciales.
+- Patrimonio inicial, final o promedio ≤ 0: ROE no interpretable, también en el reporte de pantalla. Pérdida con patrimonio positivo: sigue siendo válida.
+- Precisión: promedios y factores sin redondeo intermedio; los factores con 4 decimales reproducen el ROE en 3 casos.
+- Los 7 controles del DuPont.
+- Completitud: ausencia frente a cero explícito.
+- Signos: 14 casos de la convención; el importe no se invierte; la captura, la edición y la importación exigen confirmación; la plantilla documenta la convención.
+- Conciliación: conciliado, diferencia real, diferencia por datos faltantes y sin datos.
+
 ## Estado tras la corrección de M-11 (2026-11-01)
 
 Comando: `.venv\Scripts\python -m pytest tests/ -q` → **196 aprobadas, 13 fallidas** (209 pruebas).
@@ -84,7 +106,7 @@ Verificaciones no ejecutadas: siguen pendientes N-01, N-04, N-05, N-06 y N-07. N
 | T-12 | Balance | Ecuación cuadra | 1.000 = 400 + 600 | `cuadra`, dif. 0 | Correcto | APROBADO |
 | T-13 | Balance | Descuadre detectado | Solo activo 1.000 | Dif. 1.000, no cuadra | Correcto | APROBADO |
 | T-14 | Balance | Sin datos | Ejercicio vacío | `tiene_datos=False` | Correcto | APROBADO |
-| T-15 | DuPont | Factores | A 1.000, P 600, I 1.000, UN 100 | 0,10 / 1,00 / 1,67 | Correcto | APROBADO |
+| T-15 | DuPont | Factores | A 1.000, P 600, I 1.000, UN 100 | 0,10 / 1,00 / 1,67 | Correcto | FALLIDO tras la fase 2 (conflicto con B-01; decisión pendiente) |
 | T-16 | DuPont | ROE DuPont = directo | Igual | 16,67% | 16,67% | APROBADO |
 | T-17 | DuPont | Encadenamiento 2021 → 2022 | Dos ejercicios consecutivos | Activo prom. 1.100; Pat. prom. 650 | Correcto | APROBADO |
 | T-18 | DuPont | Sin saldo inicial → aproximación | Solo 2021 | `aproximado=True` | Correcto | APROBADO |
@@ -107,12 +129,12 @@ Verificaciones no ejecutadas: siguen pendientes N-01, N-04, N-05, N-06 y N-07. N
 
 | ID | Módulo | Escenario | Datos de prueba | Resultado esperado | Resultado obtenido | Estado | Hallazgo |
 |---|---|---|---|---|---|---|---|
-| A01 | DuPont | Ejercicio no consecutivo | 2021 (A 1.000) y 2023 (A 2.000), sin 2022 | No usar 2021 como saldo inicial sin marcarlo | Activo inicial 1.000; fuente "Balance final del ejercicio 2021"; `aproximado=False` | FALLIDO | A-01 |
-| A02 | DuPont | Patrimonio promedio negativo | A 1.000, P −200, UN −100 | No disponible o con advertencia | ROE **+50,00%**, mult. −5,00, sin advertencia | FALLIDO | A-04 |
-| A03 | DuPont | Ejercicio anterior guardado en ceros | 2022 en ceros; 2023 A 2.000, P 1.000, UN 200 | Activo inicial ≠ 0 o aproximado | Activo inicial 0 → prom. 1.000 → **ROE 40%** (real 20%); `aproximado=False` | FALLIDO | A-02 |
-| A04 | DuPont | Saldos manuales parciales | Solo patrimonio inicial 500 | Activo inicial ≠ 0 o aproximado | Activo inicial 0; **rotación 2,00** (real 1,00) | FALLIDO | A-02 |
+| A01 | DuPont | Ejercicio no consecutivo | 2021 (A 1.000) y 2023 (A 2.000), sin 2022 | No usar 2021 como saldo inicial sin marcarlo | Activo inicial 1.000; fuente "Balance final del ejercicio 2021"; `aproximado=False` | APROBADO (fase 2; antes FALLIDO) | A-01 |
+| A02 | DuPont | Patrimonio promedio negativo | A 1.000, P −200, UN −100 | No disponible o con advertencia | ROE **+50,00%**, mult. −5,00, sin advertencia | APROBADO (fase 2; antes FALLIDO) | A-04 |
+| A03 | DuPont | Ejercicio anterior guardado en ceros | 2022 en ceros; 2023 A 2.000, P 1.000, UN 200 | Activo inicial ≠ 0 o aproximado | Activo inicial 0 → prom. 1.000 → **ROE 40%** (real 20%); `aproximado=False` | APROBADO (fase 2; antes FALLIDO) | A-02 |
+| A04 | DuPont | Saldos manuales parciales | Solo patrimonio inicial 500 | Activo inicial ≠ 0 o aproximado | Activo inicial 0; **rotación 2,00** (real 1,00) | APROBADO (fase 2; antes FALLIDO) | A-02 |
 | A05 | DuPont | Identidad con datos válidos | 2021 → 2022, I 1.234,56, UN 98,76 | ROE 15,19% en ambos | 15,19% = 15,19% | APROBADO | — |
-| A06 | DuPont | Factores mostrados reproducen el ROE | A 3.333, P 1.111, I 7.777, UN 123 | Producto ≈ ROE ± 0,01 | 1,58% × 2,33 × 3,00 = 11,04% frente a ROE 11,07% | FALLIDO | B-01 |
+| A06 | DuPont | Factores mostrados reproducen el ROE | A 3.333, P 1.111, I 7.777, UN 123 | Producto ≈ ROE ± 0,01 | 1,58% × 2,33 × 3,00 = 11,04% frente a ROE 11,07% | APROBADO (fase 2; antes FALLIDO) | B-01 |
 | A07 | DuPont | Ingresos = 0 | I 0 | No disponible | No disponible | APROBADO | — |
 | A08 | DuPont | Activo promedio = 0 | A 0 | No disponible | No disponible | APROBADO | — |
 | A09 | DuPont | Utilidad negativa | A 1.000, P 500, UN −100 | ROE −20%, margen −10% | Correcto | APROBADO | — |
@@ -137,14 +159,14 @@ Verificaciones no ejecutadas: siguen pendientes N-01, N-04, N-05, N-06 y N-07. N
 | E01 | Precisión | Importe grande | 123.456.789.012.345,67 | Exacto tras reabrir | Exacto | APROBADO | — |
 | E02 | Precisión | Importes típicos | 0,10; 0,20; 1.234.567,89; −98.765,43; 99.999.999,99 | Suma exacta | 101.135.802,75 exacto | APROBADO | — |
 | E03 | Precisión | Conversión de float en la captura | 2,675 | 2,68 (HALF_UP) | 2,67 | APROBADO (fase 1; antes FALLIDO) | B-08 |
-| F01 | Balance | Depreciación positiva | PPE 1.000, dep. +300 | ANC 700 o rechazo | ANC **1.300** | FALLIDO | A-05 |
+| F01 | Balance | Depreciación positiva | PPE 1.000, dep. +300 | ANC 700 o rechazo | ANC **1.300** | FALLIDO (por diseño: el signo no se invierte; se advierte y se pide confirmación) | A-05 |
 | F02 | Balance | Depreciación negativa | PPE 1.000, dep. −300 | ANC 700 | 700 | APROBADO | — |
-| F03 | ER | Costo capturado negativo | I 1.000, CV −600 | UB 400 o rechazo | UB **1.600** | FALLIDO | A-05 |
+| F03 | ER | Costo capturado negativo | I 1.000, CV −600 | UB 400 o rechazo | UB **1.600** | FALLIDO (por diseño: el signo no se invierte; se advierte y se pide confirmación) | A-05 |
 | F04 | ER | Estado completo (todas las categorías) | 11 cuentas | UB 4.000; UO 2.300; RF −300; OR 20; UAI 2.020; UN 1.415 | Correcto | APROBADO | — |
 | F05 | Balance | Pasivo > activo, patrimonio negativo | A 100, P 300, Pat. −200 | Pat. −200, cuadra | Correcto | APROBADO | — |
 | F06 | Vertical | ER incluye ingresos y utilidades | I 1.000, CV 600 | Fila 4001 y utilidades | Solo fila 5001 | FALLIDO | M-03 |
 | F07 | Vertical | Balance incluye subtotales | AC 300, ANC 700 | Subtotales con % | Solo filas por cuenta | FALLIDO | M-03 |
-| F08 | Balance | Ausencia frente a cero | Solo 1001 = 100 | Indicador de incompleto | No existe; pasivo = 0,00 | FALLIDO | M-04 |
+| F08 | Balance | Ausencia frente a cero | Solo 1001 = 100 | Indicador de incompleto | No existe; pasivo = 0,00 | APROBADO (fase 2; antes FALLIDO) | M-04 |
 | G01 | Excel | Balance sin grupo ANC | AC 100, PC 40, Pat. 60 | Sin circulares | `C12 =C10+C12`, `C20 =C18+C20`, `C28 =C26+C28+…` | FALLIDO | A-06 |
 | G02 | Excel | ER sin gastos ni ISR | I 1.000, CV 600 | Sin circulares | `C18`, `C20`, `C22 =C20-C22` circulares | FALLIDO | A-06 |
 | G03 | PDF | Nombre con "&" | "Acero & Aluminio, S. A. de C. V." | PDF válido | Válido | APROBADO | — |

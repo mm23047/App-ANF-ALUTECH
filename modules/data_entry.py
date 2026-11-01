@@ -14,6 +14,7 @@ import streamlit as st
 from sqlalchemy.orm import Session
 
 from calculations.income_statement import compute_income_statement
+from calculations.validation import CONVENCION_SIGNOS, aviso_signo
 from components.money import ImporteInvalido, format_money, parse_importe, parse_importe_con_aviso
 from components.navigation import select_fiscal_period
 from components.transacciones import ejecutar_escritura
@@ -86,10 +87,14 @@ def _guardar_capturados(
     capturados: dict[int, tuple[Account, float | None]],
     valores_actuales: dict[int, Decimal],
     guardar: Callable[[int, Decimal], str | None],
+    confirmar_signos: bool = False,
 ) -> None:
     """Guarda solo los importes informados que son nuevos o distintos del
-    actual. Si algun valor es invalido no se guarda nada."""
+    actual. Si algun valor es invalido no se guarda nada. Un importe con
+    signo distinto a la convencion solo se guarda si el usuario lo confirma;
+    nunca se invierte (hallazgo A-05)."""
     errores: list[str] = []
+    avisos_signo: list[str] = []
     avisos: list[str] = []
     vaciados: list[str] = []
     cambios: list[tuple[int, Decimal]] = []
@@ -110,6 +115,9 @@ def _guardar_capturados(
             avisos.append(f"{cuenta.codigo} — {cuenta.nombre}: {aviso}")
         if importe != previo:
             cambios.append((account_id, importe))
+            signo = aviso_signo(cuenta, importe)
+            if signo:
+                avisos_signo.append(signo)
 
     if errores:
         st.error("No se guardó ningún dato. Corrija estos importes:\n" + "\n".join(f"- {e}" for e in errores))
@@ -121,6 +129,13 @@ def _guardar_capturados(
         )
     if not cambios:
         st.info("No hay importes nuevos ni modificados para guardar.")
+        return
+    if avisos_signo and not confirmar_signos:
+        st.warning(
+            "No se guardó ningún dato. Estos importes tienen un signo distinto a la convención:\n"
+            + "\n".join(f"- {a}" for a in avisos_signo)
+            + "\n\nCorríjalos, o marque 'Confirmo los importes con signo distinto a la convención' y guarde de nuevo."
+        )
         return
 
     guardado, operaciones = ejecutar_escritura(
@@ -180,6 +195,7 @@ def _render_grupos(session: Session, period: FiscalPeriod, tipo: Tipo, grupos, m
     valores_actuales = get_entries_map(session, period.id, tipo)
     cuentas_todas = list_accounts(session, solo_activas=True)
     st.caption(AYUDA_CAPTURA)
+    st.caption(CONVENCION_SIGNOS)
 
     with st.form(form_key):
         capturados: dict[int, tuple[Account, float | None]] = {}
@@ -196,6 +212,9 @@ def _render_grupos(session: Session, period: FiscalPeriod, tipo: Tipo, grupos, m
                 # escritos en otro ejercicio al cambiar el selector.
                 valor = _campo_importe(cuenta, valores_actuales.get(cuenta.id), moneda, f"{form_key}_{period.id}_{cuenta.id}")
                 capturados[cuenta.id] = (cuenta, valor)
+        confirmar_signos = st.checkbox(
+            "Confirmo los importes con signo distinto a la convención", key=f"{form_key}_{period.id}_confirmar_signos"
+        )
         guardado = st.form_submit_button("Guardar")
 
     if guardado:
@@ -207,6 +226,7 @@ def _render_grupos(session: Session, period: FiscalPeriod, tipo: Tipo, grupos, m
             lambda account_id, importe: upsert_entry(
                 session, fiscal_period_id=period.id, account_id=account_id, valor=importe, tipo=tipo
             ),
+            confirmar_signos,
         )
 
 
@@ -244,23 +264,25 @@ def render_income(session: Session, company: Company) -> None:
 def render_initial_balances(session: Session, company: Company) -> None:
     st.header("Ingreso de datos — Saldos iniciales")
     st.caption(
-        "Estos saldos solo se usan para calcular los promedios del modelo DuPont (sección 9.5) cuando "
-        "no existe un ejercicio fiscal anterior registrado en el sistema. Si ya existe un ejercicio "
-        "anterior con Balance capturado, su saldo final se usa automáticamente y esta pantalla no es necesaria."
+        "Estos saldos solo se usan para calcular los promedios del modelo DuPont (sección 9.5) cuando el "
+        "Balance del ejercicio inmediatamente anterior no existe o no es utilizable (incompleto, con activo "
+        "total menor o igual a cero o descuadrado). Capture al menos una cuenta de Activo y una de Patrimonio: "
+        "unos saldos parciales no se usan y el DuPont se marca como aproximado."
     )
     period = select_fiscal_period(session, key="periodo_saldos_iniciales", allow_create=False)
     if period is None:
         return
 
-    from database.repositories import get_previous_period
+    from calculations.dupont import evaluar_balance_anterior
 
-    anterior = get_previous_period(session, period.anio)
-    if anterior is not None:
+    bs_anterior, causa = evaluar_balance_anterior(session, period)
+    if bs_anterior is not None:
         st.warning(
-            f"Ya existe el ejercicio {anterior.anio} registrado antes de {period.anio}. El saldo inicial "
-            f"de {period.anio} se tomará automáticamente del Balance final de {anterior.anio}; los valores "
-            "capturados aquí no se usarán salvo que ese ejercicio anterior no tenga datos de Balance."
+            f"El saldo inicial de {period.anio} se toma automáticamente del Balance final de {period.anio - 1}; "
+            "los valores capturados aquí no se usarán."
         )
+    else:
+        st.info(f"Se usarán los saldos capturados aquí (si están completos) porque {causa}.")
 
     if _aviso_ejercicio_cerrado(period):
         return
@@ -270,6 +292,7 @@ def render_initial_balances(session: Session, company: Company) -> None:
         if c.categoria_principal in (Cat.ACTIVO, Cat.PATRIMONIO)
     ]
     st.caption(AYUDA_CAPTURA)
+    st.caption(CONVENCION_SIGNOS)
 
     with st.form("form_saldos_iniciales"):
         capturados: dict[int, tuple[Account, float | None]] = {}
@@ -280,6 +303,9 @@ def render_initial_balances(session: Session, company: Company) -> None:
                     cuenta, valores_actuales.get(cuenta.id), company.moneda, f"saldo_inicial_{period.id}_{cuenta.id}"
                 )
                 capturados[cuenta.id] = (cuenta, valor)
+        confirmar_signos = st.checkbox(
+            "Confirmo los importes con signo distinto a la convención", key=f"saldo_inicial_{period.id}_confirmar_signos"
+        )
         guardado = st.form_submit_button("Guardar saldos iniciales")
 
     if guardado:
@@ -291,6 +317,7 @@ def render_initial_balances(session: Session, company: Company) -> None:
             lambda account_id, importe: upsert_initial_balance(
                 session, fiscal_period_id=period.id, account_id=account_id, valor=importe
             ),
+            confirmar_signos,
         )
 
     if valores_actuales:

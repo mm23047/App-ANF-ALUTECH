@@ -1,7 +1,7 @@
 # Plan de corrección
 
 **Base:** `AUDITORIA_INTEGRAL.md` (2026-11-01). Los identificadores (C-, A-, M-, B-) remiten a los hallazgos de ese documento.
-**Estado:** Fases 0 y 1 completadas y M-11 corregido (2026-11-01). Fases 2–5 pendientes de autorización.
+**Estado:** Fases 0, 1 y 2 completadas y M-11 corregido (2026-11-01). Fases 3–5 pendientes de autorización. Hay una decisión pendiente sobre la prueba original T-15 (ver fase 2).
 
 ## Principios de orden
 
@@ -146,6 +146,26 @@
 ---
 
 ## FASE 2. Exactitud financiera
+
+**Estado: COMPLETADA (2026-11-01)**, salvo la decisión sobre T-15 que se explica abajo. Alcance autorizado: A-01, A-02, A-04, A-05, M-04, M-07, B-01, B-02. B-08 ya se había corregido en la fase 1.
+
+| Paso | Resultado | Evidencia |
+|---|---|---|
+| 2.1 | Saldo inicial del ejercicio N: solo el Balance de **N-1**, y solo si está completo, tiene activo total > 0 y cuadra. Si no, se usan los saldos manuales, siempre que tengan al menos una cuenta de Activo y una de Patrimonio y activo > 0. Si tampoco, se aproxima, con `aproximado=True` y la causa concreta. Se eliminó `get_previous_period`, que admitía huecos | A01, A03 y A04 aprueban; `tests/test_fase2.py` |
+| 2.2 | Patrimonio inicial, final o promedio ≤ 0 → `interpretable=False`, motivo "ROE NO INTERPRETABLE" y sin interpretación automática. La pantalla muestra "NO INTERPRETABLE" en lugar del ROE. Los casos válidos con pérdida siguen calculándose | A02 aprueba; A05, A07, A08 y A09 siguen aprobando |
+| 2.3 | `completo`, `categorias_faltantes` y `cuentas_sin_dato` en el Balance y el ER. Obligatorias: Activo, Pasivo y Patrimonio; Ingresos, Costo de ventas, Gastos operativos e ISR. Un 0 explícito cuenta como capturado. Aviso "INCOMPLETO" en los reportes de pantalla | F08 aprueba |
+| 2.4 | `calculations/validation.py`: convención de signos según categoría y naturaleza. Aviso visible en los reportes y confirmación obligatoria en captura, edición e importación. Nunca se invierte el signo. Convención documentada en las pantallas y en una hoja de la plantilla Excel | `tests/test_fase2.py`. F01 y F03 siguen fallando por diseño (ver abajo) |
+| 2.5 | `calculations/controls.py`: conciliación entre el resultado del ejercicio (patrimonio) y la utilidad neta. Estados CONCILIADO, DIFERENCIA y SIN_DATOS; distingue datos faltantes de diferencia real; no corrige importes. Se muestra en los reportes de Balance y Resultados y como control en DuPont | `tests/test_fase2.py` |
+| 2.6 | DuPont sin redondeo intermedio: promedios, factores y `roe` exactos; solo `roe_*_pct` se redondean (presentación). Factores con 4 decimales en pantalla y PDF. La "coincidencia" tautológica se reemplazó por 7 controles (cuadre, completitud de los dos estados, saldos reales, conciliación, signos y patrimonio positivo) | A06 aprueba |
+
+**Pruebas que siguen fallando y por qué**
+- **F01 y F03 (auditoría), por diseño.** Esperan que una depreciación capturada en positivo dé un ANC de 700, o que un costo negativo dé una UB de 400. Eso exigiría invertir el signo, lo que el usuario prohibió ("no invertir signos silenciosamente"). La aplicación muestra el importe tal como se capturó, lo marca con un aviso visible y exige confirmación al guardarlo. Las pruebas no se modificaron.
+- **T-15 (original, `test_margen_neto_rotacion_y_multiplicador`), decisión pendiente.**
+  - El conflicto: exige `multiplicador_capital == Decimal("1.67")`, es decir, el factor redondeado. B-01 (y la prueba A06) exige factores sin redondear: hoy el valor es exactamente 1000/600 = 1.6666…
+  - Ambas no pueden aprobar a la vez y la prueba no se modificó.
+  - Propuesta: comparar al redondeo de presentación (`q2(multiplicador_capital) == Decimal("1.67")`). Su propio comentario dice "1000 / 600 ~= 1.67".
+
+**Fuera de alcance (fase 3):** banderas INCOMPLETO, APROXIMADO, NO INTERPRETABLE y DESCUADRADO en el Excel, en el PDF del Balance y del ER y en el Dashboard. Hoy el Dashboard muestra "No disponible" si el ROE no es interpretable, pero aún no indica cuándo es aproximado (M-08).
 
 ### 2.1 Saldos iniciales DuPont (A-01, A-02)
 - **Archivos:** `database/repositories.py` (nueva `get_period_by_year(anio-1)`; mantener o eliminar `get_previous_period`), `calculations/dupont.py`, `modules/data_entry.py:151-159` (aviso coherente).

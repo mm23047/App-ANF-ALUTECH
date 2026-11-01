@@ -33,6 +33,7 @@ from components.money import (
     parse_anio,
     parse_importe_con_aviso,
 )
+from calculations.validation import CONVENCION_SIGNOS, aviso_signo
 from components.transacciones import ejecutar_escritura, mensaje_error
 from database.enums import BALANCE_CATEGORIAS, RESULTADOS_CATEGORIAS
 from database.enums import EstadoCuenta, TipoEstadoFinanciero
@@ -66,6 +67,18 @@ def _generar_plantilla(session: Session, categorias: set) -> bytes:
             "",
             "",
         ])
+    convencion = wb.create_sheet("Convención de signos")
+    convencion.append(["Convención de signos (se valida al importar; nunca se invierte un signo)"])
+    for linea in (
+        "Ingresos, costos, gastos e impuestos: en positivo. Los cálculos restan costos y gastos.",
+        "Activos, pasivos y patrimonio: en positivo.",
+        "Cuentas correctoras del activo (p. ej. depreciación acumulada): en negativo.",
+        "Resultados acumulados y resultado del ejercicio: negativos si hay pérdidas.",
+        "ISR negativo (beneficio fiscal): se admite, pero requiere confirmación.",
+        "Celda vacía = sin dato (no se importa). Un 0 escrito se importa como cero.",
+        "Solo se lee la primera hoja ('Plantilla').",
+    ):
+        convencion.append([linea])
     buffer = io.BytesIO()
     wb.save(buffer)
     return buffer.getvalue()
@@ -81,11 +94,12 @@ class FilaImportacion:
     cuenta: Account | None
     # OK, CUENTA_DESCONOCIDA, CUENTA_INACTIVA, PERIODO_INVALIDO, PERIODO_FUERA_DE_RANGO,
     # VALOR_VACIO, VALOR_NO_NUMERICO, VALOR_INVALIDO, DUPLICADA, EJERCICIO_CERRADO,
-    # OMITIDA_SIN_AUTORIZACION
+    # OMITIDA_SIN_AUTORIZACION, SIGNO_SIN_CONFIRMAR
     estado: str
     mensaje: str
     valor_existente: Decimal | None = None
     crea_ejercicio: bool = False
+    aviso_signo: str | None = None
 
 
 def _tipo_de(cuenta: Account) -> TipoEstadoFinanciero:
@@ -152,8 +166,11 @@ def _validar_dataframe(session: Session, df: pd.DataFrame) -> list[FilaImportaci
             filas.append(fila("EJERCICIO_CERRADO", f"El ejercicio {periodo} está cerrado; reábralo para importar.", periodo, valor, cuenta))
             continue
 
-        nueva = fila("OK", "Listo para importar." + (f" {aviso}" if aviso else ""), periodo, valor, cuenta)
+        signo = aviso_signo(cuenta, valor)
+        nueva = fila("OK", "Listo para importar." + (f" {aviso}" if aviso else "") + (f" {signo}" if signo else ""),
+                     periodo, valor, cuenta)
         nueva.crea_ejercicio = periodo_existente is None
+        nueva.aviso_signo = signo
         filas.append(nueva)
 
     return filas
@@ -201,7 +218,8 @@ def render(session: Session, company: Company) -> None:
         )
     st.caption(
         "Deje vacía la celda 'Valor monetario' de las cuentas sin dato: no se importarán (vacío no es cero). "
-        "Use punto decimal, sin separador de miles y como máximo dos decimales."
+        "Use punto decimal, sin separador de miles y como máximo dos decimales. "
+        "La hoja 'Convención de signos' de la plantilla explica los signos esperados."
     )
 
     st.subheader("2. Subir archivo")
@@ -228,6 +246,15 @@ def render(session: Session, company: Company) -> None:
     permitir_sobrescribir = st.checkbox(
         "Permitir sobrescribir valores ya existentes en la base de datos", value=False
     )
+    confirmar_signos = False
+    if any(f.estado == "OK" and f.aviso_signo for f in filas):
+        st.warning(CONVENCION_SIGNOS)
+        confirmar_signos = st.checkbox(
+            "Importar también las filas con signo distinto a la convención (confirmo que son correctas)", value=False
+        )
+    for fila in filas:
+        if fila.estado == "OK" and fila.aviso_signo and not confirmar_signos:
+            fila.estado = "SIGNO_SIN_CONFIRMAR"
 
     # Vista previa: solo consultas de lectura.
     cache_entries: dict[tuple[int, TipoEstadoFinanciero], dict[int, Decimal]] = {}

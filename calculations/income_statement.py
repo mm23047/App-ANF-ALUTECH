@@ -10,21 +10,32 @@ de ambiguedad en el plan):
   Utilidad antes imp. = Utilidad operativa + Ingresos financieros - Gastos financieros
                          + Otros ingresos no operativos - Otros gastos no operativos
   Utilidad neta       = Utilidad antes de impuestos - Impuesto sobre la renta
+
+`completo` indica si Ingresos, Costo de ventas, Gastos operativos e ISR
+tienen al menos una cuenta capturada (un 0 explicito cuenta); los demas
+grupos son opcionales. Ver calculations/validation.py (M-04, A-05).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from calculations.validation import (
+    OBLIGATORIAS_RESULTADOS,
+    aviso_signo,
+    categorias_faltantes,
+    cuentas_sin_dato,
+)
 from components.money import q2
+from database.enums import RESULTADOS_CATEGORIAS
 from database.enums import CategoriaPrincipal as Cat
 from database.enums import EfectoCuenta as Efecto
 from database.enums import Subcategoria as Sub
 from database.enums import TipoEstadoFinanciero
 from database.models import Account
-from database.repositories import list_entries
+from database.repositories import list_accounts, list_entries
 
 CERO = Decimal("0.00")
 
@@ -62,6 +73,10 @@ class IncomeStatementResult:
     utilidad_antes_impuestos: Decimal
     impuesto_renta: Grupo
     utilidad_neta: Decimal
+    completo: bool = False
+    categorias_faltantes: list[str] = field(default_factory=list)
+    cuentas_sin_dato: list[Account] = field(default_factory=list)
+    advertencias_signo: list[str] = field(default_factory=list)
 
 
 def _grupo(nombre: str, lineas: list[Linea]) -> Grupo:
@@ -121,6 +136,7 @@ def compute_income_statement(session: Session, fiscal_period_id: int) -> IncomeS
 
     impuesto_renta = _grupo("Impuesto sobre la renta", filtro(Cat.IMPUESTOS))
     utilidad_neta = q2(utilidad_antes_impuestos - impuesto_renta.subtotal)
+    faltantes = categorias_faltantes(entries, OBLIGATORIAS_RESULTADOS)
 
     return IncomeStatementResult(
         tiene_datos=len(entries) > 0,
@@ -141,4 +157,8 @@ def compute_income_statement(session: Session, fiscal_period_id: int) -> IncomeS
         utilidad_antes_impuestos=utilidad_antes_impuestos,
         impuesto_renta=impuesto_renta,
         utilidad_neta=utilidad_neta,
+        completo=not faltantes,
+        categorias_faltantes=faltantes,
+        cuentas_sin_dato=cuentas_sin_dato(list_accounts(session, solo_activas=True), entries, RESULTADOS_CATEGORIAS),
+        advertencias_signo=[a for a in (aviso_signo(c, v) for c, v in entries) if a],
     )

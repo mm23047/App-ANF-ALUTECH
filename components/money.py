@@ -182,13 +182,17 @@ def format_money(valor: Decimal | None, moneda: str = "") -> str:
     return f"{moneda} {texto}".strip()
 
 
-def format_percent(valor: Decimal | None) -> str:
-    if valor is None:
-        return "No disponible"
-    return f"{q2(valor):.2f}%"
+def _redondear(valor: Decimal, decimales: int) -> Decimal:
+    return valor.quantize(Decimal(1).scaleb(-decimales), rounding=ROUND_HALF_UP)
 
 
-def format_ratio(valor: Decimal | None) -> str:
+def format_percent(valor: Decimal | None, decimales: int = 2) -> str:
     if valor is None:
         return "No disponible"
-    return f"{q2(valor):.2f} veces"
+    return f"{_redondear(valor, decimales):.{decimales}f}%"
+
+
+def format_ratio(valor: Decimal | None, decimales: int = 2) -> str:
+    if valor is None:
+        return "No disponible"
+    return f"{_redondear(valor, decimales):.{decimales}f} veces"
