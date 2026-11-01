@@ -4,6 +4,7 @@ directo."""
 from decimal import Decimal
 
 from calculations.dupont import compute_dupont
+from components.money import q2
 from database.enums import TipoEstadoFinanciero as Tipo
 from database.repositories import get_account_by_codigo, get_or_create_fiscal_period, upsert_entry
 
@@ -39,7 +40,11 @@ def test_margen_neto_rotacion_y_multiplicador(db_session):
     # Primer ejercicio sin saldo inicial -> se aproxima con el saldo final (activo=patrimonio promedio = final)
     assert resultado.margen_neto == Decimal("0.10")  # 10%
     assert resultado.rotacion_activos == Decimal("1.00")  # 1000 ingresos / 1000 activo promedio
-    assert resultado.multiplicador_capital == Decimal("1.67")  # 1000 / 600 ~= 1.67
+    # 1000 / 600 ~= 1.67. Desde la fase 2 (hallazgo B-01) el factor se conserva sin
+    # redondear; se compara al redondeo de presentacion (q2, ROUND_HALF_UP). Cambio
+    # autorizado por el usuario: ver PLAN_DE_CORRECCION.md, fase 3.
+    assert q2(resultado.multiplicador_capital) == Decimal("1.67")
+    assert resultado.multiplicador_capital == Decimal("1000") / Decimal("600")
 
 
 def test_roe_dupont_y_coincidencia_con_roe_directo(db_session):

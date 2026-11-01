@@ -1,7 +1,7 @@
 # Plan de corrección
 
 **Base:** `AUDITORIA_INTEGRAL.md` (2026-11-01). Los identificadores (C-, A-, M-, B-) remiten a los hallazgos de ese documento.
-**Estado:** Fases 0, 1 y 2 completadas y M-11 corregido (2026-11-01). Fases 3–5 pendientes de autorización. Hay una decisión pendiente sobre la prueba original T-15 (ver fase 2).
+**Estado:** Fases 0, 1 y 2 completadas, M-11 corregido y T-15 resuelto (2026-11-01). Fase 3 en curso.
 
 ## Principios de orden
 
@@ -160,7 +160,7 @@
 
 **Pruebas que siguen fallando y por qué**
 - **F01 y F03 (auditoría), por diseño.** Esperan que una depreciación capturada en positivo dé un ANC de 700, o que un costo negativo dé una UB de 400. Eso exigiría invertir el signo, lo que el usuario prohibió ("no invertir signos silenciosamente"). La aplicación muestra el importe tal como se capturó, lo marca con un aviso visible y exige confirmación al guardarlo. Las pruebas no se modificaron.
-- **T-15 (original, `test_margen_neto_rotacion_y_multiplicador`), decisión pendiente.**
+- **T-15 (original, `test_margen_neto_rotacion_y_multiplicador`): RESUELTO (2026-11-01, con autorización del usuario, opción a).** La comparación pasó a `q2(multiplicador_capital) == Decimal("1.67")` (ROUND_HALF_UP) y se añadió la comprobación del valor exacto `1000/600`. El cálculo sigue sin redondear. Antecedentes:
   - El conflicto: exige `multiplicador_capital == Decimal("1.67")`, es decir, el factor redondeado. B-01 (y la prueba A06) exige factores sin redondear: hoy el valor es exactamente 1000/600 = 1.6666…
   - Ambas no pueden aprobar a la vez y la prueba no se modificó.
   - Propuesta: comparar al redondeo de presentación (`q2(multiplicador_capital) == Decimal("1.67")`). Su propio comentario dice "1000 / 600 ~= 1.67".

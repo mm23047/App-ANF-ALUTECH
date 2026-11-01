@@ -106,7 +106,7 @@ Verificaciones no ejecutadas: siguen pendientes N-01, N-04, N-05, N-06 y N-07. N
 | T-12 | Balance | Ecuación cuadra | 1.000 = 400 + 600 | `cuadra`, dif. 0 | Correcto | APROBADO |
 | T-13 | Balance | Descuadre detectado | Solo activo 1.000 | Dif. 1.000, no cuadra | Correcto | APROBADO |
 | T-14 | Balance | Sin datos | Ejercicio vacío | `tiene_datos=False` | Correcto | APROBADO |
-| T-15 | DuPont | Factores | A 1.000, P 600, I 1.000, UN 100 | 0,10 / 1,00 / 1,67 | Correcto | FALLIDO tras la fase 2 (conflicto con B-01; decisión pendiente) |
+| T-15 | DuPont | Factores | A 1.000, P 600, I 1.000, UN 100 | 0,10 / 1,00 / 1,67 | Correcto | APROBADO (comparación al redondeo de presentación `q2`, autorizada; antes FALLIDO por B-01) |
 | T-16 | DuPont | ROE DuPont = directo | Igual | 16,67% | 16,67% | APROBADO |
 | T-17 | DuPont | Encadenamiento 2021 → 2022 | Dos ejercicios consecutivos | Activo prom. 1.100; Pat. prom. 650 | Correcto | APROBADO |
 | T-18 | DuPont | Sin saldo inicial → aproximación | Solo 2021 | `aproximado=True` | Correcto | APROBADO |
