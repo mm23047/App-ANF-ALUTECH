@@ -5,9 +5,10 @@ import streamlit as st
 from sqlalchemy.orm import Session
 
 from calculations.balance_sheet import compute_balance_sheet
+from calculations.banderas import banderas_balance
 from calculations.controls import conciliar_resultado
 from calculations.income_statement import compute_income_statement
-from components.avisos import mostrar_avisos_signo, mostrar_completitud, mostrar_conciliacion
+from components.avisos import mostrar_avisos_signo, mostrar_completitud, mostrar_conciliacion, mostrar_estado
 from components.money import format_money
 from components.navigation import select_fiscal_period
 from components.tables import mostrar_grupo, mostrar_total
@@ -27,6 +28,9 @@ def render(session: Session, company: Company) -> None:
 
     st.subheader(f"{company.nombre_legal} — Balance General al cierre del ejercicio {period.anio}")
     st.caption(f"Moneda: {company.moneda}")
+    conciliacion = conciliar_resultado(bs, compute_income_statement(session, period.id))
+    banderas = banderas_balance(bs, conciliacion)
+    mostrar_estado(banderas)
 
     if bs.cuadra:
         st.success("La ecuación contable cuadra: Activo total = Pasivo total + Patrimonio total.")
@@ -55,7 +59,7 @@ def render(session: Session, company: Company) -> None:
 
     mostrar_total("Total Pasivo + Patrimonio", bs.total_pasivo_patrimonio, company.moneda)
 
-    mostrar_conciliacion(conciliar_resultado(bs, compute_income_statement(session, period.id)), company.moneda)
+    mostrar_conciliacion(conciliacion, company.moneda)
 
     st.markdown("### Exportar")
     col1, col2 = st.columns(2)
@@ -64,7 +68,7 @@ def render(session: Session, company: Company) -> None:
 
         st.download_button(
             "Descargar PDF",
-            data=export_balance_pdf(company, period, bs),
+            data=export_balance_pdf(company, period, bs, banderas),
             file_name=f"balance_general_{period.anio}.pdf",
             mime="application/pdf",
         )
@@ -73,7 +77,7 @@ def render(session: Session, company: Company) -> None:
 
         st.download_button(
             "Descargar Excel",
-            data=export_balance_excel(company, period, bs),
+            data=export_balance_excel(company, period, bs, banderas),
             file_name=f"balance_general_{period.anio}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )

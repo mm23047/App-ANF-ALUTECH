@@ -3,6 +3,30 @@
 **Fecha de ejecución:** 2026-11-01 · **Entorno:** Windows 11, Python 3.12.10 (`.venv`), pytest 8.4.2, Streamlit 1.66.1, SQLAlchemy 2.0.55
 **Base de datos:** todas las pruebas usan SQLite temporales. El hash de `data/financiera.db` fue el mismo antes y después (`f026863d…630a82d`).
 
+## Estado tras la fase 3 (2026-11-01)
+
+Comando: `.venv\Scripts\python -m pytest tests/ -q` → **270 aprobadas, 3 fallidas** (273 pruebas).
+
+| Conjunto | Ejecutadas | Aprobadas | Fallidas | Fallidas (motivo) |
+|---|---|---|---|---|
+| Originales | 30 | 30 | 0 | — (T-15 resuelto con autorización: comparación al redondeo de presentación) |
+| Auditoría | 47 | 44 | 3 | F01 y F03 (por diseño: contradicen la convención de signos aprobada); D08 (fase 4) |
+| Fase 1 + M-11 | 132 | 132 | 0 | — |
+| Fase 2 | 47 | 47 | 0 | — |
+| Fase 3 (`tests/test_fase3.py`) | 17 | 17 | 0 | — |
+
+Las 4 pruebas de auditoría que corresponden a la fase 3 pasaron de FALLIDO a APROBADO: F06, F07, G01 y G02.
+
+`tests/test_fase3.py` cubre:
+- Excel: fórmulas de control evaluadas y comparadas con Python, ausencia de referencias circulares, columna C sin fórmulas, lectura sin recálculo, banderas iguales a las de pantalla, base vertical numérica (también en el formato anterior con `df`), DuPont aproximado y no interpretable.
+- Análisis vertical: subtotales, totales y utilidades del Balance y de Resultados, márgenes coherentes, grupos vacíos ("Sin datos") y base cero.
+- PDF: banderas, nombre de cuenta largo sin cortar, vertical y DuPont.
+- Dashboard: ROE definitivo, aproximado con causa, no interpretable, e indicadores incompletos etiquetados.
+
+Verificaciones no ejecutadas:
+- **N-04:** LibreOffice no está instalado. Se sustituye por el evaluador propio de fórmulas; abrir los archivos en una hoja de cálculo sigue pendiente.
+- **N-05:** cubierta. Se revisaron visualmente 8 PDF con datos sintéticos; aún no con datos de Alutech.
+
 ## Estado tras la fase 2 (2026-11-01)
 
 Comando: `.venv\Scripts\python -m pytest tests/ -q` → **248 aprobadas, 8 fallidas** (256 pruebas).
@@ -164,11 +188,11 @@ Verificaciones no ejecutadas: siguen pendientes N-01, N-04, N-05, N-06 y N-07. N
 | F03 | ER | Costo capturado negativo | I 1.000, CV −600 | UB 400 o rechazo | UB **1.600** | FALLIDO (por diseño: el signo no se invierte; se advierte y se pide confirmación) | A-05 |
 | F04 | ER | Estado completo (todas las categorías) | 11 cuentas | UB 4.000; UO 2.300; RF −300; OR 20; UAI 2.020; UN 1.415 | Correcto | APROBADO | — |
 | F05 | Balance | Pasivo > activo, patrimonio negativo | A 100, P 300, Pat. −200 | Pat. −200, cuadra | Correcto | APROBADO | — |
-| F06 | Vertical | ER incluye ingresos y utilidades | I 1.000, CV 600 | Fila 4001 y utilidades | Solo fila 5001 | FALLIDO | M-03 |
-| F07 | Vertical | Balance incluye subtotales | AC 300, ANC 700 | Subtotales con % | Solo filas por cuenta | FALLIDO | M-03 |
+| F06 | Vertical | ER incluye ingresos y utilidades | I 1.000, CV 600 | Fila 4001 y utilidades | Solo fila 5001 | APROBADO (fase 3; antes FALLIDO) | M-03 |
+| F07 | Vertical | Balance incluye subtotales | AC 300, ANC 700 | Subtotales con % | Solo filas por cuenta | APROBADO (fase 3; antes FALLIDO) | M-03 |
 | F08 | Balance | Ausencia frente a cero | Solo 1001 = 100 | Indicador de incompleto | No existe; pasivo = 0,00 | APROBADO (fase 2; antes FALLIDO) | M-04 |
-| G01 | Excel | Balance sin grupo ANC | AC 100, PC 40, Pat. 60 | Sin circulares | `C12 =C10+C12`, `C20 =C18+C20`, `C28 =C26+C28+…` | FALLIDO | A-06 |
-| G02 | Excel | ER sin gastos ni ISR | I 1.000, CV 600 | Sin circulares | `C18`, `C20`, `C22 =C20-C22` circulares | FALLIDO | A-06 |
+| G01 | Excel | Balance sin grupo ANC | AC 100, PC 40, Pat. 60 | Sin circulares | `C12 =C10+C12`, `C20 =C18+C20`, `C28 =C26+C28+…` | APROBADO (fase 3; antes FALLIDO) | A-06 |
+| G02 | Excel | ER sin gastos ni ISR | I 1.000, CV 600 | Sin circulares | `C18`, `C20`, `C22 =C20-C22` circulares | APROBADO (fase 3; antes FALLIDO) | A-06 |
 | G03 | PDF | Nombre con "&" | "Acero & Aluminio, S. A. de C. V." | PDF válido | Válido | APROBADO | — |
 | G04 | Exportación | No modifica la BD | Exportar los 4 archivos | Hash igual | Igual | APROBADO | — |
 | H01 | Restauración | Archivo corrupto (`app.py` real con AppTest) | Bytes no SQLite | BD intacta | **BD sobrescrita**; `DatabaseError: file is not a database` | APROBADO (fase 1; antes FALLIDO) | C-01 |

@@ -156,7 +156,8 @@ def test_reporte_dupont_no_interpretable_no_muestra_roe_ni_interpretacion(bd, mo
     monkeypatch.setattr(dupont_report, "select_fiscal_period", lambda session, **k: get_fiscal_period(session, 2021))
     with render_scope() as s:
         dupont_report.render(s, get_company(s))
-    assert errores and "ROE NO INTERPRETABLE" in errores[0]
+    assert any("Estado del reporte: NO INTERPRETABLE" in e for e in errores)  # linea comun (fase 3)
+    assert any(e.startswith("ROE NO INTERPRETABLE") for e in errores)
     assert escritos == []  # sin interpretacion automatica
     valores = dict(zip(tablas[0]["Componente"], tablas[0]["Valor"]))
     assert valores["ROE (DuPont)"] == "NO INTERPRETABLE"

@@ -1,7 +1,7 @@
 # Plan de corrección
 
 **Base:** `AUDITORIA_INTEGRAL.md` (2026-11-01). Los identificadores (C-, A-, M-, B-) remiten a los hallazgos de ese documento.
-**Estado:** Fases 0, 1 y 2 completadas, M-11 corregido y T-15 resuelto (2026-11-01). Fase 3 en curso.
+**Estado:** Fases 0 a 3 completadas, M-11 corregido y T-15 resuelto (2026-11-01). Fases 4 y 5 pendientes de autorización.
 
 ## Principios de orden
 
@@ -214,6 +214,27 @@
 ---
 
 ## FASE 3. Reportes y exportaciones
+
+**Estado: COMPLETADA (2026-11-01).** Alcance autorizado: A-06, M-03, M-08, B-03, las pruebas F06, F07, G01 y G02, y los estados INCOMPLETO, APROXIMADO y NO INTERPRETABLE en Excel y PDF.
+
+| Paso | Resultado | Evidencia |
+|---|---|---|
+| 3.1 | Excel: la columna C (Importe) siempre lleva el valor calculado por Python. La D lleva una fórmula de control que solo lee la columna C, por lo que nunca es circular, y la E la diferencia C − D. Los grupos vacíos se muestran como "Sin datos" y se excluyen de las fórmulas. La base del análisis vertical es numérica. Cada hoja incluye "Estado del reporte" y sus banderas | G01 y G02 aprueban. `tests/test_fase3.py` evalúa todas las fórmulas de control con un evaluador propio y las compara al centavo con `compute_*`; también comprueba que un visor sin recálculo (`data_only`) ve todos los totales |
+| 3.2 | Análisis vertical completo: `subtotales` y `lineas` con AC, ANC, total activo, PC, PNC, total pasivo, patrimonio y total P+P; en Resultados, ingresos (100%), costo, utilidad bruta, gastos operativos netos, utilidad operativa, resultado financiero, otros resultados, UAI, ISR y utilidad neta, con su efecto (resta, suma o con su signo). Exportación nueva a PDF (`export_vertical_pdf`) y Excel completo | F06 y F07 aprueban; `tests/test_fase3.py` |
+| 3.3 | `calculations/banderas.py` es la fuente única de los estados INCOMPLETO, DESCUADRADO, APROXIMADO, NO INTERPRETABLE, SIGNO ATÍPICO y SIN CONCILIAR (sin banderas: DEFINITIVO). Los usan la pantalla (`mostrar_estado`), el PDF, el Excel y el Dashboard. El Dashboard indica si el ROE es definitivo, aproximado (con la causa) o no interpretable, y etiqueta los indicadores de estados incompletos | `tests/test_fase3.py` (Dashboard, PDF y Excel); revisión visual de los PDF |
+
+**Revisión visual de los PDF (2026-11-01).** Se revisaron 8 documentos con datos sintéticos: Balance completo, Balance incompleto y descuadrado, Resultados, vertical del Balance y de Resultados, DuPont aproximado y DuPont no interpretable.
+- Correcto: los nombres de cuenta largos se ajustan en varias líneas sin cortarse; las tablas que cruzan de página repiten el encabezado; las banderas son legibles.
+- Corregido durante la revisión: el texto pegado a la tabla del vertical, el prefijo "APROXIMADO:" duplicado y las diferencias sin separador de miles.
+
+**Limitación:** LibreOffice no está instalado en el equipo, así que el recálculo en modo headless (N-04) no se ejecutó. Lo sustituye el evaluador de fórmulas de `tests/test_fase3.py`, que cubre la gramática que genera la aplicación (`SUM`, sumas y restas de celdas, división por la base). Abrir los archivos en Excel o LibreOffice sigue pendiente.
+
+**Pruebas propias adaptadas al cambio intencional de M-03.** No ocultan ningún defecto; conservan lo que verifican y añaden las filas nuevas:
+- `tests/test_m11_vertical.py`: el vertical de Resultados incluye ahora la fila de ingresos (base), y `_tabla_presentacion` recibe `lineas`.
+- `tests/test_fase1_paginas.py`: verifica cuentas y, además, subtotales y utilidades.
+- `tests/test_fase2.py`: la primera línea de error del reporte DuPont es ahora "Estado del reporte".
+
+**F01 y F03** siguen fallando por diseño: sus expectativas (ANC 700 y UB 400 con signos contrarios a la convención) contradicen la convención de signos aprobada, que advierte y pide confirmación pero nunca invierte un signo.
 
 ### 3.1 Excel sin referencias circulares (A-06, B-03)
 - **Archivo:** `reports/excel_export.py`.

@@ -70,7 +70,7 @@ def _problemas_balance_inicial(bs: BalanceSheetResult) -> list[str]:
     if bs.total_activo <= CERO:
         problemas.append("tiene un activo total menor o igual a cero")
     if not bs.cuadra:
-        problemas.append(f"no cuadra (diferencia {bs.diferencia})")
+        problemas.append(f"no cuadra (diferencia {format_money(bs.diferencia)})")
     return problemas
 
 
@@ -195,12 +195,12 @@ def compute_dupont(session: Session, fiscal_period: FiscalPeriod) -> DuPontResul
     if not inc.completo:
         advertencias.append(f"Estado de Resultados INCOMPLETO (sin datos de {', '.join(inc.categorias_faltantes)}).")
     if not bs.cuadra:
-        advertencias.append(f"El Balance General no cuadra (diferencia {bs.diferencia}).")
+        advertencias.append(f"El Balance General no cuadra (diferencia {format_money(bs.diferencia)}).")
     if bs.advertencias_signo or inc.advertencias_signo:
         advertencias.append("Hay importes con signo distinto a la convención; revíselos en los reportes del Balance y de Resultados.")
 
     controles = [
-        Control("Balance del ejercicio cuadra", bs.cuadra, f"Diferencia: {bs.diferencia}"),
+        Control("Balance del ejercicio cuadra", bs.cuadra, f"Diferencia: {format_money(bs.diferencia)}"),
         Control("Balance del ejercicio completo", bs.completo,
                 "Completo" if bs.completo else f"Sin datos de {', '.join(bs.categorias_faltantes)}"),
         Control("Estado de Resultados completo", inc.completo,

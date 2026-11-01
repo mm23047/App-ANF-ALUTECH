@@ -68,6 +68,7 @@ def test_vertical_resultados_con_positivos_negativos_y_ceros(bd):
         r = compute_vertical_income(s, p)
     assert r.disponible and r.base_ingresos_netos == Decimal("2000.00")
     assert _por_codigo(r) == {
+        "4001": (Decimal("2000.00"), Decimal("100.00")),  # desde M-03 (fase 3) se incluye la base
         "5001": (Decimal("1200.00"), Decimal("60.00")),
         "6001": (Decimal("300.00"), Decimal("15.00")),
         "6003": (Decimal("50.00"), Decimal("2.50")),
@@ -93,28 +94,26 @@ def test_porcentaje_con_base_cero_es_none_y_redondeo_half_up():
 def test_tabla_de_pantalla_se_formatea_desde_decimal(bd):
     _, (p, _) = bd
     with session_scope() as s:
-        balance = _tabla_presentacion(compute_vertical_balance(s, p).filas, "USD")
-        resultados = _tabla_presentacion(compute_vertical_income(s, p).filas, "USD")
-    filas = {f["Código"]: (f["Valor"], f["Participación %"]) for f in balance.to_dict("records")}
+        balance = _tabla_presentacion(compute_vertical_balance(s, p).lineas, "USD")
+        resultados = _tabla_presentacion(compute_vertical_income(s, p).lineas, "USD")
+    filas = {f["Código"]: (f["Valor"], f["Participación %"]) for f in balance.to_dict("records") if f["Código"]}
     assert filas["1001"] == ("USD 1,000.00", "83.33%")
     assert filas["1002"] == ("USD 0.00", "0.00%")
     assert filas["1102"] == ("USD -300.00", "-25.00%")
     assert filas["2001"] == ("USD 1,300.00", "108.33%")
-    filas = {f["Código"]: (f["Valor"], f["Participación %"]) for f in resultados.to_dict("records")}
+    filas = {f["Código"]: (f["Valor"], f["Participación %"]) for f in resultados.to_dict("records") if f["Código"]}
     assert filas["8001"] == ("USD -25.00", "-1.25%")
 
 
 def test_tabla_de_pantalla_con_porcentaje_none_y_sin_filas():
-    from types import SimpleNamespace
+    from calculations.vertical_analysis import LineaVertical
 
-    from calculations.vertical_analysis import FilaVertical
-
-    cuenta = SimpleNamespace(codigo="1001", nombre="Efectivo")
-    tabla = _tabla_presentacion([FilaVertical(cuenta, Decimal("123456789012345.67"), None)], "USD")
+    tabla = _tabla_presentacion([LineaVertical("cuenta", "Efectivo", Decimal("123456789012345.67"), None, "1001")], "USD")
     assert tabla.to_dict("records") == [
-        {"Código": "1001", "Cuenta": "Efectivo", "Valor": "USD 123,456,789,012,345.67", "Participación %": "No disponible"}
+        {"Código": "1001", "Concepto": "Efectivo", "Valor": "USD 123,456,789,012,345.67",
+         "Participación %": "No disponible", "Efecto": ""}
     ]
-    assert list(_tabla_presentacion([], "USD").columns) == ["Código", "Cuenta", "Valor", "Participación %"]
+    assert list(_tabla_presentacion([], "USD").columns) == ["Código", "Concepto", "Valor", "Participación %", "Efecto"]
 
 
 def test_calcular_y_presentar_no_altera_los_centavos_almacenados(bd):
@@ -135,7 +134,7 @@ def test_calcular_y_presentar_no_altera_los_centavos_almacenados(bd):
     assert ("B", 4, -30000, "integer") in antes  # 1102 = -300.00
     init_db(db_path=ruta)
     with session_scope() as s:
-        _tabla_presentacion(compute_vertical_balance(s, p).filas, "USD")
-        _tabla_presentacion(compute_vertical_income(s, p).filas, "USD")
+        _tabla_presentacion(compute_vertical_balance(s, p).lineas, "USD")
+        _tabla_presentacion(compute_vertical_income(s, p).lineas, "USD")
     connection.dispose_engine()
     assert centavos() == antes

@@ -4,8 +4,17 @@ from __future__ import annotations
 
 import streamlit as st
 
+from calculations.banderas import Bandera, resumen
 from calculations.controls import CONCILIADO, DIFERENCIA, Conciliacion
 from components.money import format_money
+
+
+def mostrar_estado(banderas: list[Bandera]) -> None:
+    """Misma linea de estado que el PDF y el Excel (calculations/banderas.py)."""
+    if banderas:
+        st.error(f"Estado del reporte: {resumen(banderas)}. No presente estas cifras como definitivas.")
+    else:
+        st.success("Estado del reporte: DEFINITIVO (sin advertencias de completitud, cuadre, signos ni conciliación).")
 
 
 def mostrar_completitud(resultado, nombre_estado: str) -> None:

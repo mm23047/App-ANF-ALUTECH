@@ -6,7 +6,9 @@ import plotly.graph_objects as go
 import streamlit as st
 from sqlalchemy.orm import Session
 
+from calculations.banderas import banderas_dupont
 from calculations.dupont import DuPontResult, compute_dupont, generar_interpretacion
+from components.avisos import mostrar_estado
 from components.money import format_money, format_percent, format_ratio
 from components.navigation import select_fiscal_period
 from database.models import Company
@@ -59,6 +61,8 @@ def render(session: Session, company: Company) -> None:
         return
 
     resultado = compute_dupont(session, period)
+    if resultado.disponible or not resultado.interpretable:
+        mostrar_estado(banderas_dupont(resultado))
     if not resultado.interpretable:
         st.error(resultado.motivo_no_disponible)
         for advertencia in resultado.advertencias:
@@ -67,6 +71,7 @@ def render(session: Session, company: Company) -> None:
         st.dataframe(_tabla_resultados(resultado, company.moneda, roe_valido=False), hide_index=True, width="stretch")
         _mostrar_controles(resultado)
         st.info("No se genera interpretación automática porque el ROE no es interpretable.")
+        _descargas(company, period, resultado)
         return
     if not resultado.disponible:
         st.info(resultado.motivo_no_disponible)
@@ -110,7 +115,10 @@ def render(session: Session, company: Company) -> None:
 
     st.markdown("### Interpretación financiera automática")
     st.write(generar_interpretacion(resultado))
+    _descargas(company, period, resultado)
 
+
+def _descargas(company, period, resultado: DuPontResult) -> None:
     from reports.excel_export import export_dupont_excel
     from reports.pdf_export import export_dupont_pdf
 

@@ -113,6 +113,16 @@ También puedes respaldar manualmente copiando el archivo
   patrimonio inicial, final o promedio es ≤ 0, el ROE es NO INTERPRETABLE.
   El ROE usa el patrimonio total.
 
+## 4.3 Estado de los reportes y exportaciones
+
+Cada reporte (pantalla, PDF, Excel y Dashboard) muestra el mismo "Estado del
+reporte": DEFINITIVO, o una o varias banderas: INCOMPLETO, DESCUADRADO,
+APROXIMADO, NO INTERPRETABLE, SIGNO ATÍPICO y SIN CONCILIAR, con su causa. En
+los Excel, la columna "Importe" contiene los valores calculados por la
+aplicación, y las columnas "Control" y "Diferencia" contienen fórmulas de
+Excel que los recalculan para auditarlos. El análisis vertical incluye
+subtotales, totales y utilidades, y se exporta a PDF y a Excel.
+
 ## 5. Pruebas automatizadas
 
 ```bash
@@ -123,14 +133,15 @@ Las pruebas usan bases de datos SQLite temporales y datos sintéticos.
 `tests/conftest.py` redirige la ruta de la BD a un archivo temporal y hace
 fallar la ejecución si cambia el SHA-256 de `data/financiera.db`.
 
-Estado actual (2026-11-01, tras las fases 1 y 2 del `PLAN_DE_CORRECCION.md`):
-**248 aprobadas y 8 fallidas de 256**.
-- 30 pruebas originales: 29 aprueban. T-15 falla porque exige el factor
-  DuPont redondeado a 2 decimales, contrario a B-01 (decisión pendiente).
-- 47 pruebas de la auditoría: 40 aprueban. F01 y F03 fallan por diseño (el
-  signo no se invierte: se advierte y se pide confirmación). F06, F07, G01,
-  G02 y D08 corresponden a las fases 3 y 4.
-- 132 pruebas de la fase 1 y de M-11, y 47 de la fase 2: todas aprueban.
+Estado actual (2026-11-01, tras las fases 1 a 3 del `PLAN_DE_CORRECCION.md`):
+**270 aprobadas y 3 fallidas de 273**.
+- 30 pruebas originales: todas aprueban. La comparación de T-15 se ajustó, con
+  autorización, al redondeo de presentación (B-01).
+- 47 pruebas de la auditoría: 44 aprueban. F01 y F03 fallan por diseño: el
+  signo no se invierte, se advierte y se pide confirmación. D08 corresponde a
+  la fase 4.
+- 132 pruebas de la fase 1 y de M-11, 47 de la fase 2 y 17 de la fase 3:
+  todas aprueban.
 
 Que una prueba falle significa que el defecto que describe sigue presente.
 Detalle en `MATRIZ_DE_PRUEBAS.md`. Las cifras de los reportes todavía no se
