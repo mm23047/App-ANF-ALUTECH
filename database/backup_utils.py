@@ -200,6 +200,7 @@ def restaurar(origen: Path, destino: Path, *, dir_respaldos: Path) -> ResultadoR
     temporal.unlink(missing_ok=True)
     respaldo_previo = None
     sha_original = sha256_archivo(destino) if destino.exists() else None
+    reemplazada = False
     try:
         crear_respaldo(origen, temporal)
         migrar(temporal, respaldar=False)
@@ -218,26 +219,57 @@ def restaurar(origen: Path, destino: Path, *, dir_respaldos: Path) -> ResultadoR
                 raise RestauracionError("No se pudo verificar la copia previa de la base de datos actual.")
 
         _reemplazar(temporal, destino)
+        reemplazada = True
     except PermissionError as exc:
-        temporal.unlink(missing_ok=True)
         raise RestauracionError(
             "La base de datos actual está en uso (otra pestaña o proceso de la aplicación). Cierre las demás "
             "pestañas y vuelva a intentarlo. La base de datos actual no se modificó."
         ) from exc
     except (OSError, sqlite3.Error, MigracionError) as exc:
-        temporal.unlink(missing_ok=True)
         raise RestauracionError(f"No se pudo preparar la restauración ({exc}). La base de datos actual no se modificó.") from exc
+    finally:
+        if not reemplazada:
+            # Hallazgo O-2: la restauracion no ocurrio; se limpian los archivos de esta operacion.
+            temporal.unlink(missing_ok=True)
+            _descartar_copia_previa(respaldo_previo, destino, sha_original)
 
     try:
         inspeccionar_bd(destino)
     except RespaldoInvalido as exc:
+        # La copia previa se conserva: es la referencia de la recuperacion.
         if respaldo_previo is not None:
             reversion = destino.with_name(f"{destino.name}.revertir")
-            shutil.copy2(respaldo_previo, reversion)
-            _reemplazar(reversion, destino)
+            try:
+                shutil.copy2(respaldo_previo, reversion)
+                _reemplazar(reversion, destino)
+            except OSError as exc_reversion:
+                reversion.unlink(missing_ok=True)
+                raise RestauracionError(
+                    f"La restauración falló y no se pudo restablecer la base anterior ({exc_reversion}). "
+                    f"Copia previa conservada: {respaldo_previo}."
+                ) from exc
             if sha256_archivo(destino) != sha_original:
                 raise RestauracionError(
                     f"La restauración falló y la reversión no coincide con el original. Copia previa: {respaldo_previo}."
                 ) from exc
         raise RestauracionError(f"La restauración falló ({exc}); se restableció la base de datos anterior.") from exc
     return ResultadoRestauracion(info, respaldo_previo)
+
+
+def _descartar_copia_previa(copia: Path | None, destino: Path, sha_original: str | None) -> None:
+    """Elimina la copia previa creada por una restauracion que no llego a
+    reemplazar la base (hallazgo O-2), solo si la base actual sigue
+    demostrablemente intacta (mismo SHA-256 que antes). Ante cualquier duda
+    (la base cambio o no se puede leer) la copia se conserva."""
+    if copia is None or not copia.exists():
+        return
+    try:
+        intacta = sha_original is not None and destino.exists() and sha256_archivo(destino) == sha_original
+    except OSError:
+        intacta = False
+    if not intacta:
+        return
+    try:
+        copia.unlink()
+    except OSError:
+        pass  # no se pudo borrar: se conserva, no es un error de la restauracion
