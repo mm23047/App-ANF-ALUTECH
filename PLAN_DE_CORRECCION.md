@@ -326,6 +326,25 @@ Limitación documentada: los caracteres de control que XLSX no admite se elimina
 | 5.6 | Persistencia real: cerrar el proceso Streamlit, reabrir y comparar | Mismos datos |
 | 5.7 | Actualizar el README (B-09) y la matriz de pruebas | Documentación coherente con la suite |
 
+**Autorización (2026-11-01):** se ejecutan las etapas 5-A (5.1 y 5.3), 5-B (5.4), 5-C (5.2), 5-D (5.6 y navegación N-02) y 5-F (5.7), cada una con su commit.
+- **Criterio de 5.1:** queda en **75/77**. F01 y F03 siguen fallando por diseño (convención de signos aprobada): no se invierte ningún signo ni se modifican esas pruebas.
+- **5.5 (conciliación con Alutech, etapa 5-E): PENDIENTE.** Depende de que el usuario entregue los estados financieros originales 2020–2025 (2020 como saldo inicial). `documentos/` solo contiene material teórico. No se usarán cifras inventadas ni ficticias como conciliación real.
+- **4.1, 4.3 y 4.8:** fuera de la fase 5; requieren una autorización independiente.
+
+### Etapa 5-A: regresión y pruebas unitarias (5.1, 5.3)
+
+**Estado: COMPLETADA (2026-11-01).** Sin cambios de código.
+
+| Comprobación | Resultado |
+|---|---|
+| 30 originales | 30/30 aprobadas |
+| 47 de auditoría | 45/47 aprobadas; fallan F01 (ANC 1.300, la prueba espera 700) y F03, por diseño. Con la depreciación en positivo la app muestra el importe tal cual y el aviso de signo |
+| 5.1 (77 base) | **75/77**, criterio aprobado |
+| Pruebas base sin debilitar | `tests/test_auditoria.py` no cambió desde la fase 0 (`2b7d206`); las 6 originales no cambiaron desde la línea base, salvo `tests/test_dupont.py` (T-15, autorizado, `7504a29`) |
+| 5.3 suite completa (`.venv`) | 382 aprobadas, 2 fallidas (F01, F03): ninguna regresión |
+| Entorno limpio (`py -3.12 -m venv` + `pip install -r requirements.txt`) | Mismo `pip freeze` (47 paquetes) y mismo resultado: 382/2 |
+| BD protegidas | Sin cambios: trabajo `c69020b6…ee10ac`, respaldo original `f026863d…630a82d` |
+
 ---
 
 ## Riesgos generales de implementación
