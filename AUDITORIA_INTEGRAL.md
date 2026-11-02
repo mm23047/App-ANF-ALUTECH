@@ -9,7 +9,7 @@ Documentos relacionados: `PLAN_DE_CORRECCION.md`, `MATRIZ_DE_PRUEBAS.md`, `INVEN
 
 ---
 
-## 0. Estado de corrección (actualizado 2026-11-01, tras la fase 5, salvo la conciliación con Alutech)
+## 0. Estado de corrección (actualizado 2026-11-01, tras la fase 7, salvo la conciliación con Alutech)
 
 Los hallazgos originales se conservan sin cambios en las secciones siguientes. Esta tabla registra su estado.
 
@@ -49,6 +49,13 @@ Los hallazgos originales se conservan sin cambios en las secciones siguientes. E
 | B-09 | CORREGIDO | `README.md` actualizado (fase 5-F): estado real de la suite (418 pruebas: 416 aprobadas, F01 y F03 por diseño), versiones probadas, confirmaciones, códigos de importación, texto literal en las exportaciones y estructura vigente. Ya no menciona "18 casos requeridos" |
 | Fase 5 | COMPLETADA salvo 5.5 | Caso controlado de 3 ejercicios (0,00 de diferencia), integración del flujo completo (restauración con la misma huella SHA-256) y persistencia con el proceso real de Streamlit. Ver `PLAN_DE_CORRECCION.md` |
 | Conciliación con Alutech (5.5, N-01) | PENDIENTE | Requiere los estados financieros originales 2020–2025; no se usaron cifras ficticias |
+| Fase 6 (validación operativa) | COMPLETADA | 22 libros abiertos en Microsoft Excel 16 (instalado en el equipo: la afirmación de la auditoría y de la fase 3 de que no había hoja de cálculo era incorrecta), 16 páginas recorridas en Edge real, restauración con dos pestañas, acceso desde la red local bloqueado por `server.address = "localhost"`. Hallazgos O-1 a O-7 (abajo) |
+| O-1 | CORREGIDO (fase 7.1) | Una confirmación preparada en una pestaña se guardaba sobre la base restaurada desde otra. `components/confirmacion.py`: `EstadoBase` (identidad del archivo SQLite + último registro del historial) se guarda al preparar y se comprueba antes de guardar y dentro de la transacción; la importación lo incluye en su firma. `tests/test_fase7.py` (8) y escenario de dos pestañas en Edge: no se escribe nada y se pide preparar de nuevo |
+| O-2 | CORREGIDO (fase 7.2) | Una restauración rechazada (archivo en uso) dejaba `financiera_pre_restauracion_*`; tampoco se limpiaba si la copia previa no se podía verificar. `database/backup_utils.restaurar` elimina el `.restaurando` y la copia de la operación si no hubo reemplazo y la base sigue intacta (mismo SHA-256); en caso de duda o de reversión la conserva. `tests/test_fase7.py` (8), incluido un bloqueo real de Windows |
+| O-3, O-4 | CORREGIDOS (fase 7.3) | Excel: etiquetas cortadas e impresión en varias páginas de ancho. Columna B según su texto, textos largos ajustados, impresión horizontal en una página de ancho con encabezado repetido. Valores, fórmulas y formatos idénticos celda por celda; verificado en Excel y en PDF |
+| O-5 | CORREGIDO (fase 7.4) | DuPont: tabla de resultados completa (el ROE ya no queda oculto) y detalle de los controles legible; Modificación de datos sin la columna `account_id` (sigue en los datos) |
+| O-6 | INVESTIGADO, sin cambios (fase 7.5) | El aviso "File change · Rerun" lo provoca la escritura de `.pyc` en `__pycache__`: los paquetes no tienen `__init__.py` y Streamlit vigila esos directorios completos. Aparece en árboles sin `__pycache__` o tras cambiar el código; es inocuo. Opciones propuestas, pendientes de autorización: `__init__.py` en los paquetes o `server.fileWatcherType = "none"` |
+| O-7 | OBSERVACIÓN (no es un error) | Con la BD de trabajo, el Balance 2021 figura como DEFINITIVO aunque todos sus importes son 0,00: por la regla aprobada, un 0 escrito cuenta como dato, y los 19 ceros de 2021 se conservan por decisión del usuario. No es un error de cálculo y no se modifica |
 | Resto | PENDIENTE (autorización independiente) | Pasos 4.1 (ayuda de signos por grupo y plantillas estáticas de `assets/plantillas/` sin la hoja "Convención de signos"), 4.3 (mensajes de error técnicos) y 4.8 (página "Configuración" duplicada). F01 y F03 siguen fallando por diseño (ver A-05) |
 
 **Hallazgo nuevo B-10 (preexistente, detectado en la fase 4).** Verificación: COMPROBADO (`openpyxl` 3.1.5).

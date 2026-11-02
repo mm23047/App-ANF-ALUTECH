@@ -1,7 +1,7 @@
 # Plan de corrección
 
 **Base:** `AUDITORIA_INTEGRAL.md` (2026-11-01). Los identificadores (C-, A-, M-, B-) remiten a los hallazgos de ese documento.
-**Estado:** Fases 0 a 5 completadas (2026-11-01), con M-11, T-15 y B-10 resueltos. Pendiente: 5.5, conciliación con Alutech (a la espera de los estados 2020–2025). Requieren autorización independiente: 4.1, 4.3 y 4.8.
+**Estado:** Fases 0 a 7 completadas (2026-11-01), con M-11, T-15 y B-10 resueltos. Pendiente: 5.5, conciliación con Alutech (a la espera de los estados 2020–2025). Requieren autorización independiente: 4.1, 4.3, 4.8, O-6 (opción a elegir) y el acceso desde la red local.
 
 ## Principios de orden
 
@@ -416,6 +416,29 @@ Limitación documentada: los caracteres de control que XLSX no admite se elimina
 | `PLAN_DE_CORRECCION.md` | Resultados de las etapas 5-A a 5-F; notas en el criterio de 2.4 y en los riesgos generales (decisiones ya tomadas), sin borrar el texto original |
 
 **Fase 5: COMPLETADA en el alcance autorizado.** Pendiente: 5.5 / 5-E (conciliación con Alutech), a la espera de los estados originales 2020–2025. Fuera de la fase 5, con autorización independiente: 4.1, 4.3 y 4.8. `INVENTARIO_DEL_PROYECTO.md` es la foto de la auditoría y no se actualizó (por ejemplo, conserva los rangos de versiones anteriores a B-05).
+
+---
+
+## FASE 6. Validación operativa
+
+**Estado: COMPLETADA (2026-11-01).** Solo verificación, sin cambios en el repositorio (commit `25bf0e9`). Todo sobre copias temporales. Resultados en `MATRIZ_DE_PRUEBAS.md` (estado tras la fase 7). Hallazgos: O-1 a O-7.
+
+---
+
+## FASE 7. Correcciones y cierre operativo
+
+**Estado: COMPLETADA (2026-11-01).** Autorizado: O-1 a O-5; investigación de O-6; O-7 solo documentado.
+
+| Etapa | Hallazgo | Causa raíz | Solución | Archivos | Commit |
+|---|---|---|---|---|---|
+| 7.1 | O-1 | La confirmación solo comprobaba el valor previo de las cuentas afectadas (`vigente`), no sobre qué base se había preparado | `EstadoBase` (identidad del archivo: volumen, id NTFS, creación; y último registro del historial, que solo crece) guardado al preparar y comprobado antes de guardar y dentro de la transacción (`BaseCambiada`). No depende de `st.session_state`. La firma de la importación incluye el estado de la base | `components/confirmacion.py`, `modules/data_entry.py`, `modules/data_edit.py`, `modules/excel_import.py` | `5f03459` |
+| 7.2 | O-2 | La copia previa se creaba antes del reemplazo y ningún camino de error la eliminaba; un `RestauracionError` interno tampoco limpiaba el `.restaurando` | Limpieza en `finally` si no hubo reemplazo; la copia previa solo se borra si la base sigue intacta (mismo SHA-256); se conserva en la reversión y ante cualquier duda; se limpia el `.revertir` | `database/backup_utils.py` | `c1e3004` |
+| 7.3 | O-3, O-4 | Anchos fijos (B = 40) y sin configuración de página (vertical, 100 %) | Ancho de B según su texto (máx. 64); textos largos unidos y ajustados con alto calculado y fila alineada arriba; horizontal, 1 página de ancho, márgenes de 0,5", encabezado repetido | `reports/excel_export.py` | `6e49852` |
+| 7.4 | O-5 | `st.dataframe` con altura automática (máx. 10 filas) y texto sin ajuste; `account_id` visible | `height="content"`; controles con `st.table`; `column_config={"account_id": None}` | `reports/dupont_report.py`, `modules/data_edit.py` | `3668fdb` |
+| 7.5 | O-6 | Paquetes sin `__init__.py` (*namespace packages*): Streamlit vigila sus directorios completos y la escritura de `.pyc` en `__pycache__` dispara el aviso | Sin cambios (solo investigación). Reproducido: aparece en una copia sin `__pycache__` (10 de 16 páginas); no aparece con `__pycache__` ni con `__init__.py`. Propuestas: `__init__.py` en los 5 paquetes (recomendada) o `server.fileWatcherType = "none"` | — | (documentación) |
+| 7.6 | O-7 | Regla aprobada: un 0 escrito cuenta como dato | Sin cambios. Documentado como observación: el Balance 2021 de la BD de trabajo (19 importes 0,00, conservados por decisión del usuario) figura como DEFINITIVO; no es un error de cálculo | — | (documentación) |
+
+**Verificación.** Pruebas de cada hallazgo, que fallan con el código anterior; Excel 16 (22 libros, sin reparación, fórmulas y controles correctos, PDF revisados); 16 páginas en Edge real con datos de 2020–2025; escenario O-1 de dos pestañas en Edge (la confirmación obsoleta no escribe; rechazo "en uso" sin copia sobrante). Suite: 454 aprobadas, 2 fallidas (F01, F03). Huellas de las BD protegidas sin cambios.
 
 ---
 

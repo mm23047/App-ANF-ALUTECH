@@ -3,6 +3,30 @@
 **Fecha de ejecución:** 2026-11-01 · **Entorno:** Windows 11, Python 3.12.10 (`.venv`), pytest 8.4.2, Streamlit 1.66.1, SQLAlchemy 2.0.55
 **Base de datos:** todas las pruebas usan SQLite temporales. El hash de `data/financiera.db` fue el mismo antes y después (`f026863d…630a82d`).
 
+## Estado tras la fase 7 (2026-11-01)
+
+Comando: `.venv\Scripts\python -m pytest tests/ -q` → **454 aprobadas, 2 fallidas** (456 pruebas). Las únicas fallidas siguen siendo F01 y F03 (por diseño). Huellas sin cambios: BD de trabajo `c69020b6…ee10ac`, respaldo original `f026863d…630a82d`.
+
+| Conjunto | Ejecutadas | Aprobadas | Fallidas |
+|---|---|---|---|
+| Originales + auditoría (base) | 77 | 75 | 2 (F01, F03) |
+| Fases 1 a 5 y B-10 | 341 | 341 | 0 |
+| Fase 7 (`tests/test_fase7.py`) | 38 | 38 | 0 |
+
+`tests/test_fase7.py`:
+- **O-1 (8):** el escenario exacto (B prepara, A restaura, B confirma: no se escribe nada, mensaje y confirmación descartada; una nueva sí funciona); copia idéntica restaurada; contenido sustituido en el mismo archivo; escrituras normales que no invalidan; comprobación dentro de la transacción; edición; importación; `estado_base`.
+- **O-2 (8):** restauración exitosa (la copia previa se conserva), rechazada por archivo en uso (simulado y con bloqueo real de Windows), error en el reemplazo, copia previa no verificable, reversión, reversión fallida y caso ambiguo; los respaldos históricos no se tocan.
+- **O-3/O-4 (16):** impresión horizontal en una página de ancho con encabezado repetido, ancho total razonable, etiqueta de la diferencia completa, textos largos ajustados y alineados, formatos, fuentes y fórmulas conservados.
+- **O-5 (6):** tabla de resultados DuPont completa en 3 ejercicios, controles con el detalle completo, `account_id` oculto y la edición sigue guardando.
+
+Las pruebas de cada hallazgo fallan con el código anterior (O-1: 5, O-2: 5, O-3/O-4: 8, O-5: 6) y aprueban con el corregido; las demás comprueban comportamientos que deben conservarse.
+
+Verificaciones operativas (fases 6 y 7, siempre sobre copias):
+- **Excel (N-04): EJECUTADO.** Microsoft Excel 16 está instalado. 22 libros abiertos sin reparación; 242 fórmulas conservadas y 163 controles recalculados por Excel iguales a la aplicación; B-10 verificado; tras 7.3, todas las columnas en una página de ancho (PDF exportados por Excel).
+- **Navegación (N-02): EJECUTADO.** Las 16 páginas, con clics en Edge real, sobre la copia de la BD de trabajo y sobre datos de 2020–2025: sin errores ni desbordamientos.
+- **Varias pestañas (N-03): EJECUTADO.** Restauración con dos pestañas: correcta (misma huella que el respaldo); rechazo controlado "en uso" cuando la otra pestaña está ejecutando, sin copias sobrantes (O-2) ni escrituras obsoletas (O-1).
+- **Otro equipo (N-08): NO EJECUTADO.** El servidor escucha solo en 127.0.0.1; la conexión por la IP de la red local se rechaza. Requiere autorización para cambiar la dirección de escucha.
+
 ## Estado tras la fase 5 (2026-11-01), salvo la conciliación con Alutech
 
 Comando: `.venv\Scripts\python -m pytest tests/ -q` → **416 aprobadas, 2 fallidas** (418 pruebas). Las únicas fallidas son F01 y F03, por diseño. Huellas sin cambios durante toda la fase: BD de trabajo `c69020b6…ee10ac`, respaldo original de la fase 0 `f026863d…630a82d`. (La huella `f026863d…` del encabezado es la de la BD de trabajo durante la auditoría, antes de las migraciones de la fase 1 y de B-07.)
