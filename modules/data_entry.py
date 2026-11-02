@@ -86,6 +86,7 @@ def _aviso_ejercicio_cerrado(period: FiscalPeriod) -> bool:
 
 
 def _guardar_capturados(
+    session: Session,
     period: FiscalPeriod,
     capturados: dict[int, tuple[Account, float | None]],
     valores_actuales: dict[int, Decimal],
@@ -146,7 +147,7 @@ def _guardar_capturados(
 
     confirmacion.proponer(
         pantalla, period.id, resumen=confirmacion.resumen_cambios(cambios, period.anio, estado), cambios=cambios,
-        avisos=avisos,
+        avisos=avisos, base=confirmacion.estado_base(session),
     )
 
 
@@ -158,17 +159,24 @@ def _aplicar_confirmada(
     guardar: Callable[[int, Decimal], str | None],
 ) -> None:
     """Escribe exactamente los importes confirmados, en una sola transaccion,
-    si las cuentas conservan el valor que se mostro al confirmar."""
+    si la base es la misma sobre la que se preparo la confirmacion (O-1) y
+    las cuentas conservan el valor que se mostro al confirmar."""
+    if not confirmacion.misma_base(op.base, session):
+        st.error(f"No se guardó ningún dato: {confirmacion.MENSAJE_BASE_CAMBIADA}")
+        return
     if not confirmacion.vigente(op, valores_actuales):
         st.error(
             "No se guardó ningún dato: los importes del ejercicio cambiaron después de la vista previa. "
             "Revise los valores y guarde de nuevo."
         )
         return
+    def escribir():
+        # Se repite dentro de la transaccion: si la base cambio, no se escribe nada.
+        confirmacion.comprobar_base(op, session)
+        return [guardar(c.account_id, c.nuevo) for c in op.cambios]
+
     guardado, operaciones = ejecutar_escritura(
-        session,
-        lambda: [guardar(c.account_id, c.nuevo) for c in op.cambios],
-        descripcion=f"guardar los importes del ejercicio {period.anio}",
+        session, escribir, descripcion=f"guardar los importes del ejercicio {period.anio}"
     )
     if guardado:
         st.success(
@@ -247,7 +255,7 @@ def _render_grupos(session: Session, period: FiscalPeriod, tipo: Tipo, grupos, m
     pantalla = f"captura_{form_key}"
     if guardado:
         estado = "Balance General" if tipo == Tipo.BALANCE else "Estado de Resultados"
-        _guardar_capturados(period, capturados, valores_actuales, confirmar_signos, pantalla, estado)
+        _guardar_capturados(session, period, capturados, valores_actuales, confirmar_signos, pantalla, estado)
     op = confirmacion.mostrar(pantalla, period.id)
     if op is not None:
         _aplicar_confirmada(
@@ -340,8 +348,8 @@ def render_initial_balances(session: Session, company: Company) -> None:
         guardado = st.form_submit_button("Guardar saldos iniciales")
 
     if guardado:
-        _guardar_capturados(period, capturados, valores_actuales, confirmar_signos, "captura_saldos_iniciales",
-                            "saldos iniciales")
+        _guardar_capturados(session, period, capturados, valores_actuales, confirmar_signos,
+                            "captura_saldos_iniciales", "saldos iniciales")
     op = confirmacion.mostrar("captura_saldos_iniciales", period.id)
     if op is not None:
         _aplicar_confirmada(

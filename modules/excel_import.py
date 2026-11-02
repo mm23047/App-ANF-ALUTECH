@@ -37,6 +37,7 @@ from components.money import (
     parse_importe_con_aviso,
 )
 from calculations.validation import CONVENCION_SIGNOS, aviso_signo
+from components import confirmacion
 from components.celdas_excel import agregar_fila
 from components.transacciones import ejecutar_escritura, mensaje_error
 from database.enums import BALANCE_CATEGORIAS, RESULTADOS_CATEGORIAS
@@ -279,12 +280,14 @@ def _alcance(filas: list[FilaImportacion]) -> str:
             f"en el/los ejercicio(s) {', '.join(str(a) for a in sorted({f.periodo for f in listas}))}.")
 
 
-def _firma(filas: list[FilaImportacion]) -> str:
-    """Huella de la vista previa: filas, estados, valores nuevos y existentes."""
-    contenido = repr([
+def _firma(filas: list[FilaImportacion], base=None) -> str:
+    """Huella de la vista previa: filas, estados, valores nuevos y existentes,
+    y la base de datos sobre la que se calculo (O-1: una restauracion desde
+    otra pestana invalida la vista previa aunque los valores coincidan)."""
+    contenido = repr(([
         (f.numero_fila, f.codigo, f.periodo, str(f.valor), f.estado, str(f.valor_existente), f.crea_ejercicio)
         for f in filas
-    ])
+    ], base))
     return hashlib.sha256(contenido.encode("utf-8")).hexdigest()
 
 
@@ -395,7 +398,7 @@ def render(session: Session, company: Company) -> None:
     # en pantalla (ejecucion anterior) es la misma que se va a importar: un
     # segundo clic despues de importar, o un cambio de la BD entre la vista
     # previa y el clic, obligan a revisar de nuevo (M-10).
-    firma = _firma(filas)
+    firma = _firma(filas, confirmacion.estado_base(session))
     firma_mostrada = st.session_state.get(_FIRMA_MOSTRADA)
     st.session_state[_FIRMA_MOSTRADA] = firma
 

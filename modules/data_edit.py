@@ -47,6 +47,7 @@ def _valores_tabla(editado: pd.DataFrame) -> tuple:
 
 
 def _guardar_edicion(
+    session: Session,
     period: FiscalPeriod,
     tipo: Tipo,
     editado: pd.DataFrame,
@@ -101,29 +102,33 @@ def _guardar_edicion(
     estado = "Balance General" if tipo == Tipo.BALANCE else "Estado de Resultados"
     confirmacion.proponer(
         pantalla, (period.id, tipo), resumen=confirmacion.resumen_cambios(cambios, period.anio, estado),
-        cambios=cambios, avisos=avisos, extra=_valores_tabla(editado),
+        cambios=cambios, avisos=avisos, extra=_valores_tabla(editado), base=confirmacion.estado_base(session),
     )
 
 
 def _aplicar_edicion(
     session: Session, period: FiscalPeriod, tipo: Tipo, op: confirmacion.OperacionPendiente, originales: dict[int, Decimal]
 ) -> None:
-    """Escribe los importes confirmados en una sola transaccion, si no
-    cambiaron desde la confirmacion."""
+    """Escribe los importes confirmados en una sola transaccion, si la base es
+    la misma sobre la que se preparo (O-1) y los importes no cambiaron."""
+    if not confirmacion.misma_base(op.base, session):
+        st.error(f"No se guardó ningún dato: {confirmacion.MENSAJE_BASE_CAMBIADA}")
+        return
     if not confirmacion.vigente(op, originales):
         st.error(
             "No se guardó ningún cambio: los importes del ejercicio cambiaron después de la vista previa. "
             "Revise la tabla y guarde de nuevo."
         )
         return
-    guardado, _ = ejecutar_escritura(
-        session,
-        lambda: [
+    def escribir():
+        # Se repite dentro de la transaccion: si la base cambio, no se escribe nada.
+        confirmacion.comprobar_base(op, session)
+        return [
             upsert_entry(session, fiscal_period_id=period.id, account_id=c.account_id, valor=c.nuevo, tipo=tipo)
             for c in op.cambios
-        ],
-        descripcion=f"guardar los cambios del ejercicio {period.anio}",
-    )
+        ]
+
+    guardado, _ = ejecutar_escritura(session, escribir, descripcion=f"guardar los cambios del ejercicio {period.anio}")
     if guardado:
         st.success(f"Ejercicio {period.anio}: {len(op.cambios)} valor(es) actualizado(s).")
         for aviso in op.avisos:
@@ -199,7 +204,7 @@ def _tabla_editable(session: Session, period_id: int, tipo: Tipo, moneda: str, k
     col_guardar, col_cancelar = st.columns(2)
     with col_guardar:
         if st.button("Guardar cambios", key=f"{key}_guardar"):
-            _guardar_edicion(period, tipo, editado, originales, cuentas, confirmar_signos, key)
+            _guardar_edicion(session, period, tipo, editado, originales, cuentas, confirmar_signos, key)
     with col_cancelar:
         if st.button("Cancelar modificaciones", key=f"{key}_cancelar"):
             confirmacion.descartar(key)

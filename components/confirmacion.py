@@ -17,9 +17,16 @@ Protecciones:
 - Repeticion (doble clic, reenvio): el token se consume al confirmar; un
   segundo clic ya no encuentra la operacion.
 - Cancelar descarta la operacion sin tocar la base de datos.
+- Restauracion o sustitucion de la base desde otra pestana o proceso
+  (hallazgo O-1, fase 7): la operacion guarda `EstadoBase` (identidad del
+  archivo SQLite y ultimo registro del historial) al prepararse; al
+  confirmar, `misma_base` lo compara con la base real, dentro de la misma
+  transaccion de escritura. No depende de st.session_state, que es propio
+  de cada pestana.
 """
 from __future__ import annotations
 
+import os
 import uuid
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -27,8 +34,11 @@ from typing import Any, Hashable
 
 import pandas as pd
 import streamlit as st
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from components.money import format_money
+from database.models import ChangeHistory
 
 _PENDIENTES = "_operaciones_pendientes"
 _PAGINA = "_pagina_operaciones_pendientes"
@@ -45,6 +55,67 @@ class Cambio:
     nuevo: Decimal
 
 
+@dataclass(frozen=True)
+class EstadoBase:
+    """Identifica la base de datos sobre la que se preparo una operacion.
+
+    - archivo: (volumen, id de archivo, creacion) del .db. Una restauracion
+      reemplaza el archivo (os.replace) y cambia el id; las escrituras
+      normales de SQLite (modo journal DELETE) no lo cambian.
+    - ancla: ultimo registro del historial de cambios. El historial solo
+      crece: las escrituras normales lo conservan, y si otra base sustituye
+      el contenido (aunque sea en el mismo archivo) ese registro falta o
+      difiere.
+    """
+
+    archivo: tuple
+    ancla: tuple | None
+
+
+_COLUMNAS_ANCLA = (ChangeHistory.id, ChangeHistory.tabla_afectada, ChangeHistory.registro_id, ChangeHistory.campo,
+                   ChangeHistory.fecha, ChangeHistory.lote_id)
+
+
+def _identidad_archivo(session: Session) -> tuple:
+    estado = os.stat(session.get_bind().url.database)
+    return (estado.st_dev, estado.st_ino, getattr(estado, "st_birthtime_ns", estado.st_ctime_ns))
+
+
+def estado_base(session: Session) -> EstadoBase:
+    fila = session.execute(select(*_COLUMNAS_ANCLA).order_by(ChangeHistory.id.desc()).limit(1)).first()
+    return EstadoBase(_identidad_archivo(session), tuple(fila) if fila else None)
+
+
+def misma_base(base: EstadoBase | None, session: Session) -> bool:
+    """True si la base actual es la misma sobre la que se preparo `base`."""
+    if base is None or _identidad_archivo(session) != base.archivo:
+        return False
+    if base.ancla is None:
+        return True
+    fila = session.execute(select(*_COLUMNAS_ANCLA).where(ChangeHistory.id == base.ancla[0])).first()
+    return fila is not None and tuple(fila) == base.ancla
+
+
+MENSAJE_BASE_CAMBIADA = (
+    "la base de datos cambió después de preparar la confirmación (por ejemplo, se restauró una copia de "
+    "seguridad desde otra pestaña). Revise los datos y vuelva a pulsar Guardar para preparar una confirmación nueva."
+)
+
+
+class BaseCambiada(ValueError):
+    """La operacion confirmada se preparo sobre otra base de datos."""
+
+    def __init__(self) -> None:
+        super().__init__(MENSAJE_BASE_CAMBIADA)
+
+
+def comprobar_base(op: OperacionPendiente, session: Session) -> None:
+    """Lanza BaseCambiada si la base no es la de la propuesta. Se llama dentro
+    de la transaccion de escritura: ejecutar_escritura revierte y lo informa."""
+    if not misma_base(op.base, session):
+        raise BaseCambiada()
+
+
 @dataclass
 class OperacionPendiente:
     pantalla: str
@@ -54,6 +125,7 @@ class OperacionPendiente:
     cambios: list[Cambio]
     avisos: list[str] = field(default_factory=list)
     extra: Any = None
+    base: EstadoBase | None = None
 
 
 def _pendientes() -> dict[str, OperacionPendiente]:
@@ -69,9 +141,11 @@ def resumen_cambios(cambios: list[Cambio], anio: int, estado: str) -> str:
 
 
 def proponer(pantalla: str, contexto: Hashable, *, resumen: str, cambios: list[Cambio],
-             avisos: list[str] | None = None, extra: Any = None) -> OperacionPendiente:
-    """Registra la operacion para confirmarla; reemplaza a la anterior de la pantalla."""
-    op = OperacionPendiente(pantalla, contexto, uuid.uuid4().hex, resumen, list(cambios), list(avisos or []), extra)
+             avisos: list[str] | None = None, extra: Any = None, base: EstadoBase | None = None) -> OperacionPendiente:
+    """Registra la operacion para confirmarla; reemplaza a la anterior de la pantalla.
+    `base` (estado_base) identifica la base sobre la que se prepara."""
+    op = OperacionPendiente(pantalla, contexto, uuid.uuid4().hex, resumen, list(cambios), list(avisos or []), extra,
+                            base)
     _pendientes()[pantalla] = op
     return op
 
