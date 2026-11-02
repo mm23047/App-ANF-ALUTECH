@@ -380,6 +380,28 @@ Limitación documentada: los caracteres de control que XLSX no admite se elimina
 | Suite completa | — | 416 aprobadas, 2 fallidas (F01, F03) |
 | BD protegidas | — | Sin cambios |
 
+### Etapa 5-D: persistencia real y navegación (5.6, N-02, N-06)
+
+**Estado: COMPLETADA (2026-11-01).** Sin cambios en el código de la aplicación.
+
+**Protección.** `database/connection.py` fija la BD en `data/financiera.db` (sin otra ruta configurable), así que no se ejecutó la aplicación desde el proyecto. Se extrajo el commit `f14e1d9` con `git archive` a una carpeta temporal, se copió allí la BD de trabajo con la API de respaldo de SQLite (la original se abrió en modo solo lectura) y se verificó que la copia era idéntica fila por fila. Al terminar se cerraron los procesos y se borró la carpeta.
+
+| Paso | Resultado |
+|---|---|
+| 1. Arrancar el servidor real (`streamlit run app.py`, headless, puerto 8599, solo localhost) y abrirlo en Microsoft Edge sin interfaz | El navegador muestra el Dashboard: "Alutech · Último ejercicio disponible: 2021 · Total Activos USD 0.00 · Ingresos Netos (INCOMPLETO) No disponible …" |
+| 2. Cerrar el proceso | El servidor deja de responder |
+| 3. Capturar en la página real "Ingreso de datos › Estado de Resultados" 4001 = 1.234,56 (AppTest: Guardar → confirmación con el alcance → Confirmar y guardar) | Propuesta: "Se modificarán 1 valor(es) de Estado de Resultados en el ejercicio 2021: 1 nuevo(s)…"; sin excepciones |
+| 4. Arrancar un proceso nuevo y abrirlo en el navegador | Muestra "Ingresos Netos (INCOMPLETO · SIN CONCILIAR) USD 1,234.56": el dato persiste tras reiniciar el proceso |
+| 5. Comparar la copia | Iguales tras reabrir. Solo cambiaron `income_entry` (+1 fila, 123456 centavos) y `change_history` (+1 fila con ejercicio, cuenta y lote). Las filas anteriores de todas las tablas, intactas; los 19 ceros de 2021 de la copia, intactos |
+| 6. Navegación de las 16 páginas sobre la copia (AppTest) | 16/16 sin excepciones; la copia no cambia al navegar |
+| BD de trabajo y respaldo original | Sin cambios: `c69020b6…ee10ac` y `f026863d…630a82d` |
+
+**Limitaciones.**
+- En el navegador real solo se verificó el Dashboard (la página inicial). La navegación por clics de las otras 15 páginas no se automatizó en el navegador; se cubren con AppTest (mismo `app.py`, sin servidor). N-02 queda cubierta en parte; la revisión manual página por página sigue disponible para el usuario, siempre sobre una copia.
+- La captura se hizo con AppTest (el mismo código de la página), no con clics en el navegador.
+- El script de verificación (`verificar_persistencia.py`) se conserva fuera del repositorio: usa la librería `websockets` (dependencia indirecta de Streamlit, no declarada), y `tests/test_fase4.py` exige que toda librería importada esté en `requirements.txt`. No se añadió la dependencia ni se modificó esa prueba.
+- **Incidencia resuelta durante la ejecución:** en un intento, Edge abrió una página de bienvenida e inició sesión automáticamente en el perfil temporal con la cuenta Microsoft de Windows. El perfil se eliminó con la carpeta temporal, y la verificación definitiva se hizo en modo InPrivate, sin sincronización. En otro intento el script se interrumpió con el servidor temporal en marcha: se detuvo el proceso, se borró la carpeta y se comprobaron las huellas, sin cambios.
+
 ---
 
 ## Riesgos generales de implementación
