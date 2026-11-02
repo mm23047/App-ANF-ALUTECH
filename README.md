@@ -8,8 +8,9 @@ Modelo DuPont) y exportación a PDF/Excel.
 
 ## 1. Requisitos
 
-- Python 3.11 o superior (desarrollado y probado con 3.12).
-- Windows, macOS o Linux.
+- Python 3.12 (probado con 3.12.10 en Windows 11).
+- `requirements.txt` fija las versiones exactas con las que pasa la suite
+  de pruebas; no se han probado otras versiones ni otros sistemas.
 
 ## 2. Instalación
 
@@ -82,8 +83,22 @@ También puedes respaldar manualmente copiando el archivo
   comercial) con aviso; en la importación Excel se rechaza, salvo el ruido
   binario de Excel (p. ej. 0.30000000000000004), que se redondea con aviso
   en la vista previa.
+- **Confirmación de operaciones masivas:** "Guardar" en la captura (Balance,
+  Resultados, saldos iniciales) y "Guardar cambios" en Modificación de datos
+  no escriben nada: muestran el alcance ("Se modificarán N valor(es) … en el
+  ejercicio X") con la cuenta, el valor actual y el nuevo. Solo "Confirmar y
+  guardar" escribe, una sola vez y en una transacción, y únicamente si esos
+  valores no cambiaron mientras tanto. "Cancelar", recargar la página o
+  cambiar de página o de ejercicio descartan la operación sin modificar nada.
 - La vista previa de la importación no modifica la BD: indica qué
-  ejercicios se crearían. Al confirmar se importa todo o nada.
+  ejercicios se crearían y el alcance (importes nuevos, sobrescritos y sin
+  cambios). Al confirmar se importa todo o nada, y solo si la vista previa es
+  la que se tenía en pantalla: un segundo clic no repite la importación.
+- Importación de códigos de cuenta: un código numérico entero (Excel puede
+  leer 1001 como 1001.0) se normaliza a "1001". Se reportan como
+  `CODIGO_AMBIGUO`, y no se importan, los códigos con decimales, valores
+  lógicos, fechas y los que pudieron perder ceros a la izquierda. Los
+  códigos escritos como texto se usan tal cual.
 - "Modificación de datos › Ejercicio" permite cerrar un ejercicio, lo que
   bloquea su captura, edición, importación y borrado (también desde la BD
   mediante disparadores), reabrirlo y eliminar ejercicios vacíos.
@@ -123,6 +138,12 @@ aplicación, y las columnas "Control" y "Diferencia" contienen fórmulas de
 Excel que los recalculan para auditarlos. El análisis vertical incluye
 subtotales, totales y utilidades, y se exporta a PDF y a Excel.
 
+Los textos escritos por el usuario (nombre de la empresa, moneda, nombres
+de cuenta) se muestran siempre como texto literal: en pantalla no se
+interpreta HTML ni Markdown, en el PDF no se interpretan etiquetas y en el
+Excel nunca se convierten en fórmulas, aunque empiecen con `=`, `+`, `-` o
+`@`. Las únicas fórmulas de los Excel son las de control.
+
 ## 5. Pruebas automatizadas
 
 ```bash
@@ -133,19 +154,36 @@ Las pruebas usan bases de datos SQLite temporales y datos sintéticos.
 `tests/conftest.py` redirige la ruta de la BD a un archivo temporal y hace
 fallar la ejecución si cambia el SHA-256 de `data/financiera.db`.
 
-Estado actual (2026-11-01, tras las fases 1 a 3 del `PLAN_DE_CORRECCION.md`):
-**270 aprobadas y 3 fallidas de 273**.
-- 30 pruebas originales: todas aprueban. La comparación de T-15 se ajustó, con
-  autorización, al redondeo de presentación (B-01).
-- 47 pruebas de la auditoría: 44 aprueban. F01 y F03 fallan por diseño: el
-  signo no se invierte, se advierte y se pide confirmación. D08 corresponde a
-  la fase 4.
-- 132 pruebas de la fase 1 y de M-11, 47 de la fase 2 y 17 de la fase 3:
-  todas aprueban.
+Estado actual (2026-11-01, fases 0 a 4, B-10 y fase 5 del
+`PLAN_DE_CORRECCION.md`, salvo la conciliación con Alutech):
+**416 aprobadas y 2 fallidas de 418**.
 
-Que una prueba falle significa que el defecto que describe sigue presente.
-Detalle en `MATRIZ_DE_PRUEBAS.md`. Las cifras de los reportes todavía no se
-han conciliado con los estados publicados de Alutech.
+| Conjunto | Pruebas | Aprobadas |
+|---|---|---|
+| Originales | 30 | 30 (la comparación de T-15 se ajustó, con autorización, al redondeo de presentación) |
+| Auditoría (`test_auditoria.py`) | 47 | 45: F01 y F03 fallan **por diseño** |
+| Fase 1 y M-11 (incluye las 16 páginas con `AppTest`) | 132 | 132 |
+| Fase 2 | 47 | 47 |
+| Fase 3 | 17 | 17 |
+| Fase 4 | 77 | 77 |
+| B-10 (Excel sin fórmulas en los textos) | 34 | 34 |
+| Fase 5: caso controlado de 3 ejercicios (`test_fase5_controlado.py`) | 18 | 18 |
+| Fase 5: integración del flujo completo (`test_fase5_integracion.py`) | 16 | 16 |
+
+F01 y F03 esperan que la aplicación invierta el signo de una depreciación
+capturada en positivo o de un costo negativo. La convención aprobada es la
+contraria: el signo nunca se invierte; el importe se muestra tal como se
+capturó, con un aviso, y guardarlo requiere confirmación. Esas dos pruebas
+no se modificaron.
+
+El caso controlado (`tests/fixtures/caso_controlado.json`) tiene valores
+calculados a mano para el Balance, el Estado de Resultados, el análisis
+vertical y el DuPont de 2021–2023: la aplicación coincide al centavo y en
+0,00 puntos porcentuales. Son datos sintéticos.
+
+**Pendiente:** las cifras de los reportes todavía no se han conciliado con
+los estados publicados de Alutech (paso 5.5); requiere los estados
+originales de 2020 a 2025. Detalle en `MATRIZ_DE_PRUEBAS.md`.
 
 ## 6. Plantillas de Excel
 
@@ -163,7 +201,9 @@ database/
   models.py             Modelos SQLAlchemy (empresa, ejercicios, cuentas,
                          importes, saldos iniciales, historial, estado)
   enums.py               Categorías/subcategorías y reglas de clasificación
-  connection.py          Engine, sesiones, respaldo/restauración
+  connection.py          Engine y sesiones (render_scope sin commit implícito)
+  migrations.py          Versión de esquema (PRAGMA user_version) y migraciones
+  backup_utils.py        Copia verificada y restauración segura
   repositories.py        Acceso a datos (CRUD + historial de cambios)
   seed.py                Catálogo de cuentas estándar inicial
 modules/
@@ -180,14 +220,23 @@ calculations/
   income_statement.py      Subtotales del Estado de Resultados
   vertical_analysis.py      Análisis vertical (balance y resultados)
   dupont.py                  Modelo DuPont de tres factores
+  validation.py              Convención de signos (avisos, nunca invierte)
+  controls.py                Conciliación resultado del ejercicio / utilidad neta
+  banderas.py                Estado del reporte (DEFINITIVO, INCOMPLETO, ...)
 reports/
   balance_report.py, income_report.py, vertical_report.py,
   dupont_report.py          Reportes en pantalla (tablas + gráficos)
   pdf_export.py, excel_export.py   Exportación a PDF (ReportLab) y Excel
                                     (OpenPyXL)
 components/
-  navigation.py, tables.py, money.py   Utilidades de interfaz compartidas
-tests/                   Suite Pytest (18 casos + regresiones)
+  navigation.py, tables.py, avisos.py   Utilidades de interfaz compartidas
+  money.py               Validación y formato de importes y años
+  transacciones.py       Escrituras explícitas (lote, commit, rollback)
+  confirmacion.py        Confirmación de operaciones masivas
+  texto.py               Texto literal en elementos Markdown
+  celdas_excel.py        Celdas XLSX: texto literal o fórmula de control
+tests/                   Suite Pytest: 30 originales, 47 de la auditoría y
+                         las de cada fase (418 en total)
 data/                    Base de datos SQLite y copias de seguridad
                          (fuera de control de versiones)
 assets/plantillas/       Plantillas Excel de referencia
@@ -206,9 +255,10 @@ importes capturados vigentes, para evitar datos derivados desactualizados.
   `OTROS_OPERATIVOS` dentro de "Gastos operativos", con un campo `efecto`
   (INGRESO/GASTO) que determina el signo en la Utilidad Operativa.
 - **Saldos iniciales del modelo DuPont**: se encadenan automáticamente
-  desde el Balance final del ejercicio fiscal anterior cuando existe; solo
-  se usan saldos capturados manualmente (o una aproximación con el saldo
-  final, claramente señalada) cuando no hay ejercicio anterior registrado.
+  desde el Balance final del ejercicio inmediatamente anterior, si está
+  completo, cuadra y tiene activo positivo; si no, se usan saldos capturados
+  manualmente completos, y si tampoco los hay, una aproximación con el saldo
+  final, señalada como APROXIMADO con su causa (ver 4.2).
 - **Ecuación contable**: el Balance General y el Estado de Resultados se
   capturan de forma independiente; el reporte de Balance siempre valida
   `Activo = Pasivo + Patrimonio` y muestra la diferencia si no cuadra, sin

@@ -1,7 +1,7 @@
 # Plan de corrección
 
 **Base:** `AUDITORIA_INTEGRAL.md` (2026-11-01). Los identificadores (C-, A-, M-, B-) remiten a los hallazgos de ese documento.
-**Estado:** Fases 0 a 4 completadas, M-11 corregido y T-15 resuelto (2026-11-01). Fase 5 pendiente de autorización.
+**Estado:** Fases 0 a 5 completadas (2026-11-01), con M-11, T-15 y B-10 resueltos. Pendiente: 5.5, conciliación con Alutech (a la espera de los estados 2020–2025). Requieren autorización independiente: 4.1, 4.3 y 4.8.
 
 ## Principios de orden
 
@@ -197,6 +197,7 @@
   - INGRESOS → debe ser ≥ 0.
   - La violación produce una advertencia que requiere confirmación (no un rechazo silencioso).
 - **Aceptación:** F01 y F03 aprueban (advertencia o rechazo); F02, F04 y F05 siguen aprobando.
+- *Actualización (fase 5): el usuario aprobó la convención actual sin inversión de signos y el criterio 75/77 de 5.1. F01 y F03 fallan por diseño y no se modifican; F02, F04 y F05 aprueban.*
 
 ### 2.5 Conciliación entre estados (M-07)
 - **Archivos:** `calculations/balance_sheet.py` o un nuevo `calculations/controls.py`, `reports/balance_report.py`.
@@ -400,7 +401,21 @@ Limitación documentada: los caracteres de control que XLSX no admite se elimina
 - En el navegador real solo se verificó el Dashboard (la página inicial). La navegación por clics de las otras 15 páginas no se automatizó en el navegador; se cubren con AppTest (mismo `app.py`, sin servidor). N-02 queda cubierta en parte; la revisión manual página por página sigue disponible para el usuario, siempre sobre una copia.
 - La captura se hizo con AppTest (el mismo código de la página), no con clics en el navegador.
 - El script de verificación (`verificar_persistencia.py`) se conserva fuera del repositorio: usa la librería `websockets` (dependencia indirecta de Streamlit, no declarada), y `tests/test_fase4.py` exige que toda librería importada esté en `requirements.txt`. No se añadió la dependencia ni se modificó esa prueba.
-- **Incidencia resuelta durante la ejecución:** en un intento, Edge abrió una página de bienvenida e inició sesión automáticamente en el perfil temporal con la cuenta Microsoft de Windows. El perfil se eliminó con la carpeta temporal, y la verificación definitiva se hizo en modo InPrivate, sin sincronización. En otro intento el script se interrumpió con el servidor temporal en marcha: se detuvo el proceso, se borró la carpeta y se comprobaron las huellas, sin cambios.
+- **Incidencia resuelta durante la ejecución (1):** al incorporar el script a `tests/`, `test_requirements_cubre_las_librerias_importadas` falló (con razón) por el import de `websockets`. El script se retiró del repositorio antes del commit y la suite volvió a 416/2.
+- **Incidencia resuelta durante la ejecución (2):** en un intento, Edge abrió una página de bienvenida e inició sesión automáticamente en el perfil temporal con la cuenta Microsoft de Windows. El perfil se eliminó con la carpeta temporal, y la verificación definitiva se hizo en modo InPrivate, sin sincronización. En otro intento el script se interrumpió con el servidor temporal en marcha: se detuvo el proceso, se borró la carpeta y se comprobaron las huellas, sin cambios.
+
+### Etapa 5-F: documentación (5.7, B-09)
+
+**Estado: COMPLETADA (2026-11-01).** Solo documentación.
+
+| Documento | Cambios |
+|---|---|
+| `README.md` (B-09) | Requisitos probados (Python 3.12.10, versiones fijadas); confirmación de operaciones masivas; alcance y repetición de la importación; normalización de códigos; texto literal en pantalla, PDF y Excel; estado de la suite (418 pruebas, F01 y F03 por diseño); caso controlado; conciliación con Alutech pendiente; estructura vigente (`migrations`, `backup_utils`, `validation`, `controls`, `banderas`, `transacciones`, `confirmacion`, `texto`, `celdas_excel`); descripción exacta de los saldos iniciales del DuPont. Se eliminó "18 casos" |
+| `MATRIZ_DE_PRUEBAS.md` | Estado tras la fase 5; estado actual de N-01 a N-08 (la tabla original se conserva); corrección del recuento de `test_fase1_paginas.py` (19) |
+| `AUDITORIA_INTEGRAL.md` | B-09 corregido; estado de la fase 5 y de 5.5; pendientes con autorización independiente; nota sobre la incorporación de `test_auditoria.py` en la fase 0 |
+| `PLAN_DE_CORRECCION.md` | Resultados de las etapas 5-A a 5-F; notas en el criterio de 2.4 y en los riesgos generales (decisiones ya tomadas), sin borrar el texto original |
+
+**Fase 5: COMPLETADA en el alcance autorizado.** Pendiente: 5.5 / 5-E (conciliación con Alutech), a la espera de los estados originales 2020–2025. Fuera de la fase 5, con autorización independiente: 4.1, 4.3 y 4.8. `INVENTARIO_DEL_PROYECTO.md` es la foto de la auditoría y no se actualizó (por ejemplo, conserva los rangos de versiones anteriores a B-05).
 
 ---
 
@@ -414,3 +429,5 @@ Limitación documentada: los caracteres de control que XLSX no admite se elimina
    - Qué hacer con los 19 ceros de 2021.
    - Criterio de ROE (total o atribuible a la controladora) para Alutech consolidado.
 4. **Fuera de alcance:** autenticación multiusuario. Se mitiga restringiendo el servidor a localhost (0.4).
+
+*Actualización (fase 5): las decisiones del punto 3 ya están tomadas: 1.4 opción (a), bloqueo simple; convención de signos actual, validada y sin inversión; los 19 ceros de 2021 se conservan; ROE con el patrimonio total (revisable con los estados de Alutech en 5.5).*

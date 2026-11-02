@@ -9,7 +9,7 @@ Documentos relacionados: `PLAN_DE_CORRECCION.md`, `MATRIZ_DE_PRUEBAS.md`, `INVEN
 
 ---
 
-## 0. Estado de corrección (actualizado 2026-11-01, tras la fase 4)
+## 0. Estado de corrección (actualizado 2026-11-01, tras la fase 5, salvo la conciliación con Alutech)
 
 Los hallazgos originales se conservan sin cambios en las secciones siguientes. Esta tabla registra su estado.
 
@@ -46,7 +46,10 @@ Los hallazgos originales se conservan sin cambios en las secciones siguientes. E
 | B-06 | CORREGIDO | `modules/excel_import.normalizar_codigo`: un número entero exacto (1001.0) se normaliza a "1001"; decimales, valores lógicos, fechas, infinitos y enteros > 2^53 se reportan como `CODIGO_AMBIGUO`; también un número que coincide con un código con ceros a la izquierda y un texto "1003.0". Los textos válidos no cambian. D08 aprueba |
 | B-07 | CORREGIDO (datos, con autorización) | `data/financiera.db`, tabla `company`: `alutech` → `Alutech`, `aluetch sv` → `Alutech SV`, `El Salvaodr` → `El Salvador`. Valores anteriores en `change_history` (ids 53–55, un lote) y en la copia `data/backups/financiera_pre_b07_20261101_182614_096704.db` |
 | B-10 | CORREGIDO (con autorización, antes de la fase 5) | `components/celdas_excel.py`: todo texto se escribe como cadena literal (`data_type = "s"`) y, si empieza con `=`, `+`, `-`, `@`, tabulador o retorno de carro, con `quotePrefix`; las fórmulas de control solo se escriben con `formula()`. Usado en `reports/excel_export.py` (31 escrituras de datos, 3 de fórmulas) y en la plantilla de importación. `tests/test_b10.py` |
-| Resto | PENDIENTE | B-09 (fase 5). F01 y F03 siguen fallando por diseño (ver A-05) |
+| B-09 | CORREGIDO | `README.md` actualizado (fase 5-F): estado real de la suite (418 pruebas: 416 aprobadas, F01 y F03 por diseño), versiones probadas, confirmaciones, códigos de importación, texto literal en las exportaciones y estructura vigente. Ya no menciona "18 casos requeridos" |
+| Fase 5 | COMPLETADA salvo 5.5 | Caso controlado de 3 ejercicios (0,00 de diferencia), integración del flujo completo (restauración con la misma huella SHA-256) y persistencia con el proceso real de Streamlit. Ver `PLAN_DE_CORRECCION.md` |
+| Conciliación con Alutech (5.5, N-01) | PENDIENTE | Requiere los estados financieros originales 2020–2025; no se usaron cifras ficticias |
+| Resto | PENDIENTE (autorización independiente) | Pasos 4.1 (ayuda de signos por grupo y plantillas estáticas de `assets/plantillas/` sin la hoja "Convención de signos"), 4.3 (mensajes de error técnicos) y 4.8 (página "Configuración" duplicada). F01 y F03 siguen fallando por diseño (ver A-05) |
 
 **Hallazgo nuevo B-10 (preexistente, detectado en la fase 4).** Verificación: COMPROBADO (`openpyxl` 3.1.5).
 - **Archivo:** `reports/excel_export.py` (líneas 40, 42, 81, 89 y 92: nombre de la empresa, moneda, grupos y nombres de cuenta).
@@ -387,7 +390,7 @@ Revisión por inspección de código. La interfaz no se navegó manualmente; ver
 - Comando ejecutado: `.venv\Scripts\python -m pytest tests/ -v` → **30 aprobadas, 0 fallidas, 0 errores** (6,9 s).
 
 ### 12.2 Pruebas de verificación de la auditoría
-- Archivo: `C:\Users\estua\AppData\Local\Temp\claude\c--Users-estua-Documents-ANF-appfinanciera\9682c29f-24d7-41f1-98d9-8fdb842605d9\scratchpad\audit_tests\test_auditoria.py`. Está fuera del proyecto y es temporal de esta sesión. Se recomienda incorporarlo al proyecto en la fase 5, con autorización.
+- Archivo: `C:\Users\estua\AppData\Local\Temp\claude\c--Users-estua-Documents-ANF-appfinanciera\9682c29f-24d7-41f1-98d9-8fdb842605d9\scratchpad\audit_tests\test_auditoria.py`. Está fuera del proyecto y es temporal de esta sesión. Se recomienda incorporarlo al proyecto en la fase 5, con autorización. *(Actualización: se incorporó en la fase 0 como `tests/test_auditoria.py`; ver `PLAN_DE_CORRECCION.md`, paso 0.3.)*
 - Cada prueba afirma el **comportamiento correcto esperado**; un fallo confirma el defecto.
 - Resultado: **47 ejecutadas: 17 aprobadas y 30 fallidas.** Detalle en `MATRIZ_DE_PRUEBAS.md`.
 - Todas usan BD SQLite temporales. El hash SHA-256 de `data/financiera.db` es idéntico antes y después: `f026863d00f841c042c996e0ccb12a1317992ede97d2e544f4cba5955630a82d`.

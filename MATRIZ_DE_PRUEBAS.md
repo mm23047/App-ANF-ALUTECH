@@ -3,6 +3,31 @@
 **Fecha de ejecución:** 2026-11-01 · **Entorno:** Windows 11, Python 3.12.10 (`.venv`), pytest 8.4.2, Streamlit 1.66.1, SQLAlchemy 2.0.55
 **Base de datos:** todas las pruebas usan SQLite temporales. El hash de `data/financiera.db` fue el mismo antes y después (`f026863d…630a82d`).
 
+## Estado tras la fase 5 (2026-11-01), salvo la conciliación con Alutech
+
+Comando: `.venv\Scripts\python -m pytest tests/ -q` → **416 aprobadas, 2 fallidas** (418 pruebas). Las únicas fallidas son F01 y F03, por diseño. Huellas sin cambios durante toda la fase: BD de trabajo `c69020b6…ee10ac`, respaldo original de la fase 0 `f026863d…630a82d`. (La huella `f026863d…` del encabezado es la de la BD de trabajo durante la auditoría, antes de las migraciones de la fase 1 y de B-07.)
+
+| Conjunto | Ejecutadas | Aprobadas | Fallidas |
+|---|---|---|---|
+| Originales | 30 | 30 | 0 |
+| Auditoría | 47 | 45 | 2 (F01, F03) |
+| **Base (5.1): originales + auditoría** | **77** | **75** | **2: criterio aprobado por el usuario (75/77)** |
+| Fase 1 + M-11 (incluye las 16 páginas) | 132 | 132 | 0 |
+| Fase 2 | 47 | 47 | 0 |
+| Fase 3 | 17 | 17 | 0 |
+| Fase 4 | 77 | 77 | 0 |
+| B-10 | 34 | 34 | 0 |
+| Fase 5: caso controlado (`tests/test_fase5_controlado.py`) | 18 | 18 | 0 |
+| Fase 5: integración (`tests/test_fase5_integracion.py`) | 16 | 16 | 0 |
+
+- **5-A (5.1 y 5.3):** las pruebas de auditoría no cambiaron desde la fase 0, y las 6 originales no cambiaron desde la línea base salvo T-15 (autorizado). En un entorno limpio instalado con `requirements.txt` da el mismo resultado.
+- **5-B (5.4):** caso sintético de 2021–2023 con valores calculados a mano y verificados con fracciones exactas. Diferencia 0,00 en importes y 0,00 pp en las 126 líneas verticales; factores DuPont iguales a la fracción exacta; estado DEFINITIVO en los 3 años.
+- **5-C (5.2):** empresa → catálogo → importación 2020–2025 con las plantillas de la app → 16 páginas → 60 exportaciones → respaldo → restauración. La BD restaurada tiene la misma huella SHA-256 que la copia.
+- **5-D (5.6):** proceso real de Streamlit sobre una copia del árbol y de la BD. El dato capturado persiste tras cerrar y reabrir el proceso y el navegador real (Edge) lo muestra.
+- **5.5 (conciliación con Alutech): PENDIENTE.** Requiere los estados originales 2020–2025.
+
+Corrección de un dato de este documento: la tabla "Pruebas nuevas de la fase 1" indica 17 pruebas en `tests/test_fase1_paginas.py`; desde M-11 son 19 (16 páginas + la BD sin cambios + 2 comprobaciones del contenido vertical). El total de 132 de "Fase 1 + M-11" ya las incluía.
+
 ## Estado tras la corrección de B-10 (2026-11-01)
 
 Comando: `.venv\Scripts\python -m pytest tests/ -q` → **382 aprobadas, 2 fallidas** (384 pruebas). Las únicas fallidas siguen siendo F01 y F03 (por diseño). Hash de `data/financiera.db` igual antes y después (`c69020b6…ee10ac`).
@@ -274,6 +299,19 @@ En todos los casos se ejecutó el código real del módulo (`render`, `_render_g
 | N-06 | Persistencia | Cerrar el proceso Streamlit real y reabrir | Solo se probó a nivel de engine (T-08, E01) | Capturar, cerrar el proceso, reabrir y comparar | NO EJECUTADO |
 | N-07 | Entorno | Compatibilidad con las versiones mínimas (Streamlit 1.38, pandas 2.2, etc.) | Solo están instaladas las versiones actuales | Crear un venv con las versiones mínimas y ejecutar pytest y la aplicación | NO EJECUTADO |
 | N-08 | Seguridad | Acceso desde otra máquina de la red | Requiere una segunda máquina | Desde otro equipo, abrir `http://<IP>:8501` con la aplicación en ejecución | NO EJECUTADO |
+
+**Estado actual de estas verificaciones (tras la fase 5, 2026-11-01).** La tabla anterior se conserva como se redactó en la auditoría.
+
+| ID | Estado actual | Evidencia o motivo |
+|---|---|---|
+| N-01 | PENDIENTE | Es el paso 5.5. Requiere que el usuario entregue los estados originales 2020–2025; `documentos/` solo contiene material teórico |
+| N-02 | PARCIAL | Las 16 páginas, con `AppTest`, sobre una copia de la BD real (fase 4 y etapa 5-D) y sobre los datos de integración de 2020–2025 (5-C). El Dashboard, en el proceso real y el navegador real (5-D). Falta recorrer las otras 15 páginas con clics en el navegador |
+| N-03 | NO EJECUTADO | Requiere varias pestañas reales. Cubierto con un bloqueo real de archivo en `tests/test_fase1_restauracion.py` |
+| N-04 | NO EJECUTADO | LibreOffice no está instalado. Lo sustituye el evaluador de fórmulas de `tests/test_fase3.py` |
+| N-05 | PARCIAL | 8 PDF revisados visualmente con datos sintéticos (fase 3); falta hacerlo con los datos de Alutech (depende de 5.5) |
+| N-06 | EJECUTADO | Etapa 5-D: captura, cierre del proceso real de Streamlit, reapertura y comparación sobre una copia: mismos datos |
+| N-07 | SUPERADO | B-05 fijó en `requirements.txt` las versiones probadas; ya no se declaran mínimos. Entorno limpio con esas versiones: suite sin cambios |
+| N-08 | NO EJECUTADO | Requiere un segundo equipo. El servidor escucha solo en `localhost` (`.streamlit/config.toml`) |
 
 ---
 
