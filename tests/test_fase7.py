@@ -437,3 +437,107 @@ def test_o2_situacion_ambigua_conserva_la_copia(escenario_restauracion, monkeypa
     with pytest.raises(RestauracionError):
         restaurar(origen, actual, dir_respaldos=backups)
     assert len(_previas(backups, historicos)) == 1 and _temporales(actual) == []
+
+
+# =================================================================== O-3 y O-4 (Excel)
+
+from openpyxl import load_workbook  # noqa: E402
+
+
+@pytest.fixture()
+def libros_excel(bd):
+    """Reportes Excel de 2021 (primer ejercicio: DuPont APROXIMADO con fuente
+    larga) con las mismas banderas que pasan las paginas."""
+    from calculations.balance_sheet import compute_balance_sheet
+    from calculations.banderas import banderas_balance, banderas_resultados
+    from calculations.controls import conciliar_resultado
+    from calculations.dupont import compute_dupont
+    from calculations.income_statement import compute_income_statement
+    from calculations.vertical_analysis import compute_vertical_balance, compute_vertical_income
+    from reports.excel_export import (export_balance_excel, export_dupont_excel, export_income_excel,
+                                      export_vertical_excel)
+
+    with session_scope() as s:
+        p = get_fiscal_period(s, 2021)
+        for codigo, valor, tipo in (("1101", "900", Tipo.BALANCE), ("2001", "400", Tipo.BALANCE),
+                                    ("3001", "500", Tipo.BALANCE), ("4001", "1000", Tipo.RESULTADOS),
+                                    ("5001", "600", Tipo.RESULTADOS), ("6001", "100", Tipo.RESULTADOS),
+                                    ("8001", "50", Tipo.RESULTADOS)):
+            upsert_entry(s, fiscal_period_id=p.id, account_id=_id(s, codigo), valor=valor, tipo=tipo)
+    with session_scope() as s:
+        c, p = get_company(s), get_fiscal_period(s, 2021)
+        bs, inc = compute_balance_sheet(s, p.id), compute_income_statement(s, p.id)
+        conc = conciliar_resultado(bs, inc)
+        vb, vi = compute_vertical_balance(s, p.id), compute_vertical_income(s, p.id)
+        datos = {
+            "balance": export_balance_excel(c, p, bs, banderas_balance(bs, conc)),
+            "resultados": export_income_excel(c, p, inc, banderas_resultados(inc, conc)),
+            "vertical": export_vertical_excel(c, p, "V", None, vb.base_total_activo, "Total Activo", vb.lineas,
+                                              banderas_balance(bs, conc)),
+            "vertical_df": export_vertical_excel(c, p, "V", pd.DataFrame(
+                [{"Código": "1101", "Cuenta": "PPE", "Valor": 900.0, "Participación %": 100.0}]),
+                vb.base_total_activo, "Total Activo"),
+            "dupont": export_dupont_excel(c, p, compute_dupont(s, p)),
+        }
+    return {k: load_workbook(io.BytesIO(v)).active for k, v in datos.items()}
+
+
+@pytest.mark.parametrize("reporte", ["balance", "resultados", "vertical", "vertical_df", "dupont"])
+def test_o4_impresion_horizontal_en_una_pagina_de_ancho(libros_excel, reporte):
+    ws = libros_excel[reporte]
+    assert ws.page_setup.orientation == "landscape"
+    assert ws.sheet_properties.pageSetUpPr.fitToPage is True
+    assert ws.page_setup.fitToWidth == 1 and ws.page_setup.fitToHeight == 0
+    assert ws.page_margins.left == ws.page_margins.right == 0.5
+    if reporte != "dupont":  # el encabezado de la tabla se repite en cada pagina impresa
+        fila = int(ws.print_title_rows.split(":")[0].lstrip("$"))
+        assert ws.cell(fila, 1).value == "Código"
+
+
+@pytest.mark.parametrize("reporte, ancho_maximo", [("balance", 140), ("resultados", 140), ("vertical", 160),
+                                                    ("dupont", 140)])
+def test_o4_ancho_total_no_obliga_a_reducir_demasiado(libros_excel, reporte, ancho_maximo):
+    """Una pagina horizontal Carta con margenes de 0,5" admite unos 130
+    caracteres a 100 %: el ancho total no debe exigir una reduccion fuerte."""
+    ws = libros_excel[reporte]
+    total = sum(d.width for d in ws.column_dimensions.values() if d.width)
+    assert total <= ancho_maximo
+
+
+def test_o3_etiqueta_de_la_diferencia_cabe_en_la_columna_b(libros_excel):
+    ws = libros_excel["balance"]
+    etiqueta = next(c for c in ws["B"] if isinstance(c.value, str) and c.value.startswith("Diferencia:"))
+    assert etiqueta.font.b
+    assert ws.column_dimensions["B"].width >= len(etiqueta.value) * 1.1  # negrita: algo mas ancha
+
+
+def test_o3_textos_largos_se_ajustan_sin_perder_informacion(libros_excel):
+    ws = libros_excel["dupont"]
+    fuente = next(c for c in ws["A"] if c.value == "Fuente de saldos iniciales:")
+    valor = ws.cell(fuente.row, 2)
+    assert valor.value.startswith("APROXIMADO") and len(valor.value) > 100  # texto completo, sin recortes
+    assert f"B{fuente.row}:C{fuente.row}" in {str(r) for r in ws.merged_cells.ranges}
+    assert valor.alignment.wrap_text and ws.row_dimensions[fuente.row].height >= 30
+    assert fuente.alignment.vertical == "top"  # la etiqueta queda junto al inicio del texto
+    banderas = [c for c in ws["A"] if isinstance(c.value, str) and c.value.startswith("APROXIMADO:")]
+    assert banderas and all(f"A{b.row}:C{b.row}" in {str(r) for r in ws.merged_cells.ranges} for b in banderas)
+    assert all(b.alignment.wrap_text for b in banderas)
+
+
+def test_o3_detalle_de_controles_en_varias_lineas_y_alineado(libros_excel):
+    ws = libros_excel["dupont"]
+    fila = next(c.row for c in ws["A"] if c.value == "Saldos iniciales reales (no aproximados)")
+    detalle = ws.cell(fila, 3)
+    assert detalle.alignment.wrap_text and len(detalle.value) > 60
+    assert ws.row_dimensions[fila].height >= 30
+    assert ws.cell(fila, 1).alignment.vertical == ws.cell(fila, 2).alignment.vertical == "top"
+
+
+@pytest.mark.parametrize("reporte", ["balance", "resultados", "vertical", "dupont"])
+def test_o3_formatos_fuentes_y_formulas_se_conservan(libros_excel, reporte):
+    ws = libros_excel[reporte]
+    numeros = [c for fila in ws.iter_rows() for c in fila if c.data_type == "n" and c.value is not None]
+    assert numeros and all(c.number_format in ("#,##0.00", "0.00", "0.0000") for c in numeros)
+    assert all((c.font.sz or 11) >= 9 for fila in ws.iter_rows() for c in fila if c.value is not None)
+    formulas = [c for fila in ws.iter_rows() for c in fila if c.data_type == "f"]
+    assert (len(formulas) > 0) is (reporte != "dupont")

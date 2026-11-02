@@ -14,6 +14,12 @@ Columnas de los estados (hallazgos A-06 y B-03):
 Un grupo sin cuentas capturadas se muestra como "Sin datos" y se excluye
 de las formulas.
 
+Presentacion e impresion (hallazgos O-3 y O-4): la columna B se ensancha
+segun su texto mas largo; los textos largos (banderas, fuente de saldos,
+detalle de controles) se ajustan en varias lineas dentro del ancho de la
+tabla; cada hoja se imprime en horizontal, con todas las columnas en el
+ancho de una pagina y el encabezado de la tabla repetido.
+
 Los datos se escriben con components.celdas_excel.escribir (un texto nunca
 se guarda como formula, hallazgo B-10); las unicas formulas son las de
 control, escritas con escribir_formula.
@@ -23,9 +29,12 @@ from __future__ import annotations
 import datetime
 import io
 from decimal import Decimal
+from math import ceil
 
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.page import PageMargins
 
 from calculations.banderas import Bandera, banderas_balance, banderas_dupont, banderas_resultados, resumen
 from calculations.vertical_analysis import ETIQUETA_EFECTO
@@ -40,6 +49,9 @@ ROJO = "C00000"
 VERDE = "2E7D32"
 FORMATO_IMPORTE = "#,##0.00"
 SIN_DATOS = "Sin datos"
+ANCHOS_ESTADOS = {"A": 14, "B": 40, "C": 18, "D": 18, "E": 14}
+ANCHO_MAXIMO_B = 64
+ALTO_LINEA = 15  # puntos por linea de texto (Calibri 11)
 
 
 def _encabezado(ws, company, periodo_anio: int, titulo: str, fila_inicio: int = 1) -> int:
@@ -50,12 +62,17 @@ def _encabezado(ws, company, periodo_anio: int, titulo: str, fila_inicio: int = 
     return fila_inicio + 5
 
 
-def _escribir_banderas(ws, fila: int, banderas: list[Bandera]) -> int:
+def _escribir_banderas(ws, fila: int, banderas: list[Bandera], ajustes: list | None = None,
+                       ultima_columna: int = 5) -> int:
+    """Estado del reporte y una fila por bandera. Cada bandera se ajusta al
+    ancho de la tabla (columnas 1..ultima_columna) para que no se corte."""
     estado = resumen(banderas)
     escribir(ws, fila, 1, f"Estado del reporte: {estado}").font = Font(bold=True, color=VERDE if not banderas else ROJO)
     fila += 1
     for bandera in banderas:
         escribir(ws, fila, 1, f"{bandera.codigo}: {bandera.texto}").font = Font(color=ROJO)
+        if ajustes is not None:
+            ajustes.append((fila, 1, ultima_columna))
         fila += 1
     return fila + 1
 
@@ -117,9 +134,57 @@ def _total(ws, fila: int, etiqueta: str, valor: Decimal, terminos: list[tuple[st
     return fila
 
 
-def _autoajustar_columnas(ws, ancho_col_b: int = 40) -> None:
-    for columna, ancho in (("A", 14), ("B", ancho_col_b), ("C", 18), ("D", 18), ("E", 14)):
+def _ancho_texto(texto: str, negrita: bool) -> int:
+    """Ancho de columna (en caracteres) para mostrar `texto` completo."""
+    return ceil(len(texto) * (1.12 if negrita else 1.0)) + 2
+
+
+def _finalizar_hoja(ws, anchos: dict[str, float], ajustes: list, fila_titulos: int | None,
+                    ancho_variable: str | None = "B") -> None:
+    """Anchos de columna, textos ajustados en varias lineas e impresion.
+
+    - `ancho_variable`: columna que crece hasta ANCHO_MAXIMO_B para mostrar
+      su texto mas largo (p. ej. la etiqueta de la diferencia del Balance).
+    - `ajustes`: (fila, columna_inicial, columna_final) de textos largos; se
+      unen esas celdas, se ajusta el texto y se calcula el alto de la fila.
+      El valor sigue en la celda de la columna inicial.
+    """
+    filas_ajustadas = {(fila, c) for fila, ini, fin in ajustes for c in range(ini, fin + 1)}
+    if ancho_variable:
+        indice = ord(ancho_variable) - ord("A") + 1
+        necesario = max(
+            (_ancho_texto(str(c.value), bool(c.font and c.font.b))
+             for c in ws[ancho_variable] if isinstance(c.value, str) and (c.row, indice) not in filas_ajustadas),
+            default=0,
+        )
+        anchos = {**anchos, ancho_variable: max(anchos[ancho_variable], min(necesario, ANCHO_MAXIMO_B))}
+    for columna, ancho in anchos.items():
         ws.column_dimensions[columna].width = ancho
+
+    for fila, inicio, fin in ajustes:
+        celda = ws.cell(fila, inicio)
+        if fin > inicio:
+            ws.merge_cells(start_row=fila, start_column=inicio, end_row=fila, end_column=fin)
+        celda.alignment = Alignment(wrap_text=True, vertical="top")
+        ancho = sum(anchos.get(get_column_letter(c), 8.43) for c in range(inicio, fin + 1))
+        lineas = max(1, ceil(_ancho_texto(str(celda.value or ""), bool(celda.font and celda.font.b)) / ancho))
+        if lineas > 1:
+            ws.row_dimensions[fila].height = ALTO_LINEA * lineas
+            # Toda la fila alineada arriba: la etiqueta queda junto al inicio del texto largo.
+            for otra in ws[fila]:
+                if otra.coordinate not in ws.merged_cells:
+                    otra.alignment = Alignment(horizontal=otra.alignment.horizontal, wrap_text=otra.alignment.wrap_text,
+                                               vertical="top")
+
+    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
+    ws.page_setup.paperSize = ws.PAPERSIZE_LETTER
+    ws.page_setup.fitToWidth = 1   # todas las columnas en el ancho de una pagina
+    ws.page_setup.fitToHeight = 0  # tantas paginas de alto como haga falta
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_margins = PageMargins(left=0.5, right=0.5, top=0.6, bottom=0.6, header=0.3, footer=0.3)
+    ws.print_options.horizontalCentered = True
+    if fila_titulos:
+        ws.print_title_rows = f"{fila_titulos}:{fila_titulos}"
 
 
 def _guardar(wb) -> bytes:
@@ -133,7 +198,9 @@ def export_balance_excel(company, period, bs, banderas: list[Bandera] | None = N
     ws = wb.active
     ws.title = "Balance General"
     fila = _encabezado(ws, company, period.anio, "Balance General")
-    fila = _escribir_banderas(ws, fila, banderas if banderas is not None else banderas_balance(bs))
+    ajustes = []
+    fila = _escribir_banderas(ws, fila, banderas if banderas is not None else banderas_balance(bs), ajustes)
+    fila_titulos = fila
     fila = _encabezado_tabla(ws, fila)
 
     escribir(ws, fila, 1, "ACTIVO").font = Font(bold=True, size=11)
@@ -161,7 +228,7 @@ def export_balance_excel(company, period, bs, banderas: list[Bandera] | None = N
     fila += 2
     _total(ws, fila, "Diferencia: Activo − (Pasivo + Patrimonio) (debe ser 0)", bs.diferencia, [("+", f_ta), ("-", f_tpp)])
 
-    _autoajustar_columnas(ws)
+    _finalizar_hoja(ws, ANCHOS_ESTADOS, ajustes, fila_titulos)
     return _guardar(wb)
 
 
@@ -170,8 +237,10 @@ def export_income_excel(company, period, inc, banderas: list[Bandera] | None = N
     ws = wb.active
     ws.title = "Estado de Resultados"
     fila = _encabezado(ws, company, period.anio, "Estado de Resultados")
-    fila = _escribir_banderas(ws, fila, banderas if banderas is not None else banderas_resultados(inc))
+    ajustes = []
+    fila = _escribir_banderas(ws, fila, banderas if banderas is not None else banderas_resultados(inc), ajustes)
     escribir(ws, fila - 1, 1, "Costos, gastos e impuestos se capturan en positivo y se restan.").font = Font(italic=True, size=9)
+    fila_titulos = fila
     fila = _encabezado_tabla(ws, fila)
 
     fila, f_ing = _escribir_grupo(ws, fila, inc.ingresos_netos)
@@ -201,7 +270,7 @@ def export_income_excel(company, period, inc, banderas: list[Bandera] | None = N
     fila, f_isr = _escribir_grupo(ws, fila, inc.impuesto_renta)
     _total(ws, fila, "UTILIDAD NETA", inc.utilidad_neta, [("+", f_uai), ("-", f_isr)])
 
-    _autoajustar_columnas(ws)
+    _finalizar_hoja(ws, ANCHOS_ESTADOS, ajustes, fila_titulos)
     return _guardar(wb)
 
 
@@ -214,13 +283,15 @@ def export_vertical_excel(company, period, titulo: str, df, base, nombre_base: s
     ws = wb.active
     ws.title = "Análisis Vertical"
     fila = _encabezado(ws, company, period.anio, titulo)
-    fila = _escribir_banderas(ws, fila, banderas or [])
+    ajustes = []
+    fila = _escribir_banderas(ws, fila, banderas or [], ajustes, ultima_columna=6)
     escribir(ws, fila, 1, "Base (100%)").font = Font(bold=True)
     escribir(ws, fila, 2, nombre_base)
     _importe(ws, fila, 3, base, negrita=True)
     fila_base = fila
     fila += 2
 
+    fila_titulos = fila
     fila = _encabezado_tabla(ws, fila, ("Código", "Concepto", "Importe", "Participación %", "Efecto", "Control % (fórmula)"))
     if lineas is not None:
         filas = [(l.codigo, l.etiqueta, l.valor, l.porcentaje, l.efecto, l.tipo != "cuenta") for l in lineas]
@@ -242,8 +313,7 @@ def export_vertical_excel(company, period, titulo: str, df, base, nombre_base: s
             escribir_formula(ws, fila, 6, f"=C{fila}/$C${fila_base}*100").number_format = "0.00"
         fila += 1
 
-    _autoajustar_columnas(ws)
-    ws.column_dimensions["F"].width = 18
+    _finalizar_hoja(ws, {**ANCHOS_ESTADOS, "F": 18}, ajustes, fila_titulos)
     return _guardar(wb)
 
 
@@ -252,7 +322,8 @@ def export_dupont_excel(company, period, resultado) -> bytes:
     ws = wb.active
     ws.title = "Análisis DuPont"
     fila = _encabezado(ws, company, period.anio, "Análisis de Rentabilidad — Modelo DuPont")
-    fila = _escribir_banderas(ws, fila, banderas_dupont(resultado))
+    ajustes = []
+    fila = _escribir_banderas(ws, fila, banderas_dupont(resultado), ajustes, ultima_columna=3)
 
     def roe(valor):
         return valor if resultado.interpretable else "NO INTERPRETABLE"
@@ -281,15 +352,15 @@ def export_dupont_excel(company, period, resultado) -> bytes:
     fila += 1
     escribir(ws, fila, 1, "Fuente de saldos iniciales:").font = Font(italic=True)
     escribir(ws, fila, 2, resultado.fuente_saldos_iniciales or "")
+    ajustes.append((fila, 2, 3))  # la fuente puede ser larga: ocupa B:C en varias lineas
     fila += 2
     fila = _encabezado_tabla(ws, fila, ("Control", "Resultado", "Detalle"))
     for control in resultado.controles:
         escribir(ws, fila, 1, control.nombre)
         escribir(ws, fila, 2, "Correcto" if control.correcto else "Revisar").font = Font(color=VERDE if control.correcto else ROJO)
         escribir(ws, fila, 3, control.detalle)
+        ajustes.append((fila, 3, 3))
         fila += 1
 
-    ws.column_dimensions["A"].width = 52
-    ws.column_dimensions["B"].width = 22
-    ws.column_dimensions["C"].width = 60
+    _finalizar_hoja(ws, {"A": 52, "B": 22, "C": 60}, ajustes, None, ancho_variable=None)
     return _guardar(wb)
