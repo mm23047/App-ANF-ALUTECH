@@ -3,6 +3,29 @@
 **Fecha de ejecución:** 2026-11-01 · **Entorno:** Windows 11, Python 3.12.10 (`.venv`), pytest 8.4.2, Streamlit 1.66.1, SQLAlchemy 2.0.55
 **Base de datos:** todas las pruebas usan SQLite temporales. El hash de `data/financiera.db` fue el mismo antes y después (`f026863d…630a82d`).
 
+## Estado tras la corrección de B-10 (2026-11-01)
+
+Comando: `.venv\Scripts\python -m pytest tests/ -q` → **382 aprobadas, 2 fallidas** (384 pruebas). Las únicas fallidas siguen siendo F01 y F03 (por diseño). Hash de `data/financiera.db` igual antes y después (`c69020b6…ee10ac`).
+
+| Conjunto | Ejecutadas | Aprobadas | Fallidas |
+|---|---|---|---|
+| Originales | 30 | 30 | 0 |
+| Auditoría | 47 | 45 | 2 (F01, F03) |
+| Fase 1 + M-11 (incluye las 16 páginas) | 132 | 132 | 0 |
+| Fase 2 | 47 | 47 | 0 |
+| Fase 3 | 17 | 17 | 0 |
+| Fase 4 | 77 | 77 | 0 |
+| B-10 (`tests/test_b10.py`) | 34 | 34 | 0 |
+
+`tests/test_b10.py` cubre:
+- 15 textos guardados y releídos con openpyxl: 8 con signo de fórmula (`=`, `+`, `-`, `@`, `=HYPERLINK(...)`, `=cmd|...`, tabulador y retorno de carro iniciales) y 7 especiales (espacios exteriores, salto de línea, `Ñandú & <b>€</b> 'x' "y"`, vacío, "1001", "-", "="): mismo valor, tipo `s`, `quotePrefix` solo en los peligrosos y sin `<f>` en el XML.
+- Caracteres de control no admitidos (se eliminan), números y vacíos sin cambios, `formula()` rechaza lo que no es fórmula, `agregar_fila`.
+- Los 4 reportes (y el vertical en formato anterior) con empresa y 6 cuentas de nombre peligroso o especial: cada texto del usuario es una celda de tipo `s`; toda fórmula está en las columnas D–F y tiene la forma de una fórmula de control; fórmulas y números idénticos a los del mismo reporte con nombres normales; importes del Balance (300, 1.000 y 400).
+- XML de cada hoja: ningún `<f>` contiene datos del usuario.
+- Plantilla de importación: nombres como texto, ninguna fórmula, y se sigue leyendo con los mismos nombres.
+
+Comprobaciones adicionales: las 14 pruebas de reportes fallan con el código anterior; con datos normales, los 6 libros generados son idénticos celda por celda a los del código anterior (58 fórmulas de control).
+
 ## Estado tras la fase 4 (2026-11-01)
 
 Comando: `.venv\Scripts\python -m pytest tests/ -q` → **348 aprobadas, 2 fallidas** (350 pruebas). Mismo resultado en un entorno limpio instalado solo con `pip install -r requirements.txt` (su `pip freeze` es idéntico al de `.venv`). Hash de `data/financiera.db` igual antes y después de la suite (`c69020b6…ee10ac`, el de después de B-07).

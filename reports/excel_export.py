@@ -13,6 +13,10 @@ Columnas de los estados (hallazgos A-06 y B-03):
   E  Diferencia (C - D): debe ser 0.
 Un grupo sin cuentas capturadas se muestra como "Sin datos" y se excluye
 de las formulas.
+
+Los datos se escriben con components.celdas_excel.escribir (un texto nunca
+se guarda como formula, hallazgo B-10); las unicas formulas son las de
+control, escritas con escribir_formula.
 """
 from __future__ import annotations
 
@@ -25,6 +29,8 @@ from openpyxl.styles import Font, PatternFill
 
 from calculations.banderas import Bandera, banderas_balance, banderas_dupont, banderas_resultados, resumen
 from calculations.vertical_analysis import ETIQUETA_EFECTO
+from components.celdas_excel import escribir
+from components.celdas_excel import formula as escribir_formula
 from components.money import q2
 
 AZUL_OSCURO = "0B2447"
@@ -37,25 +43,25 @@ SIN_DATOS = "Sin datos"
 
 
 def _encabezado(ws, company, periodo_anio: int, titulo: str, fila_inicio: int = 1) -> int:
-    ws.cell(fila_inicio, 1, company.nombre_legal).font = Font(bold=True, size=14, color=AZUL_OSCURO)
-    ws.cell(fila_inicio + 1, 1, titulo).font = Font(bold=True, size=12)
-    ws.cell(fila_inicio + 2, 1, f"Ejercicio fiscal: {periodo_anio}  ·  Moneda: {company.moneda}")
-    ws.cell(fila_inicio + 3, 1, f"Generado el {datetime.date.today().isoformat()}").font = Font(italic=True, size=9, color="808080")
+    escribir(ws, fila_inicio, 1, company.nombre_legal).font = Font(bold=True, size=14, color=AZUL_OSCURO)
+    escribir(ws, fila_inicio + 1, 1, titulo).font = Font(bold=True, size=12)
+    escribir(ws, fila_inicio + 2, 1, f"Ejercicio fiscal: {periodo_anio}  ·  Moneda: {company.moneda}")
+    escribir(ws, fila_inicio + 3, 1, f"Generado el {datetime.date.today().isoformat()}").font = Font(italic=True, size=9, color="808080")
     return fila_inicio + 5
 
 
 def _escribir_banderas(ws, fila: int, banderas: list[Bandera]) -> int:
     estado = resumen(banderas)
-    ws.cell(fila, 1, f"Estado del reporte: {estado}").font = Font(bold=True, color=VERDE if not banderas else ROJO)
+    escribir(ws, fila, 1, f"Estado del reporte: {estado}").font = Font(bold=True, color=VERDE if not banderas else ROJO)
     fila += 1
     for bandera in banderas:
-        ws.cell(fila, 1, f"{bandera.codigo}: {bandera.texto}").font = Font(color=ROJO)
+        escribir(ws, fila, 1, f"{bandera.codigo}: {bandera.texto}").font = Font(color=ROJO)
         fila += 1
     return fila + 1
 
 
 def _importe(ws, fila: int, columna: int, valor: Decimal | None, negrita: bool = False):
-    celda = ws.cell(fila, columna, float(q2(valor)) if valor is not None else SIN_DATOS)
+    celda = escribir(ws, fila, columna, float(q2(valor)) if valor is not None else SIN_DATOS)
     celda.number_format = FORMATO_IMPORTE
     celda.font = Font(bold=negrita)
     return celda
@@ -63,33 +69,33 @@ def _importe(ws, fila: int, columna: int, valor: Decimal | None, negrita: bool =
 
 def _encabezado_tabla(ws, fila: int, titulos=("Código", "Cuenta", "Importe", "Control (fórmula)", "Diferencia")) -> int:
     for col, titulo in enumerate(titulos, start=1):
-        celda = ws.cell(fila, col, titulo)
+        celda = escribir(ws, fila, col, titulo)
         celda.font = Font(bold=True, color=BLANCO)
         celda.fill = PatternFill("solid", fgColor=AZUL_OSCURO)
     return fila + 1
 
 
-def _control(ws, fila: int, formula: str) -> None:
+def _control(ws, fila: int, expresion: str) -> None:
     """Formula de control en D y diferencia en E. Ambas leen la columna C."""
-    ws.cell(fila, 4, formula).number_format = FORMATO_IMPORTE
-    ws.cell(fila, 5, f"=C{fila}-D{fila}").number_format = FORMATO_IMPORTE
+    escribir_formula(ws, fila, 4, expresion).number_format = FORMATO_IMPORTE
+    escribir_formula(ws, fila, 5, f"=C{fila}-D{fila}").number_format = FORMATO_IMPORTE
 
 
 def _escribir_grupo(ws, fila: int, grupo) -> tuple[int, int | None]:
     """Escribe un grupo y su subtotal. Devuelve (fila_siguiente, fila_subtotal);
     fila_subtotal es None si el grupo no tiene cuentas (no entra en formulas)."""
-    ws.cell(fila, 1, grupo.nombre).font = Font(bold=True, color=AZUL_OSCURO)
+    escribir(ws, fila, 1, grupo.nombre).font = Font(bold=True, color=AZUL_OSCURO)
     fila += 1
     if not grupo.lineas:
-        ws.cell(fila, 2, SIN_DATOS).font = Font(italic=True, color="808080")
+        escribir(ws, fila, 2, SIN_DATOS).font = Font(italic=True, color="808080")
         return fila + 2, None
     inicio = fila
     for linea in grupo.lineas:
-        ws.cell(fila, 1, linea.cuenta.codigo)
-        ws.cell(fila, 2, linea.cuenta.nombre)
+        escribir(ws, fila, 1, linea.cuenta.codigo)
+        escribir(ws, fila, 2, linea.cuenta.nombre)
         _importe(ws, fila, 3, linea.valor)
         fila += 1
-    ws.cell(fila, 2, f"Subtotal {grupo.nombre}").font = Font(bold=True)
+    escribir(ws, fila, 2, f"Subtotal {grupo.nombre}").font = Font(bold=True)
     _importe(ws, fila, 3, grupo.subtotal, negrita=True).fill = PatternFill("solid", fgColor=GRIS_CLARO)
     _control(ws, fila, f"=SUM(C{inicio}:C{fila - 1})")
     return fila + 2, fila
@@ -105,7 +111,7 @@ def _formula(terminos: list[tuple[str, int | None]]) -> str:
 
 
 def _total(ws, fila: int, etiqueta: str, valor: Decimal, terminos: list[tuple[str, int | None]]) -> int:
-    ws.cell(fila, 2, etiqueta).font = Font(bold=True)
+    escribir(ws, fila, 2, etiqueta).font = Font(bold=True)
     _importe(ws, fila, 3, valor, negrita=True)
     _control(ws, fila, _formula(terminos))
     return fila
@@ -130,19 +136,19 @@ def export_balance_excel(company, period, bs, banderas: list[Bandera] | None = N
     fila = _escribir_banderas(ws, fila, banderas if banderas is not None else banderas_balance(bs))
     fila = _encabezado_tabla(ws, fila)
 
-    ws.cell(fila, 1, "ACTIVO").font = Font(bold=True, size=11)
+    escribir(ws, fila, 1, "ACTIVO").font = Font(bold=True, size=11)
     fila, f_ac = _escribir_grupo(ws, fila + 1, bs.activo_corriente)
     fila, f_anc = _escribir_grupo(ws, fila, bs.activo_no_corriente)
     f_ta = _total(ws, fila, "TOTAL ACTIVO", bs.total_activo, [("+", f_ac), ("+", f_anc)])
     fila += 2
 
-    ws.cell(fila, 1, "PASIVO").font = Font(bold=True, size=11)
+    escribir(ws, fila, 1, "PASIVO").font = Font(bold=True, size=11)
     fila, f_pc = _escribir_grupo(ws, fila + 1, bs.pasivo_corriente)
     fila, f_pnc = _escribir_grupo(ws, fila, bs.pasivo_no_corriente)
     f_tp = _total(ws, fila, "TOTAL PASIVO", bs.total_pasivo, [("+", f_pc), ("+", f_pnc)])
     fila += 2
 
-    ws.cell(fila, 1, "PATRIMONIO").font = Font(bold=True, size=11)
+    escribir(ws, fila, 1, "PATRIMONIO").font = Font(bold=True, size=11)
     fila += 1
     filas_patrimonio = []
     for grupo in bs.patrimonio_grupos:
@@ -165,7 +171,7 @@ def export_income_excel(company, period, inc, banderas: list[Bandera] | None = N
     ws.title = "Estado de Resultados"
     fila = _encabezado(ws, company, period.anio, "Estado de Resultados")
     fila = _escribir_banderas(ws, fila, banderas if banderas is not None else banderas_resultados(inc))
-    ws.cell(fila - 1, 1, "Costos, gastos e impuestos se capturan en positivo y se restan.").font = Font(italic=True, size=9)
+    escribir(ws, fila - 1, 1, "Costos, gastos e impuestos se capturan en positivo y se restan.").font = Font(italic=True, size=9)
     fila = _encabezado_tabla(ws, fila)
 
     fila, f_ing = _escribir_grupo(ws, fila, inc.ingresos_netos)
@@ -209,8 +215,8 @@ def export_vertical_excel(company, period, titulo: str, df, base, nombre_base: s
     ws.title = "Análisis Vertical"
     fila = _encabezado(ws, company, period.anio, titulo)
     fila = _escribir_banderas(ws, fila, banderas or [])
-    ws.cell(fila, 1, "Base (100%)").font = Font(bold=True)
-    ws.cell(fila, 2, nombre_base)
+    escribir(ws, fila, 1, "Base (100%)").font = Font(bold=True)
+    escribir(ws, fila, 2, nombre_base)
     _importe(ws, fila, 3, base, negrita=True)
     fila_base = fila
     fila += 2
@@ -226,14 +232,14 @@ def export_vertical_excel(company, period, titulo: str, df, base, nombre_base: s
             for _, r in df.iterrows()
         ]
     for codigo, etiqueta, valor, porcentaje, efecto, negrita in filas:
-        ws.cell(fila, 1, codigo)
-        ws.cell(fila, 2, etiqueta).font = Font(bold=negrita)
+        escribir(ws, fila, 1, codigo)
+        escribir(ws, fila, 2, etiqueta).font = Font(bold=negrita)
         _importe(ws, fila, 3, valor, negrita)
-        celda_pct = ws.cell(fila, 4, float(porcentaje) if porcentaje is not None else "No disponible")
+        celda_pct = escribir(ws, fila, 4, float(porcentaje) if porcentaje is not None else "No disponible")
         celda_pct.number_format = "0.00"
-        ws.cell(fila, 5, ETIQUETA_EFECTO.get(efecto, ""))
+        escribir(ws, fila, 5, ETIQUETA_EFECTO.get(efecto, ""))
         if valor is not None and base != 0:
-            ws.cell(fila, 6, f"=C{fila}/$C${fila_base}*100").number_format = "0.00"
+            escribir_formula(ws, fila, 6, f"=C{fila}/$C${fila_base}*100").number_format = "0.00"
         fila += 1
 
     _autoajustar_columnas(ws)
@@ -267,20 +273,20 @@ def export_dupont_excel(company, period, resultado) -> bytes:
         ("ROE directo (%)", roe(resultado.roe_directo_pct), "0.00"),
     ]
     for etiqueta, valor, formato in filas_datos:
-        ws.cell(fila, 1, etiqueta)
-        celda = ws.cell(fila, 2, float(valor) if isinstance(valor, Decimal) else (valor if valor is not None else "No disponible"))
+        escribir(ws, fila, 1, etiqueta)
+        celda = escribir(ws, fila, 2, float(valor) if isinstance(valor, Decimal) else (valor if valor is not None else "No disponible"))
         celda.number_format = formato
         fila += 1
 
     fila += 1
-    ws.cell(fila, 1, "Fuente de saldos iniciales:").font = Font(italic=True)
-    ws.cell(fila, 2, resultado.fuente_saldos_iniciales or "")
+    escribir(ws, fila, 1, "Fuente de saldos iniciales:").font = Font(italic=True)
+    escribir(ws, fila, 2, resultado.fuente_saldos_iniciales or "")
     fila += 2
     fila = _encabezado_tabla(ws, fila, ("Control", "Resultado", "Detalle"))
     for control in resultado.controles:
-        ws.cell(fila, 1, control.nombre)
-        ws.cell(fila, 2, "Correcto" if control.correcto else "Revisar").font = Font(color=VERDE if control.correcto else ROJO)
-        ws.cell(fila, 3, control.detalle)
+        escribir(ws, fila, 1, control.nombre)
+        escribir(ws, fila, 2, "Correcto" if control.correcto else "Revisar").font = Font(color=VERDE if control.correcto else ROJO)
+        escribir(ws, fila, 3, control.detalle)
         fila += 1
 
     ws.column_dimensions["A"].width = 52

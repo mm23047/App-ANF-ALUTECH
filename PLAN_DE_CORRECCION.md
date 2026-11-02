@@ -297,7 +297,20 @@
 
 Procedimiento: (1) comprobación de que los valores actuales eran exactamente los esperados (si no, no se corregía); (2) ensayo sobre una copia; (3) copia previa verificada `data/backups/financiera_pre_b07_20261101_182614_096704.db` (mismo contenido fila por fila); (4) `save_company` en una transacción, que registra los valores anteriores en `change_history` (ids 53–55, un mismo lote); (5) comprobación de que solo cambiaron esos 3 campos: todas las demás tablas son idénticas fila por fila, el historial anterior no cambió, `integrity_check = ok`, los 19 importes 0.00 de 2021 siguen intactos. SHA-256 de la BD de trabajo: antes `ffc23c08…05c7c8`, después `c69020b6891f026119b0b4a1ca1943e4f8f8a4bb1290d66762f7f222a5ee10ac`. Respaldo original de la fase 0 sin cambios (`f026863d…630a82d`).
 
-**Hallazgo nuevo B-10** (fuera del alcance, no corregido): el Excel exportado guarda como fórmula un texto que empiece con `=` (ver `AUDITORIA_INTEGRAL.md`). Requiere autorización.
+**Hallazgo nuevo B-10** (fuera del alcance de la fase 4): el Excel exportado guardaba como fórmula un texto que empezara con `=` (ver `AUDITORIA_INTEGRAL.md`).
+
+### Corrección autorizada: B-10 (antes de la fase 5)
+
+**Estado: COMPLETADA (2026-11-01).**
+
+| Paso | Resultado | Evidencia |
+|---|---|---|
+| Revisión | Únicos generadores de XLSX: `reports/excel_export.py` (34 escrituras de celda: 31 de datos y 3 de fórmulas de control) y la plantilla de `modules/excel_import.py` (4 filas agregadas) | Búsqueda de `openpyxl`, `Workbook` y `to_excel` en el código |
+| Separación | `components/celdas_excel.py`: `texto()`/`escribir()` para datos (todo `str` como cadena literal, `quotePrefix` si empieza con `=`, `+`, `-`, `@`, tabulador o retorno de carro) y `formula()` para las fórmulas de control. Ninguna celda se escribe ya con `ws.cell(..., valor)` ni `ws.append` | `tests/test_b10.py` (34) |
+| Sin cambios en fórmulas e importes | Con datos normales, los 6 libros son idénticos celda por celda al código anterior (58 fórmulas) | Comparación con el árbol de `b4f8212` |
+| BD | No se modificó | Mismo SHA-256 (`c69020b6…ee10ac`) |
+
+Limitación documentada: los caracteres de control que XLSX no admite se eliminan (openpyxl no puede guardarlos y antes hacían fallar la exportación con `IllegalCharacterError`).
 
 ---
 

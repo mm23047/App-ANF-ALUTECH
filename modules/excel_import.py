@@ -37,6 +37,7 @@ from components.money import (
     parse_importe_con_aviso,
 )
 from calculations.validation import CONVENCION_SIGNOS, aviso_signo
+from components.celdas_excel import agregar_fila
 from components.transacciones import ejecutar_escritura, mensaje_error
 from database.enums import BALANCE_CATEGORIAS, RESULTADOS_CATEGORIAS
 from database.enums import EstadoCuenta, TipoEstadoFinanciero
@@ -57,12 +58,12 @@ def _generar_plantilla(session: Session, categorias: set) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "Plantilla"
-    ws.append(COLUMNAS)
+    agregar_fila(ws, COLUMNAS)
     cuentas = [
         c for c in list_accounts(session, solo_activas=True) if c.categoria_principal in categorias
     ]
     for c in cuentas:
-        ws.append([
+        agregar_fila(ws, [
             c.codigo,
             c.nombre,
             c.categoria_principal.value,
@@ -71,7 +72,7 @@ def _generar_plantilla(session: Session, categorias: set) -> bytes:
             "",
         ])
     convencion = wb.create_sheet("Convención de signos")
-    convencion.append(["Convención de signos (se valida al importar; nunca se invierte un signo)"])
+    agregar_fila(convencion, ["Convención de signos (se valida al importar; nunca se invierte un signo)"])
     for linea in (
         "Ingresos, costos, gastos e impuestos: en positivo. Los cálculos restan costos y gastos.",
         "Activos, pasivos y patrimonio: en positivo.",
@@ -81,7 +82,7 @@ def _generar_plantilla(session: Session, categorias: set) -> bytes:
         "Celda vacía = sin dato (no se importa). Un 0 escrito se importa como cero.",
         "Solo se lee la primera hoja ('Plantilla').",
     ):
-        convencion.append([linea])
+        agregar_fila(convencion, [linea])
     buffer = io.BytesIO()
     wb.save(buffer)
     return buffer.getvalue()
