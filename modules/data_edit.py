@@ -191,7 +191,8 @@ def _tabla_editable(session: Session, period_id: int, tipo: Tipo, moneda: str, k
         hide_index=True,
         width="stretch",
         disabled=True if period.cerrado else ["account_id", "Código", "Nombre", "Categoría", "Subcategoría"],
-        column_config={"Valor": st.column_config.NumberColumn(format="%.2f", step=0.01)},
+        # account_id identifica la cuenta al guardar: sigue en los datos, pero no se muestra (O-5).
+        column_config={"account_id": None, "Valor": st.column_config.NumberColumn(format="%.2f", step=0.01)},
         key=key,
     )
     if period.cerrado:

@@ -42,13 +42,13 @@ def _tabla_resultados(resultado: DuPontResult, moneda: str, roe_valido: bool) ->
 
 def _mostrar_controles(resultado: DuPontResult) -> None:
     st.markdown("### Controles de los datos")
-    st.dataframe(
+    # st.table ajusta el detalle en varias lineas (en st.dataframe se cortaba: hallazgo O-5).
+    st.table(
         pd.DataFrame(
             [{"Control": c.nombre, "Resultado": "✅ Correcto" if c.correcto else "⚠️ Revisar", "Detalle": c.detalle}
              for c in resultado.controles]
         ),
         hide_index=True,
-        width="stretch",
     )
 
 
@@ -68,7 +68,7 @@ def render(session: Session, company: Company) -> None:
         for advertencia in resultado.advertencias:
             st.warning(advertencia)
         st.markdown("### Tabla de resultados (solo referencia)")
-        st.dataframe(_tabla_resultados(resultado, company.moneda, roe_valido=False), hide_index=True, width="stretch")
+        st.dataframe(_tabla_resultados(resultado, company.moneda, roe_valido=False), hide_index=True, width="stretch", height="content")
         _mostrar_controles(resultado)
         st.info("No se genera interpretación automática porque el ROE no es interpretable.")
         _descargas(company, period, resultado)
@@ -100,7 +100,7 @@ def render(session: Session, company: Company) -> None:
                "El ROE DuPont y el ROE directo son iguales por construcción; no se usan como control.")
 
     st.markdown("### Tabla de resultados")
-    st.dataframe(_tabla_resultados(resultado, company.moneda, roe_valido=True), hide_index=True, width="stretch")
+    st.dataframe(_tabla_resultados(resultado, company.moneda, roe_valido=True), hide_index=True, width="stretch", height="content")
     _mostrar_controles(resultado)
 
     st.markdown("### Representación gráfica de los tres componentes")

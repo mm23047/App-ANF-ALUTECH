@@ -541,3 +541,78 @@ def test_o3_formatos_fuentes_y_formulas_se_conservan(libros_excel, reporte):
     assert all((c.font.sz or 11) >= 9 for fila in ws.iter_rows() for c in fila if c.value is not None)
     formulas = [c for fila in ws.iter_rows() for c in fila if c.data_type == "f"]
     assert (len(formulas) > 0) is (reporte != "dupont")
+
+
+# =================================================================== O-5 (interfaz)
+
+def _datos_varios_anios():
+    """2020-2022 completos y cuadrados (datos sinteticos)."""
+    with session_scope() as s:
+        for i, anio in enumerate((2020, 2021, 2022)):
+            p, _ = get_or_create_fiscal_period(s, anio)
+            un = 300 + 100 * i
+            for codigo, valor, tipo in (("1001", 2000 + 500 * i, Tipo.BALANCE), ("1102", -100, Tipo.BALANCE),
+                                        ("1101", 1000, Tipo.BALANCE), ("2001", 800, Tipo.BALANCE),
+                                        ("3001", 1500 + 500 * i - un - 100, Tipo.BALANCE), ("3004", un, Tipo.BALANCE),
+                                        ("4001", 5000, Tipo.RESULTADOS), ("5001", 3000, Tipo.RESULTADOS),
+                                        ("6001", 1700 - un, Tipo.RESULTADOS), ("8001", 0, Tipo.RESULTADOS)):
+                upsert_entry(s, fiscal_period_id=p.id, account_id=_id(s, codigo), valor=str(valor), tipo=tipo)
+
+
+def _render_dupont(monkeypatch, anio):
+    from reports import dupont_report
+
+    llamadas = {"dataframe": [], "table": []}
+    monkeypatch.setattr(streamlit, "dataframe", lambda df, *a, **k: llamadas["dataframe"].append((df, k)))
+    monkeypatch.setattr(streamlit, "table", lambda df, *a, **k: llamadas["table"].append((df, k)))
+    monkeypatch.setattr(streamlit, "selectbox", lambda label, opciones, *a, **k: next(o for o in opciones if o == anio))
+    monkeypatch.setattr(streamlit, "plotly_chart", lambda *a, **k: None)
+    monkeypatch.setattr(streamlit, "download_button", lambda *a, **k: None)
+    with render_scope() as s:
+        dupont_report.render(s, get_company(s))
+    return llamadas
+
+
+@pytest.mark.parametrize("anio", [2020, 2021, 2022])
+def test_o5_tabla_de_resultados_muestra_todas_las_filas_incluido_el_roe(bd, monkeypatch, anio):
+    _datos_varios_anios()
+    llamadas = _render_dupont(monkeypatch, anio)
+    tabla, opciones = next((df, k) for df, k in llamadas["dataframe"] if "Componente" in df.columns)
+    assert opciones.get("height") == "content"  # sin desplazamiento interno
+    assert len(tabla) == 13 and tabla["Componente"].iloc[-2] == "ROE (DuPont)"
+
+
+@pytest.mark.parametrize("anio", [2020, 2022])
+def test_o5_controles_dupont_con_el_detalle_completo(bd, monkeypatch, anio):
+    _datos_varios_anios()
+    llamadas = _render_dupont(monkeypatch, anio)
+    controles, opciones = next((df, k) for df, k in llamadas["table"] if "Detalle" in df.columns)
+    assert opciones.get("hide_index") is True and len(controles) == 7
+    detalles = list(controles["Detalle"])
+    assert any(len(d) > 60 for d in detalles)  # textos largos completos (st.table los ajusta)
+    if anio == 2020:  # primer ejercicio: saldos aproximados, con la causa completa
+        assert any(d.startswith("APROXIMADO") and "no existe el ejercicio 2019" in d for d in detalles)
+
+
+def test_o5_modificacion_de_datos_oculta_account_id_y_sigue_guardando(bd, monkeypatch):
+    from modules import data_edit
+
+    vistos = {}
+
+    def editor(df, **k):
+        vistos["columnas"], vistos["config"] = list(df.columns), k.get("column_config", {})
+        df = df.copy()
+        df.loc[df["Código"] == "1001", "Valor"] = 175.0
+        return df
+
+    monkeypatch.setattr(streamlit, "data_editor", editor)
+    monkeypatch.setattr(streamlit, "checkbox", lambda *a, **k: False)
+    monkeypatch.setattr(streamlit, "rerun", lambda *a, **k: None)
+    for botones in (("Guardar cambios",), (confirmacion.ETIQUETA_CONFIRMAR,)):
+        _botones(monkeypatch, *botones)
+        with render_scope() as s:
+            data_edit._tabla_editable(s, get_fiscal_period(s, 2021).id, Tipo.BALANCE, "USD", key="k")
+    assert "account_id" in vistos["columnas"]            # el identificador sigue en los datos
+    assert vistos["config"].get("account_id", "falta") is None  # pero no se muestra
+    with session_scope() as s:
+        assert _importes(s, Tipo.BALANCE) == {"1001": Decimal("175.00")}
