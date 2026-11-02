@@ -4,6 +4,8 @@ capturados en un unico tablero por ejercicio, con historial de cambios.
 La clasificacion de cuentas (categoria/subcategoria/estado) se edita en
 el modulo Catalogo de cuentas -- aqui solo se modifican los IMPORTES
 capturados, para no duplicar la logica de validacion de clasificacion.
+Guardar la tabla pide confirmar el alcance antes de escribir
+(components/confirmacion.py, M-10).
 Tambien se administra el ejercicio: cierre, reapertura y eliminacion de
 ejercicios vacios (hallazgo M-05).
 """
@@ -17,9 +19,12 @@ from sqlalchemy.orm import Session
 
 from calculations.balance_sheet import compute_balance_sheet
 from calculations.validation import CONVENCION_SIGNOS, aviso_signo
+from components import confirmacion
+from components.confirmacion import Cambio
 from components.money import ImporteInvalido, es_vacio, format_money, parse_importe_con_aviso
 from components.navigation import select_fiscal_period
 from components.transacciones import ejecutar_escritura
+from components.texto import md
 from database.enums import TipoEstadoFinanciero as Tipo
 from database.models import Account, Company, FiscalPeriod
 from database.repositories import (
@@ -35,19 +40,27 @@ from database.repositories import (
 from modules.history import historial_dataframe
 
 
+def _valores_tabla(editado: pd.DataFrame) -> tuple:
+    """Huella de la tabla editada: si cambia, la propuesta pendiente ya no
+    corresponde a lo que el usuario tiene en pantalla."""
+    return tuple((int(f["account_id"]), None if es_vacio(f["Valor"]) else float(f["Valor"])) for _, f in editado.iterrows())
+
+
 def _guardar_edicion(
-    session: Session,
     period: FiscalPeriod,
     tipo: Tipo,
     editado: pd.DataFrame,
     originales: dict[int, Decimal],
     cuentas: dict[int, Account],
-    confirmar_signos: bool = False,
+    confirmar_signos: bool,
+    pantalla: str,
 ) -> None:
+    """Valida la tabla y prepara la confirmacion; no escribe nada."""
+    confirmacion.descartar(pantalla)
     errores: list[str] = []
     avisos: list[str] = []
     avisos_signo: list[str] = []
-    cambios: list[tuple[int, Decimal]] = []
+    cambios: list[Cambio] = []
     for _, fila in editado.iterrows():
         account_id = int(fila["account_id"])
         cuenta = cuentas[account_id]
@@ -67,13 +80,13 @@ def _guardar_edicion(
         if aviso:
             avisos.append(f"{cuenta.codigo} — {cuenta.nombre}: {aviso}")
         if importe != originales[account_id]:
-            cambios.append((account_id, importe))
+            cambios.append(Cambio(account_id, f"{cuenta.codigo} — {cuenta.nombre}", originales[account_id], importe))
             signo = aviso_signo(cuenta, importe)
             if signo:
                 avisos_signo.append(signo)
 
     if errores:
-        st.error("No se guardó ningún cambio. Corrija:\n" + "\n".join(f"- {e}" for e in errores))
+        st.error("No se guardó ningún cambio. Corrija:\n" + "\n".join(f"- {md(e)}" for e in errores))
         return
     if not cambios:
         st.info("No se detectaron cambios.")
@@ -81,23 +94,41 @@ def _guardar_edicion(
     if avisos_signo and not confirmar_signos:
         st.warning(
             "No se guardó ningún cambio. Estos importes tienen un signo distinto a la convención:\n"
-            + "\n".join(f"- {a}" for a in avisos_signo)
+            + "\n".join(f"- {md(a)}" for a in avisos_signo)
             + "\n\nCorríjalos, o marque la casilla de confirmación y guarde de nuevo."
+        )
+        return
+    estado = "Balance General" if tipo == Tipo.BALANCE else "Estado de Resultados"
+    confirmacion.proponer(
+        pantalla, (period.id, tipo), resumen=confirmacion.resumen_cambios(cambios, period.anio, estado),
+        cambios=cambios, avisos=avisos, extra=_valores_tabla(editado),
+    )
+
+
+def _aplicar_edicion(
+    session: Session, period: FiscalPeriod, tipo: Tipo, op: confirmacion.OperacionPendiente, originales: dict[int, Decimal]
+) -> None:
+    """Escribe los importes confirmados en una sola transaccion, si no
+    cambiaron desde la confirmacion."""
+    if not confirmacion.vigente(op, originales):
+        st.error(
+            "No se guardó ningún cambio: los importes del ejercicio cambiaron después de la vista previa. "
+            "Revise la tabla y guarde de nuevo."
         )
         return
     guardado, _ = ejecutar_escritura(
         session,
         lambda: [
-            upsert_entry(session, fiscal_period_id=period.id, account_id=account_id, valor=importe, tipo=tipo)
-            for account_id, importe in cambios
+            upsert_entry(session, fiscal_period_id=period.id, account_id=c.account_id, valor=c.nuevo, tipo=tipo)
+            for c in op.cambios
         ],
         descripcion=f"guardar los cambios del ejercicio {period.anio}",
     )
     if guardado:
-        st.success(f"Ejercicio {period.anio}: {len(cambios)} valor(es) actualizado(s).")
-        for aviso in avisos:
+        st.success(f"Ejercicio {period.anio}: {len(op.cambios)} valor(es) actualizado(s).")
+        for aviso in op.avisos:
             st.warning(aviso)
-        if not avisos:
+        if not op.avisos:
             st.rerun()
 
 
@@ -159,6 +190,7 @@ def _tabla_editable(session: Session, period_id: int, tipo: Tipo, moneda: str, k
         key=key,
     )
     if period.cerrado:
+        confirmacion.descartar(key)
         st.caption(f"El ejercicio {period.anio} está cerrado: solo lectura.")
         return
 
@@ -167,10 +199,19 @@ def _tabla_editable(session: Session, period_id: int, tipo: Tipo, moneda: str, k
     col_guardar, col_cancelar = st.columns(2)
     with col_guardar:
         if st.button("Guardar cambios", key=f"{key}_guardar"):
-            _guardar_edicion(session, period, tipo, editado, originales, cuentas, confirmar_signos)
+            _guardar_edicion(period, tipo, editado, originales, cuentas, confirmar_signos, key)
     with col_cancelar:
         if st.button("Cancelar modificaciones", key=f"{key}_cancelar"):
+            confirmacion.descartar(key)
             st.rerun()
+    pendiente = confirmacion.pendiente(key)
+    if pendiente is not None and pendiente.extra != _valores_tabla(editado):
+        # La tabla se edito despues de pulsar "Guardar cambios": la propuesta ya no vale.
+        confirmacion.descartar(key)
+        st.info("La tabla cambió después de pulsar 'Guardar cambios'. Pulse de nuevo para revisar el alcance.")
+    op = confirmacion.mostrar(key, (period.id, tipo))
+    if op is not None:
+        _aplicar_edicion(session, period, tipo, op, originales)
     _borrar_importe(session, period, tipo, cuentas, originales, moneda, key)
 
 
@@ -221,10 +262,10 @@ def render(session: Session, company: Company) -> None:
 
     bs = compute_balance_sheet(session, period.id)
     if bs.tiene_datos:
-        estado_eq = "✅ La ecuación contable cuadra." if bs.cuadra else f"⚠️ Diferencia de {format_money(bs.diferencia, company.moneda)} entre Activo y Pasivo+Patrimonio."
+        estado_eq = "✅ La ecuación contable cuadra." if bs.cuadra else f"⚠️ Diferencia de {md(format_money(bs.diferencia, company.moneda))} entre Activo y Pasivo+Patrimonio."
         st.caption(
-            f"Activo: {format_money(bs.total_activo, company.moneda)} · "
-            f"Pasivo+Patrimonio: {format_money(bs.total_pasivo_patrimonio, company.moneda)} · {estado_eq}"
+            f"Activo: {md(format_money(bs.total_activo, company.moneda))} · "
+            f"Pasivo+Patrimonio: {md(format_money(bs.total_pasivo_patrimonio, company.moneda))} · {estado_eq}"
         )
 
     tab_balance, tab_resultados, tab_historial, tab_ejercicio = st.tabs(

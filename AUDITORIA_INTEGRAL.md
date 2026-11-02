@@ -9,7 +9,7 @@ Documentos relacionados: `PLAN_DE_CORRECCION.md`, `MATRIZ_DE_PRUEBAS.md`, `INVEN
 
 ---
 
-## 0. Estado de corrección (actualizado 2026-11-01, tras la fase 3)
+## 0. Estado de corrección (actualizado 2026-11-01, tras la fase 4)
 
 Los hallazgos originales se conservan sin cambios en las secciones siguientes. Esta tabla registra su estado.
 
@@ -26,7 +26,7 @@ Los hallazgos originales se conservan sin cambios en las secciones siguientes. E
 | M-05 | CORREGIDO | Cierre, reapertura, borrado de importes y de ejercicios vacíos; disparadores en la BD |
 | M-06 | CORREGIDO | `render_scope` y `ejecutar_escritura` |
 | M-09 | CORREGIDO | `database/migrations.py` (user_version) y `sqlite3.backup` con verificación |
-| M-10 | PARCIAL | Servidor solo en localhost (fase 0). Falta la confirmación de cambios masivos (fase 4.2) |
+| M-10 | CORREGIDO | Servidor solo en localhost (fase 0). Fase 4: `components/confirmacion.py`; la captura (Balance, Resultados, saldos iniciales) y la edición muestran el alcance (cuenta, valor actual, valor nuevo) y solo escriben tras "Confirmar y guardar", en una transacción; la importación muestra el alcance y solo importa la vista previa revisada. Cancelar, recargar, navegar o repetir el clic no escriben nada. `tests/test_fase4.py` |
 | B-08 | CORREGIDO | `parse_importe(..., redondear=True)` con HALF_UP. E03 aprueba |
 | M-11 | CORREGIDO | `reports/vertical_report.py` (tabla formateada desde Decimal). `tests/test_m11_vertical.py` y las páginas verticales de `tests/test_fase1_paginas.py` aprueban |
 | A-01 | CORREGIDO | `calculations/dupont.py`: solo N-1. A01 aprueba |
@@ -41,7 +41,18 @@ Los hallazgos originales se conservan sin cambios en las secciones siguientes. E
 | M-03 | CORREGIDO | Vertical con subtotales, totales y utilidades, y su efecto; PDF del vertical (`export_vertical_pdf`). F06 y F07 aprueban |
 | M-08 | CORREGIDO | El Dashboard indica si el ROE es definitivo, APROXIMADO (con la causa) o NO INTERPRETABLE, y etiqueta los indicadores incompletos |
 | B-03 | CORREGIDO | Valores calculados en lugar de fórmulas sin caché; base del vertical numérica; banderas en celdas propias |
-| Resto | PENDIENTE | B-04 a B-07 (fase 4) y B-09 (fase 5). F01 y F03 siguen fallando por diseño (ver A-05) |
+| B-04 | CORREGIDO | `components/tables.py` usa `st.markdown` nativo (sin HTML) con `text_alignment="right"`; `components/texto.md` escapa los datos del usuario (empresa, moneda, nombres de cuenta) en todo elemento Markdown; el PDF escapa la moneda en los 2 párrafos que no lo hacían (Balance descuadrado y base del vertical: con la moneda `<x` el PDF fallaba). El único `unsafe_allow_html` es el CSS constante de `app.py` |
+| B-05 | CORREGIDO | `requirements.txt` fija las 8 versiones probadas (las instaladas; no se actualizó ninguna). Ver `PLAN_DE_CORRECCION.md`, fase 4 |
+| B-06 | CORREGIDO | `modules/excel_import.normalizar_codigo`: un número entero exacto (1001.0) se normaliza a "1001"; decimales, valores lógicos, fechas, infinitos y enteros > 2^53 se reportan como `CODIGO_AMBIGUO`; también un número que coincide con un código con ceros a la izquierda y un texto "1003.0". Los textos válidos no cambian. D08 aprueba |
+| B-07 | CORREGIDO (datos, con autorización) | `data/financiera.db`, tabla `company`: `alutech` → `Alutech`, `aluetch sv` → `Alutech SV`, `El Salvaodr` → `El Salvador`. Valores anteriores en `change_history` (ids 53–55, un lote) y en la copia `data/backups/financiera_pre_b07_20261101_182614_096704.db` |
+| B-10 | NUEVO (fuera del alcance de la fase 4) | Ver abajo |
+| Resto | PENDIENTE | B-09 (fase 5) y B-10 (sin fase asignada). F01 y F03 siguen fallando por diseño (ver A-05) |
+
+**Hallazgo nuevo B-10 (preexistente, detectado en la fase 4).** Verificación: COMPROBADO (`openpyxl` 3.1.5).
+- **Archivo:** `reports/excel_export.py` (líneas 40, 42, 81, 89 y 92: nombre de la empresa, moneda, grupos y nombres de cuenta).
+- **Problema:** `openpyxl` guarda como fórmula cualquier texto que empiece con `=`. Un nombre de empresa o de cuenta como `=HYPERLINK("http://…","x")` se exportaría como fórmula activa (inyección de fórmulas en hojas de cálculo).
+- **Riesgo:** bajo en uso local con un solo usuario; los datos los escribe el mismo usuario.
+- **Corrección propuesta (no aplicada, requiere autorización):** escribir esas celdas como texto (`cell.data_type = "s"`) o anteponer un apóstrofo a los textos que empiecen con `=`, `+`, `-` o `@`.
 
 **Hallazgo nuevo M-11 (preexistente, detectado en la fase 1).** Verificación: COMPROBADO (prueba de humo con `AppTest`).
 - **Archivo:** `reports/vertical_report.py` (líneas 22–23 y 46–48; igual en el reporte de resultados).

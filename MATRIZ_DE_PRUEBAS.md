@@ -3,6 +3,34 @@
 **Fecha de ejecución:** 2026-11-01 · **Entorno:** Windows 11, Python 3.12.10 (`.venv`), pytest 8.4.2, Streamlit 1.66.1, SQLAlchemy 2.0.55
 **Base de datos:** todas las pruebas usan SQLite temporales. El hash de `data/financiera.db` fue el mismo antes y después (`f026863d…630a82d`).
 
+## Estado tras la fase 4 (2026-11-01)
+
+Comando: `.venv\Scripts\python -m pytest tests/ -q` → **348 aprobadas, 2 fallidas** (350 pruebas). Mismo resultado en un entorno limpio instalado solo con `pip install -r requirements.txt` (su `pip freeze` es idéntico al de `.venv`). Hash de `data/financiera.db` igual antes y después de la suite (`c69020b6…ee10ac`, el de después de B-07).
+
+| Conjunto | Ejecutadas | Aprobadas | Fallidas | Fallidas (motivo) |
+|---|---|---|---|---|
+| Originales | 30 | 30 | 0 | — |
+| Auditoría | 47 | 45 | 2 | F01 y F03 (por diseño: contradicen la convención de signos aprobada) |
+| Fase 1 + M-11 | 132 | 132 | 0 | — (incluye las 16 páginas con `AppTest`) |
+| Fase 2 | 47 | 47 | 0 | — |
+| Fase 3 | 17 | 17 | 0 | — |
+| Fase 4 (`tests/test_fase4.py`) | 77 | 77 | 0 | — |
+
+La prueba de auditoría de la fase 4 pasó de FALLIDO a APROBADO: D08.
+
+`tests/test_fase4.py` cubre:
+- **B-04:** `md()` con 18 entradas (HTML, `<script>`, Markdown, `:red[]`, `$LaTeX$`, entidades, enlaces `javascript:`); análisis del código fuente: el único `unsafe_allow_html` es el CSS de `app.py` y solo interpola la constante `PRIMARY`; subtotales y totales nativos y alineados a la derecha; PDF con 4 monedas maliciosas (con `<x` fallaba); el `app.py` real con `AppTest` y una empresa con nombre malicioso (se muestra literal, solo el CSS lleva HTML).
+- **B-05:** las 8 versiones fijadas son las instaladas; `requirements.txt` cubre todas las librerías de terceros importadas; las APIs de Streamlit usadas existen.
+- **B-06:** 15 casos de normalización, 9 de códigos ambiguos, los 30 códigos del catálogo sin cambios, ceros a la izquierda, texto "1003.0", duplicado en dos formatos e importación real de un Excel con columna numérica y fila vacía.
+- **B-07:** la BD de trabajo (solo lectura) tiene los datos corregidos, la evidencia en el historial y los 19 ceros de 2021; el encabezado del Excel y del PDF muestra "Alutech" (sobre una copia).
+- **D08 (confirmaciones):** proponer no escribe; cancelar, recargar (sesión nueva), navegar y repetir el clic no modifican la BD (comparación de las tablas o del SHA-256); confirmar escribe exactamente lo propuesto en un lote; datos cambiados entre la vista previa y la confirmación → no escribe; fallo a mitad → nada guardado; saldos iniciales y edición también confirman; la edición cambiada después de proponer se descarta; la importación muestra el alcance, no se repite y no importa si la BD cambió tras la vista previa.
+
+Pruebas existentes adaptadas (solo la acción simulada del usuario, no lo que se comprueba): `tests/test_fase1_integridad.py::_capturar` y `tests/test_fase2.py` (`_capturar_formulario` y la edición con signo atípico) pulsan también "Confirmar y guardar", porque guardar ahora tiene dos pasos. `tests/conftest.py` vacía `st.session_state` en cada prueba (sin servidor es global del proceso).
+
+Las pruebas nuevas se ejecutaron también contra el código anterior (HEAD `2899301`, con solo los dos módulos nuevos añadidos para poder importarlas): 43 fallidas y 2 errores, es decir, detectan los defectos.
+
+Verificación de páginas con datos reales: `tests/humo_paginas.py` sobre una copia de la BD de trabajo corregida → las 16 páginas sin excepciones y la copia sin cambios.
+
 ## Estado tras la fase 3 (2026-11-01)
 
 Comando: `.venv\Scripts\python -m pytest tests/ -q` → **270 aprobadas, 3 fallidas** (273 pruebas).
@@ -176,7 +204,7 @@ Verificaciones no ejecutadas: siguen pendientes N-01, N-04, N-05, N-06 y N-07. N
 | D05 | Importación | Período decimal | 2021.9 | Rechazado | OK, período 2021 | APROBADO (fase 1; antes FALLIDO) | M-01 |
 | D06 | Importación | Período fuera de rango | 21 | Rechazado | OK | APROBADO (fase 1; antes FALLIDO) | M-01 |
 | D07 | Importación | Más de 2 decimales | 0,1 + 0,2 | Rechazado o cuantizado | 0.30000000000000004, OK | APROBADO (fase 1; antes FALLIDO) | M-02 |
-| D08 | Importación | Código numérico | 1001.0 | OK | CUENTA_DESCONOCIDA | FALLIDO | B-06 |
+| D08 | Importación | Código numérico | 1001.0 | OK | CUENTA_DESCONOCIDA | APROBADO (fase 4; antes FALLIDO) | B-06 |
 | D09 | Importación | Duplicado dentro del archivo | 1001/2021 × 2 | OK + DUPLICADA | Correcto | APROBADO | — |
 | D10 | Importación | Errores parciales | 1 válida + 1 inexistente | Solo se importa la válida | {1001: 100,00} | APROBADO | — |
 | D11 | Importación | Reimportar el mismo archivo | 2 veces | 1 registro | 1 | APROBADO | — |

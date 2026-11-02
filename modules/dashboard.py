@@ -25,6 +25,7 @@ from calculations.controls import conciliar_resultado
 from calculations.dupont import compute_dupont
 from calculations.income_statement import compute_income_statement
 from components.money import format_money, format_percent
+from components.texto import md
 from database.enums import EstadoRegistro, TipoEstadoFinanciero
 from database.models import Company
 from database.repositories import get_statement_status, list_fiscal_periods
@@ -51,7 +52,7 @@ def _estado_roe(dp) -> tuple[str, str, str | None]:
 
 def render(session: Session, company: Company) -> None:
     st.header("Dashboard")
-    st.subheader(company.nombre_legal)
+    st.subheader(md(company.nombre_legal))
 
     periodos = list_fiscal_periods(session)
     if not periodos:
@@ -87,7 +88,7 @@ def render(session: Session, company: Company) -> None:
         estado_balance = get_statement_status(session, ultimo.id, TipoEstadoFinanciero.BALANCE)
         estado_resultados = get_statement_status(session, ultimo.id, TipoEstadoFinanciero.RESULTADOS)
         etiqueta = lambda e: "Revisado ✅" if e == EstadoRegistro.REVISADO else "Borrador ✏️"
-        validacion_eq = "✅ cuadra" if bs.cuadra else f"⚠️ no cuadra (dif. {format_money(bs.diferencia, company.moneda)})"
+        validacion_eq = "✅ cuadra" if bs.cuadra else f"⚠️ no cuadra (dif. {md(format_money(bs.diferencia, company.moneda))})"
         st.info(
             f"Estado Balance General: {etiqueta(estado_balance)} ({validacion_eq}; {estado_bs}) · "
             f"Estado de Resultados: {etiqueta(estado_resultados)} ({estado_inc})"

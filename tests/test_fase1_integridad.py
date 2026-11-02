@@ -278,6 +278,8 @@ def _capturar(monkeypatch, valores_por_codigo, tipo=Tipo.BALANCE):
 
     monkeypatch.setattr(streamlit, "number_input", number_input)
     monkeypatch.setattr(streamlit, "form_submit_button", lambda *a, **k: True)
+    # Fase 4 (M-10): el usuario confirma el alcance mostrado antes de escribir.
+    monkeypatch.setattr(streamlit, "button", lambda label, *a, **k: label == "Confirmar y guardar")
     monkeypatch.setattr(streamlit, "rerun", lambda *a, **k: None)
     grupos = data_entry.GRUPOS_BALANCE if tipo == Tipo.BALANCE else data_entry.GRUPOS_RESULTADOS
     with render_scope() as s:

@@ -12,6 +12,7 @@ from calculations.validation import CONVENCION_SIGNOS
 from components.avisos import mostrar_avisos_signo, mostrar_completitud, mostrar_conciliacion, mostrar_estado
 from components.navigation import select_fiscal_period
 from components.tables import mostrar_grupo, mostrar_total
+from components.texto import md
 from database.models import Company
 
 
@@ -26,8 +27,8 @@ def render(session: Session, company: Company) -> None:
         st.info("No hay datos de Estado de Resultados capturados para este ejercicio.")
         return
 
-    st.subheader(f"{company.nombre_legal} — Estado de Resultados del ejercicio {period.anio}")
-    st.caption(f"Moneda: {company.moneda} · Los costos, gastos e impuestos se capturan en positivo y se restan.")
+    st.subheader(f"{md(company.nombre_legal)} — Estado de Resultados del ejercicio {period.anio}")
+    st.caption(f"Moneda: {md(company.moneda)} · Los costos, gastos e impuestos se capturan en positivo y se restan.")
     conciliacion = conciliar_resultado(compute_balance_sheet(session, period.id), inc)
     banderas = banderas_resultados(inc, conciliacion)
     mostrar_estado(banderas)

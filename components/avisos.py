@@ -7,6 +7,7 @@ import streamlit as st
 from calculations.banderas import Bandera, resumen
 from calculations.controls import CONCILIADO, DIFERENCIA, Conciliacion
 from components.money import format_money
+from components.texto import md
 
 
 def mostrar_estado(banderas: list[Bandera]) -> None:
@@ -28,14 +29,14 @@ def mostrar_completitud(resultado, nombre_estado: str) -> None:
     if resultado.cuentas_sin_dato:
         with st.expander(f"Cuentas activas sin dato ({len(resultado.cuentas_sin_dato)})"):
             st.caption("Informativo: una cuenta sin dato no se suma como cero ni es obligatoria por sí sola.")
-            st.write(", ".join(f"{c.codigo} — {c.nombre}" for c in resultado.cuentas_sin_dato))
+            st.write(md(", ".join(f"{c.codigo} — {c.nombre}" for c in resultado.cuentas_sin_dato)))
 
 
 def mostrar_avisos_signo(resultado) -> None:
     if resultado.advertencias_signo:
         st.warning(
             "Importes con signo distinto a la convención (se muestran tal como se capturaron, sin invertirlos):\n"
-            + "\n".join(f"- {a}" for a in resultado.advertencias_signo)
+            + "\n".join(f"- {md(a)}" for a in resultado.advertencias_signo)
         )
 
 
@@ -48,7 +49,7 @@ def mostrar_conciliacion(conciliacion: Conciliacion, moneda: str) -> None:
     else:
         st.info(conciliacion.mensaje)
     st.caption(
-        f"Resultado del ejercicio (patrimonio): {format_money(conciliacion.resultado_patrimonio, moneda)} · "
-        f"Utilidad neta (Estado de Resultados): {format_money(conciliacion.utilidad_neta, moneda)} · "
-        f"Diferencia: {format_money(conciliacion.diferencia, moneda)}"
+        f"Resultado del ejercicio (patrimonio): {md(format_money(conciliacion.resultado_patrimonio, moneda))} · "
+        f"Utilidad neta (Estado de Resultados): {md(format_money(conciliacion.utilidad_neta, moneda))} · "
+        f"Diferencia: {md(format_money(conciliacion.diferencia, moneda))}"
     )

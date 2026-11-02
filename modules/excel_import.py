@@ -13,10 +13,13 @@ una sola transaccion: si una fila falla, no se guarda ninguna.
 """
 from __future__ import annotations
 
+import hashlib
 import io
+import math
 from dataclasses import dataclass
 from decimal import Decimal
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 from openpyxl import Workbook
@@ -92,7 +95,7 @@ class FilaImportacion:
     periodo: int | None
     valor: Decimal | None
     cuenta: Account | None
-    # OK, CUENTA_DESCONOCIDA, CUENTA_INACTIVA, PERIODO_INVALIDO, PERIODO_FUERA_DE_RANGO,
+    # OK, CODIGO_AMBIGUO, CUENTA_DESCONOCIDA, CUENTA_INACTIVA, PERIODO_INVALIDO, PERIODO_FUERA_DE_RANGO,
     # VALOR_VACIO, VALOR_NO_NUMERICO, VALOR_INVALIDO, DUPLICADA, EJERCICIO_CERRADO,
     # OMITIDA_SIN_AUTORIZACION, SIGNO_SIN_CONFIRMAR
     estado: str
@@ -100,6 +103,62 @@ class FilaImportacion:
     valor_existente: Decimal | None = None
     crea_ejercicio: bool = False
     aviso_signo: str | None = None
+
+
+class CodigoAmbiguo(ValueError):
+    """El codigo de la celda no identifica una cuenta sin suponer nada."""
+
+
+# Mayor entero que un float representa sin perdida (2**53).
+_MAX_ENTERO_FLOAT = 2**53
+
+
+def normalizar_codigo(valor) -> str:
+    """Codigo de cuenta de una celda, como texto (hallazgo B-06).
+
+    Excel guarda 1001 como numero, y pandas lo lee como 1001.0 si la
+    columna tiene celdas vacias. Un numero entero exacto se normaliza a
+    su texto ("1001"); un texto se conserva tal cual (sin espacios
+    exteriores). Se rechaza (CodigoAmbiguo) lo que obligaria a adivinar:
+    decimales (1001.5 pudo ser "1001.50"), valores logicos, fechas,
+    infinitos o enteros demasiado grandes para un float exacto.
+    Devuelve "" para una celda vacia.
+    """
+    if valor is None or (not isinstance(valor, str) and pd.api.types.is_scalar(valor) and pd.isna(valor)):
+        return ""
+    if isinstance(valor, (bool, np.bool_)):
+        raise CodigoAmbiguo(f"El código '{valor}' es un valor lógico, no un código de cuenta.")
+    if isinstance(valor, (int, np.integer)):
+        return str(int(valor))
+    if isinstance(valor, (float, np.floating)):
+        if not math.isfinite(valor) or not float(valor).is_integer() or abs(valor) >= _MAX_ENTERO_FLOAT:
+            raise CodigoAmbiguo(
+                f"El código {valor!r} es un número con decimales o fuera de rango: no se puede saber qué código "
+                "de texto representa. Escríbalo como texto en el archivo."
+            )
+        return str(int(valor))
+    if isinstance(valor, str):
+        texto = valor.strip()
+        return "" if texto.lower() == "nan" else texto
+    raise CodigoAmbiguo(f"El código '{valor}' ({type(valor).__name__}) no es un número ni un texto.")
+
+
+def _diagnostico_codigo(session: Session, codigo: str, numerico: bool) -> str | None:
+    """Si un codigo desconocido se parece a uno del catalogo solo por un
+    formato que Excel pudo alterar, lo explica (no lo sustituye)."""
+    if numerico:
+        # Excel quita los ceros a la izquierda de un numero (0101 -> 101).
+        parecidos = [c.codigo for c in list_accounts(session) if c.codigo.isdigit() and c.codigo.lstrip("0") == codigo
+                     and c.codigo != codigo]
+        if parecidos:
+            return (f"El código {codigo} llegó como número y podría ser {', '.join(parecidos)} sin los ceros "
+                    "a la izquierda. Escríbalo como texto en el archivo.")
+        return None
+    entero, punto, decimales = codigo.partition(".")
+    if punto and entero.isdigit() and decimales and set(decimales) == {"0"} and get_account_by_codigo(session, entero):
+        return (f"El código '{codigo}' no existe; existe '{entero}'. No se corrige automáticamente un código "
+                "escrito como texto: revise el archivo.")
+    return None
 
 
 def _tipo_de(cuenta: Account) -> TipoEstadoFinanciero:
@@ -113,12 +172,18 @@ def _validar_dataframe(session: Session, df: pd.DataFrame) -> list[FilaImportaci
 
     for idx, row in df.iterrows():
         numero_fila = idx + 2  # +1 por encabezado, +1 por index 0-based
-        codigo = str(row.get("Código de cuenta", "")).strip()
+        codigo_raw = row.get("Código de cuenta", "")
         nombre_archivo = str(row.get("Nombre de cuenta", "")).strip()
         periodo_raw = row.get("Período")
         valor_raw = row.get("Valor monetario")
 
-        if not codigo or codigo.lower() == "nan":
+        try:
+            codigo = normalizar_codigo(codigo_raw)
+        except CodigoAmbiguo as exc:
+            filas.append(FilaImportacion(numero_fila, str(codigo_raw).strip(), nombre_archivo, None, None, None,
+                                         "CODIGO_AMBIGUO", str(exc)))
+            continue
+        if not codigo:
             continue  # fila vacia, se ignora silenciosamente
 
         def fila(estado, mensaje, periodo=None, valor=None, cuenta=None):
@@ -126,7 +191,11 @@ def _validar_dataframe(session: Session, df: pd.DataFrame) -> list[FilaImportaci
 
         cuenta = get_account_by_codigo(session, codigo)
         if cuenta is None:
-            filas.append(fila("CUENTA_DESCONOCIDA", f"No existe ninguna cuenta con código '{codigo}' en el catálogo."))
+            diagnostico = _diagnostico_codigo(session, codigo, numerico=not isinstance(codigo_raw, str))
+            if diagnostico:
+                filas.append(fila("CODIGO_AMBIGUO", diagnostico))
+            else:
+                filas.append(fila("CUENTA_DESCONOCIDA", f"No existe ninguna cuenta con código '{codigo}' en el catálogo."))
             continue
         if cuenta.estado == EstadoCuenta.INACTIVA:
             filas.append(fila("CUENTA_INACTIVA", f"La cuenta {codigo} está desactivada.", cuenta=cuenta))
@@ -195,6 +264,27 @@ def _importar(session: Session, filas: list[FilaImportacion]) -> dict[str, int]:
             raise ValueError(f"fila {fila.numero_fila} ({fila.codigo}): {mensaje_error(exc)}") from exc
         resultado[operacion or "SIN_CAMBIOS"] += 1
     return resultado
+
+
+_FIRMA_MOSTRADA = "importacion_firma_mostrada"
+
+
+def _alcance(filas: list[FilaImportacion]) -> str:
+    listas = [f for f in filas if f.estado == "OK"]
+    nuevos = sum(1 for f in listas if f.valor_existente is None)
+    sobrescritos = sum(1 for f in listas if f.valor_existente is not None and f.valor_existente != f.valor)
+    iguales = len(listas) - nuevos - sobrescritos
+    return (f"Alcance: {nuevos} importe(s) nuevo(s), {sobrescritos} sobrescrito(s) y {iguales} sin cambios "
+            f"en el/los ejercicio(s) {', '.join(str(a) for a in sorted({f.periodo for f in listas}))}.")
+
+
+def _firma(filas: list[FilaImportacion]) -> str:
+    """Huella de la vista previa: filas, estados, valores nuevos y existentes."""
+    contenido = repr([
+        (f.numero_fila, f.codigo, f.periodo, str(f.valor), f.estado, str(f.valor_existente), f.crea_ejercicio)
+        for f in filas
+    ])
+    return hashlib.sha256(contenido.encode("utf-8")).hexdigest()
 
 
 def render(session: Session, company: Company) -> None:
@@ -297,16 +387,33 @@ def render(session: Session, company: Company) -> None:
     a_crear = sorted({f.periodo for f in filas if f.estado == "OK" and f.crea_ejercicio})
     if a_crear:
         st.info(f"Al confirmar se crearán los ejercicios: {', '.join(str(a) for a in a_crear)}.")
+    if ok:
+        st.warning(_alcance(filas) + " Nada se guarda hasta que pulse 'Confirmar importación'.")
+
+    # La importacion solo se ejecuta si la vista previa que el usuario tenia
+    # en pantalla (ejecucion anterior) es la misma que se va a importar: un
+    # segundo clic despues de importar, o un cambio de la BD entre la vista
+    # previa y el clic, obligan a revisar de nuevo (M-10).
+    firma = _firma(filas)
+    firma_mostrada = st.session_state.get(_FIRMA_MOSTRADA)
+    st.session_state[_FIRMA_MOSTRADA] = firma
 
     col_confirmar, col_cancelar = st.columns(2)
     with col_confirmar:
         confirmar = st.button("Confirmar importación", type="primary", disabled=(ok == 0))
     with col_cancelar:
         if st.button("Cancelar"):
+            st.session_state.pop(_FIRMA_MOSTRADA, None)
             st.info("Importación cancelada. No se guardó ningún dato.")
             return
 
     if confirmar and ok:
+        if firma_mostrada is not None and firma_mostrada != firma:
+            st.warning(
+                "La vista previa cambió desde que la revisó (por ejemplo, porque el archivo ya se importó o los "
+                "datos se modificaron). No se importó nada: revise la vista previa actualizada y confirme de nuevo."
+            )
+            return
         importado, resultado = ejecutar_escritura(session, lambda: _importar(session, filas), descripcion="importar el archivo")
         if importado:
             st.success(

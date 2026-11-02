@@ -145,7 +145,7 @@ def export_balance_pdf(company, period, bs, banderas: list[Bandera] | None = Non
     else:
         story.append(
             Paragraph(
-                f"ADVERTENCIA: la ecuación contable NO cuadra. Diferencia: {format_money(bs.diferencia, company.moneda)}.",
+                f"ADVERTENCIA: la ecuación contable NO cuadra. Diferencia: {escape(format_money(bs.diferencia, company.moneda))}.",
                 _alerta_style,
             )
         )
@@ -193,7 +193,7 @@ def export_vertical_pdf(company, period, titulo: str, lineas, base, nombre_base:
     doc = _documento(buffer)
     story = _encabezado(company, period.anio, titulo)
     story += _banderas(banderas or [])
-    story.append(Paragraph(f"Base (100%): {escape(nombre_base)} = {format_money(base, company.moneda)}", _seccion_style))
+    story.append(Paragraph(f"Base (100%): {escape(nombre_base)} = {escape(format_money(base, company.moneda))}", _seccion_style))
     if any(l.efecto for l in lineas):
         story.append(Paragraph("Los costos, gastos e impuestos tienen porcentaje positivo y restan "
                                "(columna Efecto).", _sub_style))

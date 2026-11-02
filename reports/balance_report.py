@@ -12,6 +12,7 @@ from components.avisos import mostrar_avisos_signo, mostrar_completitud, mostrar
 from components.money import format_money
 from components.navigation import select_fiscal_period
 from components.tables import mostrar_grupo, mostrar_total
+from components.texto import md
 from database.models import Company
 
 
@@ -26,8 +27,8 @@ def render(session: Session, company: Company) -> None:
         st.info("No hay datos de Balance General capturados para este ejercicio.")
         return
 
-    st.subheader(f"{company.nombre_legal} — Balance General al cierre del ejercicio {period.anio}")
-    st.caption(f"Moneda: {company.moneda}")
+    st.subheader(f"{md(company.nombre_legal)} — Balance General al cierre del ejercicio {period.anio}")
+    st.caption(f"Moneda: {md(company.moneda)}")
     conciliacion = conciliar_resultado(bs, compute_income_statement(session, period.id))
     banderas = banderas_balance(bs, conciliacion)
     mostrar_estado(banderas)
@@ -36,7 +37,7 @@ def render(session: Session, company: Company) -> None:
         st.success("La ecuación contable cuadra: Activo total = Pasivo total + Patrimonio total.")
     else:
         st.error(
-            f"La ecuación contable NO cuadra. Diferencia: {format_money(bs.diferencia, company.moneda)} "
+            f"La ecuación contable NO cuadra. Diferencia: {md(format_money(bs.diferencia, company.moneda))} "
             "(Activo total − (Pasivo total + Patrimonio total))."
         )
     mostrar_completitud(bs, "Balance General")

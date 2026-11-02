@@ -1,7 +1,7 @@
 # Plan de corrección
 
 **Base:** `AUDITORIA_INTEGRAL.md` (2026-11-01). Los identificadores (C-, A-, M-, B-) remiten a los hallazgos de ese documento.
-**Estado:** Fases 0 a 3 completadas, M-11 corregido y T-15 resuelto (2026-11-01). Fases 4 y 5 pendientes de autorización.
+**Estado:** Fases 0 a 4 completadas, M-11 corregido y T-15 resuelto (2026-11-01). Fase 5 pendiente de autorización.
 
 ## Principios de orden
 
@@ -66,7 +66,7 @@
 2. Migración real: SHA-256 antes `f026863d00f841c042c996e0ccb12a1317992ede97d2e544f4cba5955630a82d` (v0), después `ffc23c08ac19d71050254edba6d5a7dc9a2508aacf45222056f8a93b9f05c7c8` (v3). Filas iguales en todas las tablas (30 cuentas, 19 importes de balance, 52 historial, 1 empresa, 1 ejercicio, 1 estado). Los 19 importes conservan id, ejercicio, cuenta y valor (0 → 0 centavos). `integrity_check = ok`.
 3. Copia previa automática `data/backups/financiera_pre_migracion_v0_20261101_110247_634176.db`: contenido idéntico al original (comparación fila por fila).
 
-**Pendiente de fases posteriores:** M-10 (confirmación de cambios masivos, fase 4.2).
+**Pendiente de fases posteriores:** M-10 (confirmación de cambios masivos, fase 4.2): completado en la fase 4.
 
 ### Corrección adelantada: M-11 (autorizada por el usuario antes de la fase 2)
 - **Defecto:** las páginas de análisis vertical fallaban con importes distintos de cero (`'float' object has no attribute 'quantize'`).
@@ -273,6 +273,31 @@
 | 4.6 | B-05 | `requirements.txt` | Fijar las versiones probadas | `pip install -r` en un entorno limpio + pytest |
 | 4.7 | B-07 | Datos (no código) | El usuario corrige los datos de la empresa | Encabezados correctos |
 | 4.8 | — | `components/navigation.py` | Eliminar el duplicado "Configuración" o darle un contenido propio | — |
+
+**Estado: COMPLETADA en el alcance autorizado (2026-11-01): B-04, B-05, B-06, B-07 y las confirmaciones de operaciones masivas (paso 4.2, M-10; la autorización las llama "D08").** Los pasos 4.1, 4.3 y 4.8 no estaban en la autorización y siguen pendientes. Nota: en `MATRIZ_DE_PRUEBAS.md`, D08 es la prueba de códigos numéricos (B-06); ambas cosas se hicieron.
+
+| Paso | Resultado | Evidencia |
+|---|---|---|
+| 4.2 (M-10) | `components/confirmacion.py`: guardar valida y **propone** (no escribe); un panel muestra "Se modificarán N valor(es) de … en el ejercicio X: n nuevo(s) y m modificado(s)" con la tabla cuenta / valor actual / valor nuevo y los botones "Confirmar y guardar" y "Cancelar". La operación se retira de `st.session_state` antes de escribir (un solo uso) y se escribe en una sola transacción (`ejecutar_escritura`) solo si las cuentas conservan el valor mostrado. Se descarta al cancelar, al recargar (sesión nueva), al cambiar de página (`app.py`) o de ejercicio, y en la edición si la tabla cambia después de proponer. La importación muestra el alcance (nuevos, sobrescritos, sin cambios) y solo importa si la vista previa es la que el usuario tenía en pantalla: un segundo clic o un cambio de la BD obligan a revisarla de nuevo. La restauración ya tenía confirmación (fase 1); las operaciones de un solo registro (borrar un importe, cerrar un ejercicio) ya tenían casilla de confirmación | `tests/test_fase4.py` (16 pruebas de confirmación, una de ellas con 8 escenarios del `app.py` real en `tests/humo_fase4.py`) |
+| 4.4 (B-04) | Subtotales y totales con `st.markdown` nativo (`text_alignment="right"`, negrita: misma presentación; el total pierde el 10 % de tamaño de letra extra, que no se puede reproducir sin HTML). `components/texto.md` escapa todo signo de puntuación ASCII de los datos del usuario en elementos Markdown (nombre de la empresa, moneda, nombres de cuenta en avisos y errores). PDF: se escapa la moneda en el párrafo de diferencia del Balance y en la base del vertical (antes `<x` hacía fallar el PDF). El CSS de `app.py` es el único HTML y no lleva datos | Moneda `<b>x</b>` se muestra como `<b>x</b>`; prueba de código fuente del único `unsafe_allow_html` |
+| 4.5 (B-06) | `normalizar_codigo`: entero exacto → texto ("1001"); se reportan como `CODIGO_AMBIGUO` los decimales (1001.5), lógicos, fechas, infinitos, enteros > 2^53, un número que coincide con un código con ceros a la izquierda (105 frente a "0105") y un texto "1003.0" cuando existe "1003" (se explica, no se sustituye). Los códigos de texto válidos no cambian | D08 aprueba |
+| 4.6 (B-05) | `requirements.txt` fija las versiones instaladas y probadas (no se actualizó ninguna) | Entorno limpio (`py -3.12 -m venv` + `pip install -r requirements.txt`): mismo `pip freeze` de 47 paquetes que `.venv` y misma suite (348/2) |
+| 4.7 (B-07) | Datos corregidos con autorización expresa del usuario, que eligió las mayúsculas (ver abajo) | Historial, copia previa y comprobación de tablas |
+
+**Versiones probadas (B-05):** Python 3.12.10 (Windows 11) · streamlit 1.66.1 · SQLAlchemy 2.0.55 · pandas 2.3.3 · numpy 2.2.6 · plotly 5.24.1 · openpyxl 3.1.5 · reportlab 4.5.1 · pytest 8.4.2. El mínimo anterior (`streamlit>=1.38`) no era válido: la app usa `width="stretch"` y, desde esta fase, `st.markdown(text_alignment=...)`; no se probó ninguna versión anterior a 1.66.1.
+
+**Datos de la empresa (B-07), `data/financiera.db`, tabla `company` (id 1):**
+
+| Campo | Valor anterior | Valor propuesto | Valor aplicado | Criterio |
+|---|---|---|---|---|
+| nombre_legal | `alutech` | `Alutech` | `Alutech` | Mayúscula inicial elegida por el usuario. El nombre legal completo (p. ej. "S. A. de C. V.") no se dedujo |
+| nombre_comercial | `aluetch sv` | `Alutech SV` | `Alutech SV` | Transposición de letras (inequívoca) + mayúsculas elegidas por el usuario |
+| pais | `El Salvaodr` | `El Salvador` | `El Salvador` | Transposición de letras (inequívoca) |
+| actividad_economica, moneda, anio_inicial_analisis | `metal`, `USD`, `2021` | sin cambio | sin cambio | Fuera de la autorización |
+
+Procedimiento: (1) comprobación de que los valores actuales eran exactamente los esperados (si no, no se corregía); (2) ensayo sobre una copia; (3) copia previa verificada `data/backups/financiera_pre_b07_20261101_182614_096704.db` (mismo contenido fila por fila); (4) `save_company` en una transacción, que registra los valores anteriores en `change_history` (ids 53–55, un mismo lote); (5) comprobación de que solo cambiaron esos 3 campos: todas las demás tablas son idénticas fila por fila, el historial anterior no cambió, `integrity_check = ok`, los 19 importes 0.00 de 2021 siguen intactos. SHA-256 de la BD de trabajo: antes `ffc23c08…05c7c8`, después `c69020b6891f026119b0b4a1ca1943e4f8f8a4bb1290d66762f7f222a5ee10ac`. Respaldo original de la fase 0 sin cambios (`f026863d…630a82d`).
+
+**Hallazgo nuevo B-10** (fuera del alcance, no corregido): el Excel exportado guarda como fórmula un texto que empiece con `=` (ver `AUDITORIA_INTEGRAL.md`). Requiere autorización.
 
 ---
 

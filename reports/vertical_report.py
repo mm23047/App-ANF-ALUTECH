@@ -16,6 +16,7 @@ from calculations.vertical_analysis import ETIQUETA_EFECTO, compute_vertical_bal
 from components.avisos import mostrar_estado
 from components.money import format_money, format_percent
 from components.navigation import select_fiscal_period
+from components.texto import md
 from database.models import Company
 
 
@@ -81,7 +82,7 @@ def render_balance(session: Session, company: Company) -> None:
     bs = compute_balance_sheet(session, period.id)
     banderas = banderas_balance(bs, conciliar_resultado(bs, compute_income_statement(session, period.id)))
     mostrar_estado(banderas)
-    st.caption(f"Base (100%): Total Activo = {format_money(resultado.base_total_activo, company.moneda)}")
+    st.caption(f"Base (100%): Total Activo = {md(format_money(resultado.base_total_activo, company.moneda))}")
     st.dataframe(_tabla_presentacion(resultado.lineas, company.moneda), hide_index=True, width="stretch")
     st.plotly_chart(_grafico(resultado, "Participación porcentual sobre el Total Activo"), width="stretch")
     _descargas(company, period, "Análisis Vertical — Balance General", resultado, resultado.base_total_activo,
@@ -103,7 +104,7 @@ def render_income(session: Session, company: Company) -> None:
     banderas = banderas_resultados(inc, conciliar_resultado(compute_balance_sheet(session, period.id), inc))
     mostrar_estado(banderas)
     st.caption(
-        f"Base (100%): Ingresos Netos = {format_money(resultado.base_ingresos_netos, company.moneda)} · "
+        f"Base (100%): Ingresos Netos = {md(format_money(resultado.base_ingresos_netos, company.moneda))} · "
         "Los costos, gastos e impuestos tienen porcentaje positivo y restan (columna Efecto)."
     )
     st.dataframe(_tabla_presentacion(resultado.lineas, company.moneda), hide_index=True, width="stretch")

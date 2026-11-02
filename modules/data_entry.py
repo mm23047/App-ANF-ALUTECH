@@ -3,7 +3,8 @@ iniciales (secciones 6.1, 6.2, 6.3, 9.5).
 
 Un campo vacio significa "sin dato" y no se guarda; un cero escrito se
 guarda como importe cero (hallazgo A-03). Solo se guardan los importes
-nuevos o modificados, en una transaccion explicita.
+nuevos o modificados, en una transaccion explicita y despues de que el
+usuario confirme el alcance mostrado (components/confirmacion.py, M-10).
 """
 from __future__ import annotations
 
@@ -15,9 +16,12 @@ from sqlalchemy.orm import Session
 
 from calculations.income_statement import compute_income_statement
 from calculations.validation import CONVENCION_SIGNOS, aviso_signo
+from components import confirmacion
+from components.confirmacion import Cambio
 from components.money import ImporteInvalido, format_money, parse_importe, parse_importe_con_aviso
 from components.navigation import select_fiscal_period
 from components.transacciones import ejecutar_escritura
+from components.texto import md
 from database.enums import CategoriaPrincipal as Cat
 from database.enums import EstadoRegistro
 from database.enums import Subcategoria as Sub
@@ -82,22 +86,23 @@ def _aviso_ejercicio_cerrado(period: FiscalPeriod) -> bool:
 
 
 def _guardar_capturados(
-    session: Session,
     period: FiscalPeriod,
     capturados: dict[int, tuple[Account, float | None]],
     valores_actuales: dict[int, Decimal],
-    guardar: Callable[[int, Decimal], str | None],
-    confirmar_signos: bool = False,
+    confirmar_signos: bool,
+    pantalla: str,
+    estado: str,
 ) -> None:
-    """Guarda solo los importes informados que son nuevos o distintos del
-    actual. Si algun valor es invalido no se guarda nada. Un importe con
-    signo distinto a la convencion solo se guarda si el usuario lo confirma;
+    """Prepara la confirmacion de los importes informados que son nuevos o
+    distintos del actual; no escribe nada (lo hace _aplicar_confirmada).
+    Si algun valor es invalido no se propone nada. Un importe con signo
+    distinto a la convencion solo se propone si el usuario lo confirma;
     nunca se invierte (hallazgo A-05)."""
     errores: list[str] = []
     avisos_signo: list[str] = []
     avisos: list[str] = []
     vaciados: list[str] = []
-    cambios: list[tuple[int, Decimal]] = []
+    cambios: list[Cambio] = []
     for account_id, (cuenta, valor) in capturados.items():
         previo = valores_actuales.get(account_id)
         if valor is None:
@@ -114,18 +119,19 @@ def _guardar_capturados(
         if aviso:
             avisos.append(f"{cuenta.codigo} — {cuenta.nombre}: {aviso}")
         if importe != previo:
-            cambios.append((account_id, importe))
+            cambios.append(Cambio(account_id, f"{cuenta.codigo} — {cuenta.nombre}", previo, importe))
             signo = aviso_signo(cuenta, importe)
             if signo:
                 avisos_signo.append(signo)
 
+    confirmacion.descartar(pantalla)  # un nuevo envio reemplaza la propuesta anterior
     if errores:
-        st.error("No se guardó ningún dato. Corrija estos importes:\n" + "\n".join(f"- {e}" for e in errores))
+        st.error("No se guardó ningún dato. Corrija estos importes:\n" + "\n".join(f"- {md(e)}" for e in errores))
         return
     if vaciados:
         st.warning(
             "Estos campos se vaciaron, pero conservan su importe guardado (vaciar no borra): "
-            + "; ".join(vaciados) + ". Para borrarlos use 'Borrar importe'."
+            + md("; ".join(vaciados)) + ". Para borrarlos use 'Borrar importe'."
         )
     if not cambios:
         st.info("No hay importes nuevos ni modificados para guardar.")
@@ -133,14 +139,35 @@ def _guardar_capturados(
     if avisos_signo and not confirmar_signos:
         st.warning(
             "No se guardó ningún dato. Estos importes tienen un signo distinto a la convención:\n"
-            + "\n".join(f"- {a}" for a in avisos_signo)
+            + "\n".join(f"- {md(a)}" for a in avisos_signo)
             + "\n\nCorríjalos, o marque 'Confirmo los importes con signo distinto a la convención' y guarde de nuevo."
         )
         return
 
+    confirmacion.proponer(
+        pantalla, period.id, resumen=confirmacion.resumen_cambios(cambios, period.anio, estado), cambios=cambios,
+        avisos=avisos,
+    )
+
+
+def _aplicar_confirmada(
+    session: Session,
+    period: FiscalPeriod,
+    op: confirmacion.OperacionPendiente,
+    valores_actuales: dict[int, Decimal],
+    guardar: Callable[[int, Decimal], str | None],
+) -> None:
+    """Escribe exactamente los importes confirmados, en una sola transaccion,
+    si las cuentas conservan el valor que se mostro al confirmar."""
+    if not confirmacion.vigente(op, valores_actuales):
+        st.error(
+            "No se guardó ningún dato: los importes del ejercicio cambiaron después de la vista previa. "
+            "Revise los valores y guarde de nuevo."
+        )
+        return
     guardado, operaciones = ejecutar_escritura(
         session,
-        lambda: [guardar(account_id, importe) for account_id, importe in cambios],
+        lambda: [guardar(c.account_id, c.nuevo) for c in op.cambios],
         descripcion=f"guardar los importes del ejercicio {period.anio}",
     )
     if guardado:
@@ -148,9 +175,9 @@ def _guardar_capturados(
             f"Ejercicio {period.anio}: {operaciones.count('CREAR')} importe(s) nuevo(s) y "
             f"{operaciones.count('EDITAR')} modificado(s)."
         )
-        for aviso in avisos:
+        for aviso in op.avisos:
             st.warning(aviso)
-        if not avisos and not vaciados:
+        if not op.avisos:
             st.rerun()
 
 
@@ -217,16 +244,20 @@ def _render_grupos(session: Session, period: FiscalPeriod, tipo: Tipo, grupos, m
         )
         guardado = st.form_submit_button("Guardar")
 
+    pantalla = f"captura_{form_key}"
     if guardado:
-        _guardar_capturados(
+        estado = "Balance General" if tipo == Tipo.BALANCE else "Estado de Resultados"
+        _guardar_capturados(period, capturados, valores_actuales, confirmar_signos, pantalla, estado)
+    op = confirmacion.mostrar(pantalla, period.id)
+    if op is not None:
+        _aplicar_confirmada(
             session,
             period,
-            capturados,
+            op,
             valores_actuales,
             lambda account_id, importe: upsert_entry(
                 session, fiscal_period_id=period.id, account_id=account_id, valor=importe, tipo=tipo
             ),
-            confirmar_signos,
         )
 
 
@@ -235,13 +266,13 @@ def render_balance(session: Session, company: Company) -> None:
     period = select_fiscal_period(session)
     if period is None:
         return
-    st.caption(f"Período seleccionado: ejercicio {period.anio} · Moneda: {company.moneda}")
+    st.caption(f"Período seleccionado: ejercicio {period.anio} · Moneda: {md(company.moneda)}")
 
     inc = compute_income_statement(session, period.id)
     if inc.tiene_datos:
         st.info(
             f"Utilidad neta calculada en el Estado de Resultados {period.anio}: "
-            f"{format_money(inc.utilidad_neta, company.moneda)}. Puedes usar este valor en "
+            f"{md(format_money(inc.utilidad_neta, company.moneda))}. Puedes usar este valor en "
             "'Resultado del ejercicio' dentro de Patrimonio (el campo permanece editable: la Ecuación "
             "Contable del reporte de Balance te avisará si no cuadra)."
         )
@@ -255,7 +286,7 @@ def render_income(session: Session, company: Company) -> None:
     period = select_fiscal_period(session)
     if period is None:
         return
-    st.caption(f"Período seleccionado: ejercicio {period.anio} · Moneda: {company.moneda}")
+    st.caption(f"Período seleccionado: ejercicio {period.anio} · Moneda: {md(company.moneda)}")
 
     _estado_selector(session, period, Tipo.RESULTADOS, key="estado_resultados")
     _render_grupos(session, period, Tipo.RESULTADOS, GRUPOS_RESULTADOS, company.moneda, form_key="form_resultados")
@@ -309,15 +340,18 @@ def render_initial_balances(session: Session, company: Company) -> None:
         guardado = st.form_submit_button("Guardar saldos iniciales")
 
     if guardado:
-        _guardar_capturados(
+        _guardar_capturados(period, capturados, valores_actuales, confirmar_signos, "captura_saldos_iniciales",
+                            "saldos iniciales")
+    op = confirmacion.mostrar("captura_saldos_iniciales", period.id)
+    if op is not None:
+        _aplicar_confirmada(
             session,
             period,
-            capturados,
+            op,
             valores_actuales,
             lambda account_id, importe: upsert_initial_balance(
                 session, fiscal_period_id=period.id, account_id=account_id, valor=importe
             ),
-            confirmar_signos,
         )
 
     if valores_actuales:

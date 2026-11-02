@@ -272,6 +272,8 @@ def _capturar_formulario(monkeypatch, valores, confirmar):
     monkeypatch.setattr(streamlit, "number_input", lambda label, *a, value=None, **k: valores.get(label.split(" — ")[0], value))
     monkeypatch.setattr(streamlit, "checkbox", lambda *a, **k: confirmar)
     monkeypatch.setattr(streamlit, "form_submit_button", lambda *a, **k: True)
+    # Fase 4 (M-10): el usuario confirma el alcance mostrado antes de escribir.
+    monkeypatch.setattr(streamlit, "button", lambda label, *a, **k: label == "Confirmar y guardar")
     monkeypatch.setattr(streamlit, "rerun", lambda *a, **k: None)
     with render_scope() as s:
         p = get_fiscal_period(s, 2021)
@@ -305,7 +307,8 @@ def test_edicion_con_signo_atipico_requiere_confirmacion(bd, monkeypatch):
         return df
 
     monkeypatch.setattr(streamlit, "data_editor", editor)
-    monkeypatch.setattr(streamlit, "button", lambda label, *a, **k: label == "Guardar cambios")
+    # Fase 4 (M-10): "Guardar cambios" y despues "Confirmar y guardar".
+    monkeypatch.setattr(streamlit, "button", lambda label, *a, **k: label in ("Guardar cambios", "Confirmar y guardar"))
     monkeypatch.setattr(streamlit, "rerun", lambda *a, **k: None)
     for confirmar, esperado in ((False, Decimal("-300.00")), (True, Decimal("300.00"))):
         monkeypatch.setattr(streamlit, "checkbox", lambda *a, _c=confirmar, **k: _c)

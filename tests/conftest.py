@@ -36,7 +36,19 @@ def _redirigir_db_path(tmp_path, monkeypatch):
     monkeypatch.setattr(connection, "DB_PATH", tmp_path / "db_por_defecto.db")
 
 
-ESQUEMA_V0 = Path(__file__).resolve().parent / "fixtures" / "esquema_v0.sql"
+@pytest.fixture(autouse=True)
+def _session_state_limpio():
+    """Sin servidor, st.session_state es global del proceso: cada prueba
+    empieza con una sesion vacia, como un navegador nuevo (fase 4: las
+    operaciones pendientes y la firma de la importacion viven ahi)."""
+    import streamlit as st
+
+    st.session_state.clear()
+    yield
+    st.session_state.clear()
+
+
+ESQUEMA_V0 =Path(__file__).resolve().parent / "fixtures" / "esquema_v0.sql"
 FECHA = "2026-11-01 15:45:04.751750"
 
 

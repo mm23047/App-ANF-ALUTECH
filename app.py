@@ -8,6 +8,7 @@ import logging
 
 import streamlit as st
 
+from components import confirmacion
 from components.navigation import render_sidebar
 from database import connection
 from database.connection import init_db, render_scope, session_scope
@@ -56,6 +57,7 @@ if not st.session_state.get("db_inicializada"):
     st.session_state["db_inicializada"] = True
 
 PRIMARY = "#0B2447"
+# Unico HTML habilitado: CSS constante, sin datos del usuario (B-04).
 st.markdown(
     f"""
     <style>
@@ -71,6 +73,8 @@ st.markdown(
 with render_scope() as session:
     company = get_company(session)
     pagina = render_sidebar(company_exists=company is not None)
+    # Una operacion masiva sin confirmar no sobrevive a un cambio de pagina (M-10).
+    confirmacion.descartar_al_navegar(pagina)
 
     if pagina == "company":
         from modules import company as mod_company
