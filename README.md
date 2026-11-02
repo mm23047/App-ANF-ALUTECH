@@ -90,6 +90,9 @@ También puedes respaldar manualmente copiando el archivo
   guardar" escribe, una sola vez y en una transacción, y únicamente si esos
   valores no cambiaron mientras tanto. "Cancelar", recargar la página o
   cambiar de página o de ejercicio descartan la operación sin modificar nada.
+  Si otra pestaña restaura una copia de seguridad (o la base se sustituye)
+  después de preparar la confirmación, "Confirmar y guardar" no escribe nada
+  y pide revisar los datos y preparar la operación de nuevo.
 - La vista previa de la importación no modifica la BD: indica qué
   ejercicios se crearían y el alcance (importes nuevos, sobrescritos y sin
   cambios). Al confirmar se importa todo o nada, y solo si la vista previa es
@@ -154,9 +157,8 @@ Las pruebas usan bases de datos SQLite temporales y datos sintéticos.
 `tests/conftest.py` redirige la ruta de la BD a un archivo temporal y hace
 fallar la ejecución si cambia el SHA-256 de `data/financiera.db`.
 
-Estado actual (2026-11-01, fases 0 a 4, B-10 y fase 5 del
-`PLAN_DE_CORRECCION.md`, salvo la conciliación con Alutech):
-**416 aprobadas y 2 fallidas de 418**.
+Estado actual (2026-11-01, fases 0 a 7 del `PLAN_DE_CORRECCION.md`, salvo
+la conciliación con Alutech): **454 aprobadas y 2 fallidas de 456**.
 
 | Conjunto | Pruebas | Aprobadas |
 |---|---|---|
@@ -169,6 +171,7 @@ Estado actual (2026-11-01, fases 0 a 4, B-10 y fase 5 del
 | B-10 (Excel sin fórmulas en los textos) | 34 | 34 |
 | Fase 5: caso controlado de 3 ejercicios (`test_fase5_controlado.py`) | 18 | 18 |
 | Fase 5: integración del flujo completo (`test_fase5_integracion.py`) | 16 | 16 |
+| Fase 7: correcciones operativas O-1 a O-5 (`test_fase7.py`) | 38 | 38 |
 
 F01 y F03 esperan que la aplicación invierta el signo de una depreciación
 capturada en positivo o de un costo negativo. La convención aprobada es la
@@ -236,7 +239,7 @@ components/
   texto.py               Texto literal en elementos Markdown
   celdas_excel.py        Celdas XLSX: texto literal o fórmula de control
 tests/                   Suite Pytest: 30 originales, 47 de la auditoría y
-                         las de cada fase (418 en total)
+                         las de cada fase (456 en total)
 data/                    Base de datos SQLite y copias de seguridad
                          (fuera de control de versiones)
 assets/plantillas/       Plantillas Excel de referencia
