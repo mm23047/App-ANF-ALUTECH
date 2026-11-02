@@ -345,6 +345,25 @@ Limitación documentada: los caracteres de control que XLSX no admite se elimina
 | Entorno limpio (`py -3.12 -m venv` + `pip install -r requirements.txt`) | Mismo `pip freeze` (47 paquetes) y mismo resultado: 382/2 |
 | BD protegidas | Sin cambios: trabajo `c69020b6…ee10ac`, respaldo original `f026863d…630a82d` |
 
+### Etapa 5-B: caso controlado (5.4)
+
+**Estado: COMPLETADA (2026-11-01).** Sin cambios en el código de la aplicación.
+
+- **Caso:** `tests/fixtures/caso_controlado.json`, sintético (no son datos de Alutech). Ejercicios 2021–2023 con las 30 cuentas del catálogo estándar, en la convención de signos aprobada. Incluye depreciación negativa (correctora), otros ingresos y gastos operativos, resultado financiero negativo, grupos sin datos ("Otros resultados no operativos" en 2022 y 2023), ISR 0,00 explícito, pérdida en 2023 con patrimonio positivo, redondeo HALF_UP exacto (45/12.000 = 0,375 % → 0,38 %) y saldos iniciales: manuales en 2021 y el Balance del año anterior en 2022 y 2023.
+- **Valores esperados:** calculados a mano y verificados con un cálculo independiente en fracciones exactas que no usa código de la aplicación (script de la sesión, fuera del proyecto): 0 diferencias.
+- **Prueba:** `tests/test_fase5_controlado.py` (18 pruebas: Balance, Resultados, vertical del Balance, vertical de Resultados, DuPont y estado del reporte, por año).
+
+| Criterio | Resultado |
+|---|---|
+| Importes (totales, subtotales, utilidades, promedios) | Diferencia 0,00 en todos |
+| Porcentajes del vertical (126 líneas) | Diferencia real 0,00 pp (criterio ≤ 0,01 pp) |
+| Factores DuPont | Iguales a la fracción exacta (tolerancia 1e-20) |
+| ROE (%) | 2021: 19,92 · 2022: 18,06 · 2023: −1,18; DuPont y directo iguales |
+| Estado de los reportes | DEFINITIVO en los 3 años (cuadra, completo, conciliado, signos correctos, saldos reales) |
+| Discrepancias contables | Ninguna |
+| Suite completa | 400 aprobadas, 2 fallidas (F01, F03) |
+| BD protegidas | Sin cambios |
+
 ---
 
 ## Riesgos generales de implementación
