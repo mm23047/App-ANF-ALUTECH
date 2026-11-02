@@ -364,6 +364,22 @@ Limitación documentada: los caracteres de control que XLSX no admite se elimina
 | Suite completa | 400 aprobadas, 2 fallidas (F01, F03) |
 | BD protegidas | Sin cambios |
 
+### Etapa 5-C: integración (5.2)
+
+**Estado: COMPLETADA (2026-11-01).** Sin cambios en el código de la aplicación. Prueba: `tests/test_fase5_integracion.py` (16), sobre una BD temporal con datos sintéticos generados por la prueba (no son datos de Alutech).
+
+| Paso del flujo | Cómo se ejecuta | Resultado |
+|---|---|---|
+| Empresa | `modules/company.render` real (formulario simulado) | Guardada; la moneda se normaliza a "USD" |
+| Catálogo | Catálogo estándar + cuenta nueva 1005 | Creada |
+| Importar 2020–2025 | Las 2 plantillas descargadas de la aplicación, rellenadas con 6 ejercicios, importadas con `modules/excel_import.render` ("Confirmar importación") | 6 ejercicios creados; todos los importes guardados tal cual; 0 filas con observaciones |
+| Estados | `compute_*` y banderas por año | Cuadrados, completos y conciliados; Balance y Resultados DEFINITIVO en los 6 años; DuPont APROXIMADO en 2020 (primer ejercicio, sin saldo inicial: comportamiento esperado) y DEFINITIVO en 2021–2025, con el Balance del año anterior como saldo inicial |
+| Reportes en pantalla | Las 16 páginas del `app.py` real (`tests/humo_paginas.py`, subproceso) | Sin excepciones; la BD no cambia al navegar |
+| Exportar | 5 PDF y 5 Excel por año (Balance, Resultados, 2 verticales, DuPont): 60 archivos | Válidos; encabezado con empresa, ejercicio y estado del reporte |
+| Respaldo → cambio → restaurar | `crear_respaldo`, un importe nuevo después del respaldo, `restaurar` | **SHA-256 de la BD restaurada = SHA-256 de la copia**; contenido idéntico fila por fila (y `user_version`); el cambio posterior desapareció; la copia previa automática tiene la huella de la BD antes de restaurar; la copia de respaldo no se alteró |
+| Suite completa | — | 416 aprobadas, 2 fallidas (F01, F03) |
+| BD protegidas | — | Sin cambios |
+
 ---
 
 ## Riesgos generales de implementación
