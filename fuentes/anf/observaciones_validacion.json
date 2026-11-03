@@ -1,0 +1,194 @@
+{
+  "descripcion": "Causas investigadas de las diferencias y coincidencias por redondeo entre la aplicación y el trabajo ANF. Se redactaron después de ejecutar la comparación, siguiendo el orden de verificación de la consigna (extracción, clasificación, conjunto de cuentas, fórmula, base, redondeo, error aritmético, clasificación entre ejercicios). No modifican ningún dato ni cálculo: solo explican el resultado de la comparación.",
+  "observaciones": [
+    {
+      "id": "OBS-01",
+      "tipo": "Error del trabajo: cifra no rastreable a los estados financieros",
+      "referencias": [
+        "T3-AC",
+        "T4-AC",
+        "T6-AC"
+      ],
+      "anios": [
+        2023
+      ],
+      "causa": "El estado combinado de situación financiera 2023 (Certificación 2023, pág. 7 del PDF) presenta «Total activos corrientes» 429,794,544, y la suma de sus partidas coincide con ese total. Las Tablas 3, 4 y 6 del trabajo usan 541,094,544 (111,300,000 más). El propio trabajo usa la cifra correcta en el análisis vertical (53.12 %), la razón circulante de 8.1 (1.29) y el fondo de maniobra de 9.2. 541,094,544 no aparece en ningún documento de la carpeta; el informe PCR (SV-CIALUTECH-202506) muestra 541.1 M para dic‑23, pero con otro perímetro de consolidación (activo total 818.1 M frente a 809.1 M). Se conserva el dato del estado financiero original.",
+      "categoria": "Error en el trabajo académico"
+    },
+    {
+      "id": "OBS-02",
+      "tipo": "Error del trabajo: cifra no rastreable a los estados financieros",
+      "referencias": [
+        "T3-PC",
+        "T4-PC",
+        "T6-PC"
+      ],
+      "anios": [
+        2023
+      ],
+      "causa": "El estado 2023 (pág. 7) presenta «Total pasivos corrientes» 333,120,685, igual a la suma de sus partidas. Las Tablas 3, 4 y 6 usan 342,120,685 (9,000,000 más). La razón de tesorería (9.1), el fondo de maniobra (9.2) y el vertical (41.17 %) del propio trabajo usan 333,120,685. El informe PCR muestra 342.1 M para dic‑23 con otro perímetro.",
+      "categoria": "Error en el trabajo académico"
+    },
+    {
+      "id": "OBS-03",
+      "tipo": "Error de transcripción del trabajo",
+      "referencias": [
+        "T3-PC",
+        "T6-PC"
+      ],
+      "anios": [
+        2022
+      ],
+      "causa": "El estado 2022 (Certificación 2022, pág. 9) presenta «Total pasivos corrientes» 231,944,180 (= 458,148,329 − 226,204,149). Las Tablas 3, 6 y 7 usan 231,914,180 (dígitos 4 y 1 intercambiados: 30,000 menos). Las secciones 9.1 y 9.2 del trabajo usan la cifra correcta.",
+      "categoria": "Error en el trabajo académico"
+    },
+    {
+      "id": "OBS-04",
+      "tipo": "Diferencia derivada de OBS-03 (pasivo corriente 2022)",
+      "referencias": [
+        "T3-PC-VA",
+        "T3-PC-VR",
+        "T6-CTN",
+        "T6-CTN-VA",
+        "T6-CTN-VR",
+        "T7-CTN",
+        "T7-CTN-VA",
+        "T7-CTN-VR"
+      ],
+      "anios": [
+        2022
+      ],
+      "causa": "Variaciones y capital de trabajo calculados con el pasivo corriente 2022 mal transcrito (231,914,180 en lugar de 231,944,180). Con la cifra del documento el CTN 2022 es 216,728,221, el mismo valor que el trabajo presenta en 8.1 y 9.2.",
+      "categoria": "Error en el trabajo académico"
+    },
+    {
+      "id": "OBS-05",
+      "tipo": "Diferencia derivada de OBS-01, OBS-02 y OBS-03",
+      "referencias": [
+        "T3-AC-VA",
+        "T3-AC-VR",
+        "T3-PC-VA",
+        "T3-PC-VR",
+        "T4-AC-VA",
+        "T4-AC-VR",
+        "T4-PC-VA",
+        "T4-PC-VR",
+        "T6-CTN",
+        "T6-CTN-VA",
+        "T6-CTN-VR",
+        "T7-CTN",
+        "T7-CTN-VA",
+        "T7-CTN-VR",
+        "T6-RC",
+        "T6-PA"
+      ],
+      "anios": [
+        2023,
+        2024
+      ],
+      "causa": "Variaciones, capital de trabajo, razón corriente y prueba ácida calculados por el trabajo con el activo corriente (541,094,544) y el pasivo corriente (342,120,685) de 2023 que no corresponden al documento. Con las cifras originales: CTN 2023 = 96,673,859; razón corriente 1.29; prueba ácida 0.87 (los mismos valores que el trabajo presenta en 8.1 y 9.2). Las variaciones 2023→2024 cambian en consecuencia (p. ej. activo corriente +0.69 % en lugar de −20.02 %). La interpretación de 6.5 («2022–2023: presión sobre el capital de trabajo», CTN −8.20 %) subestima el deterioro: con los datos originales el CTN cae 55.39 % en 2023.",
+      "categoria": "Error en el trabajo académico"
+    },
+    {
+      "id": "OBS-06",
+      "tipo": "Presentación del trabajo (cifra redondeada y señalada con *)",
+      "referencias": [
+        "T5-UO"
+      ],
+      "anios": [
+        2022
+      ],
+      "causa": "El estado de resultados 2022 no presenta la utilidad de operación; la aplicación la obtiene como subtotal: 89,322,338 − 18,344,656 − 39,712,552 − 397,016 + 332,863 = 31,200,977. La Tabla 5 muestra 31,200,000* (redondeado y marcado con asterisco); las secciones 8.3 B y 8.4 del trabajo usan 31,200,977. Las variaciones relativas de la Tabla 5 coinciden con la cifra exacta.",
+      "categoria": "Diferencia de redondeo"
+    },
+    {
+      "id": "OBS-07",
+      "tipo": "Base de cálculo distinta (inconsistencia interna del trabajo)",
+      "referencias": [
+        "B-CXC",
+        "B-RCC",
+        "B-PPC"
+      ],
+      "anios": [
+        2023
+      ],
+      "causa": "En 8.2 B el trabajo usa solo cuentas por cobrar comerciales en 2021–2022 (53,081,088 y 32,581,092) y comerciales + otras en 2023 (41,272,525 + 54,824,958 = 96,097,483), como señala su asterisco. La aplicación aplica la misma base en todos los años (línea comercial presentada). Con la base «comerciales y otras» la aplicación obtiene para 2023 una rotación de 4.98 veces y 73.28 días (indicadores «rotacion_cxc_total» y «ppc_total»), iguales a los del trabajo. En 9.3 el propio trabajo usa 41,272,525 para 2023 (31.47 días), que coincide con la aplicación.",
+      "categoria": "Diferencia de fórmula"
+    },
+    {
+      "id": "OBS-08",
+      "tipo": "Redondeo del trabajo",
+      "referencias": [
+        "B-PPC"
+      ],
+      "anios": [
+        2025
+      ],
+      "causa": "365 / 6.2663 = 58.248 días; el trabajo presenta 58.3, posiblemente por redondeo doble (58.248 → 58.25 → 58.3). Diferencia de 0.05 días, menor que una unidad del decimal presentado.",
+      "categoria": "Diferencia de redondeo"
+    },
+    {
+      "id": "OBS-09",
+      "tipo": "Redondeo del trabajo (suma de componentes redondeados)",
+      "referencias": [
+        "C-CO82",
+        "C-CO"
+      ],
+      "causa": "El trabajo suma el período de inventario y el de cobro ya redondeados (p. ej. 76.9 + 58.3 = 135.2; 125.48 + 23.80 = 149.28); la aplicación suma los valores sin redondear (135.14 y 149.29). La diferencia no supera una unidad del último decimal presentado.",
+      "categoria": "Diferencia de redondeo"
+    },
+    {
+      "id": "OBS-10",
+      "tipo": "Redondeo del trabajo",
+      "referencias": [
+        "E-PCP"
+      ],
+      "anios": [
+        2021
+      ],
+      "causa": "205,973,230 / 408,633,995 = 50.4053 %, que redondea a 50.41 %; el trabajo presenta 50.40 % (truncado). Diferencia de 0.005 puntos.",
+      "categoria": "Diferencia de redondeo"
+    },
+    {
+      "id": "OBS-11",
+      "tipo": "Redondeo e inconsistencia interna del trabajo",
+      "referencias": [
+        "W-WACC"
+      ],
+      "anios": [
+        2023
+      ],
+      "causa": "El cálculo da un WACC 2023 de 3.8745 % (3.87 %). El cuadro del trabajo muestra 3.88 % (suma de los aportes ya redondeados por línea), mientras que el texto de 9.4.3 dice 3.87 %, que coincide con la aplicación (referencia W-WACC-TXT).",
+      "categoria": "Diferencia de redondeo"
+    },
+    {
+      "id": "OBS-12",
+      "categoria": "Error de clasificación",
+      "tipo": "Error de clasificación del trabajo: equivalencia no respaldada por los documentos",
+      "referencias": [
+        "FU25-CXCR_LP",
+        "FU25-TOTAL",
+        "FU25-CXCR-NETO"
+      ],
+      "anios": [
+        2025
+      ],
+      "causa": "En 9.7 el trabajo trata «Otras cuentas por cobrar a LP» de 2024 (118,684,551; 12_EEFF_diciembre_2024.pdf, pág. 1) como si fuera la misma partida que «Cuentas por cobrar Empresas Relacionadas a LP» de 2025 (262,128,668) y obtiene una variación de 143,444,117. El estado de 2024 no la identifica como cuenta con partes relacionadas y el informe PCR (SV-CIALUTECH-202506, balance resumido) presenta a dic‑24 «Cuentas por cobrar de LP» 119.7 M y «Cuentas por cobrar a partes relacionadas» (no corriente) 0.0. La aplicación conserva la denominación de 2024 en el grupo «Otras cuentas por cobrar (no corrientes)»: en 2025 la cuenta de relacionadas a LP aumenta 262,128,668 (uso) y la de otras CxC a LP disminuye 118,684,551 (fuente); el total de fuentes y usos es 408,447,177 en lugar de 289,762,626 (ambos totales cuadran). El aumento neto «relacionadas CP + LP» es 157,470,488 en lugar de 38,785,937. Ningún indicador cambia: usan totales."
+    },
+    {
+      "id": "OBS-13",
+      "categoria": "Supuesto no verificable",
+      "tambien_coincidencias": true,
+      "tipo": "Supuesto no verificable con los documentos (WACC)",
+      "referencias": [
+        "W-ISR",
+        "W-KD",
+        "W-AD",
+        "W-WACC",
+        "W-WACC-TXT",
+        "W-SPREAD"
+      ],
+      "causa": "La coincidencia se obtiene con las tasas de interés (6.75 % a 8.50 %) y la tasa de ISR (30 %) que supone el trabajo; ninguna figura en los documentos de la carpeta (el trabajo cita notas del informe auditado que no están disponibles y, para 2024–2025, no cita fuente; la certificación 2021 indica tasas de ISR de 25 % a 30 % según el país). La aplicación reproduce correctamente el método, pero el resultado no es verificable con las fuentes originales. Los pesos, el costo del patrimonio (ROE) y el ROA sí provienen de los estados financieros."
+    }
+  ]
+}

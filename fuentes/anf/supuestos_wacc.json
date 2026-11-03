@@ -1,0 +1,72 @@
+{
+  "descripcion": "Supuestos que el trabajo ANF (sección 9.4) usa para el WACC y que NO pueden verificarse con los documentos de la carpeta documentos/: las tasas de interés de cada fuente de deuda y la tasa del impuesto sobre la renta. El trabajo cita notas del informe auditado completo (Notas 18 a 25) que no forman parte de los documentos disponibles; para 2024 y 2025 no cita ninguna fuente. La aplicación los usa como datos de entrada configurables, separados de los datos originales y de los resultados calculados. El costo del patrimonio no es un supuesto: la aplicación lo calcula (ROE al cierre), igual que el trabajo.",
+  "fuente": "Trabajo de investigación ANF, sección 9.4 (tablas WACC 2021 a 2025)",
+  "metodo_costo_patrimonio": "ROE al cierre = utilidad neta del ejercicio / patrimonio total al cierre (criterio del trabajo ANF; no es un costo de capital exigido por los accionistas, p. ej. CAPM).",
+  "verificable": false,
+  "ejercicios": {
+    "2021": {
+      "tasa_isr": "30.00",
+      "tasas": {
+        "PRESTAMOS_CP": "7.50", "PRESTAMOS_LP": "7.50",
+        "ARRENDAMIENTOS_CP": "8.00", "ARRENDAMIENTOS_LP": "8.00",
+        "TITULARIZACION_CP": "6.90", "TITULARIZACION_LP": "6.90",
+        "DOCUMENTOS_POR_PAGAR_CP": "6.75", "DOCUMENTOS_POR_PAGAR_LP": "6.75",
+        "BONOS_LP": "7.25", "CERTIFICADOS_INVERSION_LP": "7.34"
+      },
+      "citas": {
+        "PRESTAMOS_CP": "Nota 18(a), pág. 26: 6% a 9% en dólares; punto medio del rango",
+        "PRESTAMOS_LP": "Nota 18(b), pág. 27: 7.5% en dólares",
+        "ARRENDAMIENTOS_CP": "Nota 20, pág. 29", "ARRENDAMIENTOS_LP": "Nota 20, pág. 29",
+        "TITULARIZACION_CP": "Nota 21, pág. 30: tramos de 6.50%, 7.25% y 7.00%; promedio ponderado por saldo",
+        "TITULARIZACION_LP": "Nota 21, pág. 30",
+        "DOCUMENTOS_POR_PAGAR_CP": "Nota 19(b), pág. 28", "DOCUMENTOS_POR_PAGAR_LP": "Nota 19(b), pág. 28",
+        "BONOS_LP": "Nota 25, pág. 32: series A a F, todas a 7.25%",
+        "CERTIFICADOS_INVERSION_LP": "Nota 24, pág. 31: 7.50% sobre 16 millones y 6.50% sobre 3 millones; promedio ponderado"
+      }
+    },
+    "2022": {
+      "tasa_isr": "30.00",
+      "tasas": {
+        "PRESTAMOS_CP": "7.50", "PRESTAMOS_LP": "7.50",
+        "ARRENDAMIENTOS_CP": "8.50", "ARRENDAMIENTOS_LP": "8.00",
+        "CERTIFICADOS_INVERSION_CP": "7.34", "CERTIFICADOS_INVERSION_LP": "7.34",
+        "TITULARIZACION_CP": "6.90", "TITULARIZACION_LP": "6.90",
+        "DOCUMENTOS_POR_PAGAR_CP": "6.75", "DOCUMENTOS_POR_PAGAR_LP": "6.75",
+        "BONOS_LP": "7.25"
+      },
+      "citas": {}
+    },
+    "2023": {
+      "tasa_isr": "30.00",
+      "tasas": {
+        "PRESTAMOS_CP": "7.50", "PRESTAMOS_LP": "7.50",
+        "ARRENDAMIENTOS_CP": "8.00", "ARRENDAMIENTOS_LP": "8.00",
+        "BONOS_CP": "7.25", "BONOS_LP": "7.25",
+        "CERTIFICADOS_INVERSION_CP": "7.34", "CERTIFICADOS_INVERSION_LP": "7.34",
+        "TITULARIZACION_CP": "6.90", "TITULARIZACION_LP": "6.90",
+        "DOCUMENTOS_POR_PAGAR_CP": "6.75", "DOCUMENTOS_POR_PAGAR_LP": "6.75"
+      },
+      "citas": {}
+    },
+    "2024": {
+      "tasa_isr": "30.00",
+      "tasas": {
+        "PRESTAMOS_CP": "7.50", "PRESTAMOS_LP": "7.50",
+        "ARRENDAMIENTOS_CP": "8.00", "ARRENDAMIENTOS_LP": "8.00",
+        "TITULOS_VALORES_CP": "7.20", "TITULOS_VALORES_LP": "7.20",
+        "OTROS_PASIVOS_FINANCIEROS_CP": "6.75", "OTROS_PASIVOS_FINANCIEROS_LP": "6.75"
+      },
+      "citas": {}
+    },
+    "2025": {
+      "tasa_isr": "30.00",
+      "tasas": {
+        "PRESTAMOS_CP": "7.50", "PRESTAMOS_LP": "7.50",
+        "ARRENDAMIENTOS_CP": "8.00", "ARRENDAMIENTOS_LP": "8.00",
+        "TITULOS_VALORES_CP": "7.20", "TITULOS_VALORES_LP": "7.20",
+        "OTROS_PASIVOS_FINANCIEROS_CP": "6.75", "OTROS_PASIVOS_FINANCIEROS_LP": "6.75"
+      },
+      "citas": {}
+    }
+  }
+}
