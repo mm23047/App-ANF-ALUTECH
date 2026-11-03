@@ -8,6 +8,9 @@ Versiones:
      Decimal y se verifica; cualquier valor ambiguo detiene la migracion.
   3  Cierre de ejercicios (M-05): fiscal_period.fecha_cierre y disparadores
      que impiden modificar los importes de un ejercicio CERRADO.
+  4  Trazabilidad de datos originales (adaptación Alutech): account.grupo_analisis
+     y tablas fuente_importe y dato_complementario, protegidas por el cierre.
+     No modifica ninguna fila existente.
 
 Cada paso es idempotente (comprueba la forma actual antes de cambiarla) y
 todos se ejecutan en una sola transaccion. Antes de migrar una BD con datos se
@@ -24,7 +27,7 @@ import sys
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-VERSION_ACTUAL = 3
+VERSION_ACTUAL = 4
 
 IMPORTE_MAXIMO = Decimal("9999999999999999.99")
 DIGITOS_FLOAT_SEGUROS = 15
@@ -238,10 +241,77 @@ def _paso_3_cierre(con: sqlite3.Connection) -> str:
     return "; ".join(resumen)
 
 
+# DDL de la version 4 (igual al que genera create_all con los modelos).
+_DDL_TRAZABILIDAD = {
+    "fuente_importe": """CREATE TABLE IF NOT EXISTS fuente_importe (
+	id INTEGER NOT NULL,
+	fiscal_period_id INTEGER NOT NULL,
+	account_id INTEGER NOT NULL,
+	tipo VARCHAR(20) NOT NULL,
+	documento VARCHAR(300) NOT NULL,
+	pagina INTEGER,
+	estado_financiero VARCHAR(200) NOT NULL,
+	nombre_original VARCHAR(300) NOT NULL,
+	importe_documento VARCHAR(40) NOT NULL,
+	valor_registrado BIGINT NOT NULL,
+	fecha_carga DATETIME NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT uq_fuente_importe UNIQUE (fiscal_period_id, account_id, tipo),
+	FOREIGN KEY(fiscal_period_id) REFERENCES fiscal_period (id) ON DELETE CASCADE,
+	FOREIGN KEY(account_id) REFERENCES account (id) ON DELETE RESTRICT
+)""",
+    "dato_complementario": """CREATE TABLE IF NOT EXISTS dato_complementario (
+	id INTEGER NOT NULL,
+	fiscal_period_id INTEGER NOT NULL,
+	clave VARCHAR(60) NOT NULL,
+	tipo VARCHAR(20) NOT NULL,
+	valor BIGINT NOT NULL,
+	documento VARCHAR(300) NOT NULL,
+	pagina INTEGER,
+	estado_financiero VARCHAR(200) NOT NULL,
+	nombre_original VARCHAR(300) NOT NULL,
+	importe_documento VARCHAR(40) NOT NULL,
+	fecha_carga DATETIME NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT uq_dato_complementario UNIQUE (fiscal_period_id, clave),
+	FOREIGN KEY(fiscal_period_id) REFERENCES fiscal_period (id) ON DELETE CASCADE
+)""",
+}
+
+
+def _disparadores_cierre(con: sqlite3.Connection, tabla: str) -> None:
+    cerrado_new = "(SELECT estado FROM fiscal_period WHERE id = NEW.fiscal_period_id) = 'CERRADO'"
+    cerrado_old = "(SELECT estado FROM fiscal_period WHERE id = OLD.fiscal_period_id) = 'CERRADO'"
+    for evento, condicion in (
+        ("INSERT", cerrado_new),
+        ("UPDATE", f"{cerrado_new} OR {cerrado_old}"),
+        ("DELETE", cerrado_old),
+    ):
+        con.execute(
+            f"""CREATE TRIGGER IF NOT EXISTS trg_{tabla}_cerrado_{evento.lower()}
+            BEFORE {evento} ON {tabla} WHEN {condicion}
+            BEGIN SELECT RAISE(ABORT, 'EJERCICIO_CERRADO'); END"""
+        )
+
+
+def _paso_4_trazabilidad(con: sqlite3.Connection) -> str:
+    resumen = []
+    if "grupo_analisis" not in _columnas(con, "account"):
+        con.execute("ALTER TABLE account ADD COLUMN grupo_analisis VARCHAR(40)")
+        resumen.append("account.grupo_analisis agregada")
+    for tabla, ddl in _DDL_TRAZABILIDAD.items():
+        existia = _tabla_existe(con, tabla)
+        con.execute(ddl)
+        _disparadores_cierre(con, tabla)
+        resumen.append(f"{tabla} {'ya existía' if existia else 'creada'}")
+    return "; ".join(resumen)
+
+
 PASOS = (
     (1, "Historial: ejercicio, cuenta y lote", _paso_1_historial),
     (2, "Importes en centavos enteros", _paso_2_centavos),
     (3, "Cierre de ejercicios", _paso_3_cierre),
+    (4, "Trazabilidad de datos originales", _paso_4_trazabilidad),
 )
 
 
@@ -322,7 +392,11 @@ def migrar(ruta: Path, *, respaldar: bool = True) -> list[str]:
 # --------------------------------------------------------------------------- verificacion
 
 _TABLAS_MONETARIAS = tuple(_DDL_MONETARIAS)
-_COLUMNAS_NUEVAS = {"change_history": {"fiscal_period_id", "account_id", "lote_id"}, "fiscal_period": {"fecha_cierre"}}
+_COLUMNAS_NUEVAS = {
+    "change_history": {"fiscal_period_id", "account_id", "lote_id"},
+    "fiscal_period": {"fecha_cierre"},
+    "account": {"grupo_analisis"},
+}
 
 
 def comparar_bd(antes: Path, despues: Path) -> tuple[list[str], list[tuple]]:

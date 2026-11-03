@@ -253,7 +253,7 @@ def test_requirements_cubre_las_librerias_importadas():
                 importados |= {a.name.split(".")[0] for a in nodo.names}
             elif isinstance(nodo, ast.ImportFrom) and nodo.module and nodo.level == 0:
                 importados.add(nodo.module.split(".")[0])
-    locales = {"app", "calculations", "components", "database", "modules", "reports", "conftest", "humo_paginas"}
+    locales = {"app", "calculations", "components", "database", "modules", "reports", "scripts", "conftest", "humo_paginas"}
     externos = {m for m in importados - locales if m not in sys.stdlib_module_names}
     assert externos == terceros
     assert {l.partition("==")[0].lower() for l in _requisitos()} == terceros
@@ -379,15 +379,31 @@ def test_bd_de_trabajo_tiene_los_datos_corregidos_y_conserva_la_evidencia():
         "select campo, valor_anterior, valor_nuevo from change_history where tabla_afectada = 'company' "
         "and operacion = 'EDITAR' order by id"
     ).fetchall()
+    # Desde la adaptacion Alutech, 2021 tambien tiene los importes reales (cuentas CB...);
+    # los 19 ceros son los de las cuentas del catalogo estandar.
     ceros = con.execute(
         "select count(*), sum(b.valor = 0) from balance_entry b join fiscal_period p on p.id = b.fiscal_period_id "
-        "where p.anio = 2021"
+        "join account a on a.id = b.account_id where p.anio = 2021 and a.codigo not like 'CB%' and a.codigo not like 'CN%'"
     ).fetchone()
     con.close()
-    assert empresa == [("Alutech", "Alutech SV", "metal", "El Salvador", "USD", 2021)]
-    assert evidencia[-3:] == [("nombre_legal", "alutech", "Alutech"), ("nombre_comercial", "aluetch sv", "Alutech SV"),
-                              ("pais", "El Salvaodr", "El Salvador")]
-    assert ceros == (19, 19)  # los 19 importes 0.00 de 2021 siguen intactos
+    # Revision final Alutech (2026-11-02, autorizada): identificacion de la entidad analizada.
+    assert empresa == [("Alutech, S. A. de C. V. y subsidiarias – División Acero", "Alutech – División Acero", "metal",
+                        "Honduras", "USD", 2021)]
+    # La correccion de la fase 4 sigue en el historial, seguida de la actualizacion final.
+    assert evidencia[-6:-3] == [("nombre_legal", "alutech", "Alutech"), ("nombre_comercial", "aluetch sv", "Alutech SV"),
+                                ("pais", "El Salvaodr", "El Salvador")]
+    assert evidencia[-3:] == [("nombre_legal", "Alutech", "Alutech, S. A. de C. V. y subsidiarias – División Acero"),
+                              ("nombre_comercial", "Alutech SV", "Alutech – División Acero"), ("pais", "El Salvador", "Honduras")]
+    # El usuario autorizo (2026-11-02) borrar solo el 0.00 de «3004 Resultado del ejercicio» 2021; los otros 18 se conservan.
+    assert ceros == (18, 18)
+    con = sqlite3.connect(f"file:{BD_REAL}?mode=ro", uri=True)
+    borrado = con.execute(
+        "select h.valor_anterior, h.valor_nuevo from change_history h join account a on a.id = h.account_id "
+        "where h.tabla_afectada = 'balance_entry' and h.operacion = 'ELIMINAR' and a.codigo = '3004'"
+    ).fetchall()
+    sigue = con.execute("select estado from account where codigo = '3004'").fetchall()
+    con.close()
+    assert borrado == [("0.00", None)] and sigue == [("ACTIVA",)]
 
 
 @pytest.mark.skipif(not BD_REAL.exists(), reason="sin BD de trabajo")
@@ -410,8 +426,8 @@ def test_encabezados_de_reportes_con_los_datos_corregidos(tmp_path, pdf_sin_comp
             pdf = _lineas_pdf(export_balance_pdf(c, p, bs))
     finally:
         connection.dispose_engine()
-    assert hoja.cell(1, 1).value == "Alutech"
-    assert "Alutech" in pdf  # titulo del encabezado
+    assert hoja.cell(1, 1).value == "Alutech, S. A. de C. V. y subsidiarias – División Acero"
+    assert any("Alutech, S. A. de C. V. y subsidiarias" in l for l in pdf)  # titulo del encabezado
     assert not any("alutech" in l or "aluetch" in l or "Salvaodr" in l for l in pdf)
 
 

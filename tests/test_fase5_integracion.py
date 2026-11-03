@@ -1,7 +1,7 @@
 """Fase 5.2: flujo completo sobre una BD temporal.
 
 empresa -> catalogo -> importar 2020-2025 (plantillas de la aplicacion)
--> reportes en pantalla (16 paginas, AppTest en subproceso) -> exportar
+-> reportes en pantalla (25 paginas, AppTest en subproceso) -> exportar
 PDF y Excel -> respaldo -> cambio posterior -> restaurar.
 
 Datos sinteticos generados por la prueba (no son datos de Alutech). Las
@@ -146,7 +146,7 @@ def flujo(tmp_path_factory):
         r["mensajes_importacion"] = exitos
     connection.dispose_engine()
 
-    # 4. Reportes en pantalla: las 16 paginas del app.py real (subproceso).
+    # 4. Reportes en pantalla: las 25 paginas del app.py real (subproceso).
     hash_antes_paginas = sha256_archivo(ruta)
     proceso = subprocess.run([sys.executable, str(PROYECTO / "tests" / "humo_paginas.py"), str(ruta)],
                              capture_output=True, text=True, encoding="utf-8", timeout=600)
@@ -235,7 +235,9 @@ def test_estados_cuadrados_conciliados_y_con_estado_correcto(flujo, anio):
 
 def test_las_16_paginas_se_renderizan_sin_modificar_la_bd(flujo):
     paginas = flujo["paginas"]
-    assert len(paginas) == 16
+    # 16 paginas originales + 8 del analisis 2021-2025 + "Ingreso de datos" del menu simplificado.
+    paginas = {k: v for k, v in paginas.items() if k != "_menu"}
+    assert len(paginas) == 25
     for etiqueta, resultado in paginas.items():
         assert resultado["pagina"] == etiqueta and not resultado["excepciones"], (etiqueta, resultado["excepciones"])
     assert flujo["paginas_sin_cambios"]

@@ -10,6 +10,7 @@ from __future__ import annotations
 import streamlit as st
 from sqlalchemy.orm import Session
 
+from calculations.rubros import GRUPOS, NOMBRE_CLASE
 from components.transacciones import ejecutar_escritura
 from database.enums import CategoriaPrincipal as Cat
 from database.enums import EfectoCuenta as Efecto
@@ -89,6 +90,19 @@ def _clasificacion_inputs(prefijo: str, categoria_default=Cat.ACTIVO, sub_defaul
     return categoria, subcategoria, efecto
 
 
+def _grupo_input(prefijo: str, actual: str | None = None) -> str | None:
+    """Grupo de analisis (calculations/rubros.py): linea normalizada que permite
+    comparar la cuenta con las de otros ejercicios aunque cambie su nombre."""
+    opciones = [None] + list(GRUPOS)
+    return st.selectbox(
+        "Grupo de análisis (comparación entre ejercicios e indicadores)",
+        opciones,
+        index=opciones.index(actual) if actual in opciones else 0,
+        format_func=lambda g: "(sin grupo)" if g is None else f"{GRUPOS[g].nombre} · {NOMBRE_CLASE[GRUPOS[g].clase]}",
+        key=f"{prefijo}_grupo",
+    )
+
+
 def _clasificacion_bloqueada(cuenta) -> None:
     sub = f" / {NOMBRES_SUBCATEGORIA[cuenta.subcategoria]}" if cuenta.subcategoria else ""
     efecto = ""
@@ -123,6 +137,7 @@ def render(session: Session) -> None:
             key="nueva_naturaleza",
         )
         orden = st.number_input("Orden de presentación", min_value=0, value=0, step=10, key="nueva_orden")
+        grupo = _grupo_input("nueva")
 
         if st.button("Crear cuenta"):
             if not codigo.strip() or not nombre.strip():
@@ -139,6 +154,7 @@ def render(session: Session) -> None:
                         naturaleza_saldo=naturaleza,
                         efecto=efecto,
                         orden_presentacion=int(orden),
+                        grupo_analisis=grupo,
                     ),
                     descripcion=f"crear la cuenta {codigo.strip()}",
                 )
@@ -178,6 +194,7 @@ def render(session: Session) -> None:
                 orden_edit = st.number_input(
                     "Orden de presentación", min_value=0, value=cuenta.orden_presentacion, step=10, key=f"edit_orden_{cuenta.id}"
                 )
+                grupo_edit = _grupo_input(f"edit_{cuenta.id}", cuenta.grupo_analisis)
 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -193,6 +210,7 @@ def render(session: Session) -> None:
                                     nombre=nombre_edit.strip(),
                                     naturaleza_saldo=naturaleza_edit,
                                     orden_presentacion=int(orden_edit),
+                                    grupo_analisis=grupo_edit,
                                     **clasificacion,
                                 ),
                                 descripcion=f"actualizar la cuenta {cuenta.codigo}",

@@ -269,6 +269,27 @@ def _render_grupos(session: Session, period: FiscalPeriod, tipo: Tipo, grupos, m
         )
 
 
+# "Ingreso de datos" del menu: una sola opcion que muestra la captura del
+# Balance General o del Estado de Resultados (las mismas funciones de siempre).
+OPCIONES_INGRESO = {"Balance General": "entry_balance", "Estado de Resultados": "entry_income"}
+CLAVE_INGRESO = "ingreso_estado"
+
+
+def pagina_de_ingreso() -> str:
+    """Pagina de captura que muestra "Ingreso de datos" (para descartar
+    confirmaciones pendientes al cambiar entre Balance y Resultados)."""
+    return OPCIONES_INGRESO.get(st.session_state.get(CLAVE_INGRESO) or "Balance General", "entry_balance")
+
+
+def render_ingreso(session: Session, company: Company) -> None:
+    eleccion = st.segmented_control("Estado financiero", list(OPCIONES_INGRESO), default="Balance General",
+                                    required=True, key=CLAVE_INGRESO)
+    if OPCIONES_INGRESO.get(eleccion) == "entry_income":
+        render_income(session, company)
+    else:
+        render_balance(session, company)
+
+
 def render_balance(session: Session, company: Company) -> None:
     st.header("Ingreso de datos — Balance General")
     period = select_fiscal_period(session)

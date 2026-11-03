@@ -32,7 +32,9 @@ from database.models import (
     BalanceEntry,
     ChangeHistory,
     Company,
+    DatoComplementario,
     FiscalPeriod,
+    FuenteImporte,
     IncomeEntry,
     InitialBalance,
     StatementStatus,
@@ -266,6 +268,7 @@ def create_account(
     naturaleza_saldo: NaturalezaSaldo,
     efecto: EfectoCuenta | None = None,
     orden_presentacion: int = 0,
+    grupo_analisis: str | None = None,
 ) -> Account:
     if get_account_by_codigo(session, codigo) is not None:
         raise ValueError(f"Ya existe una cuenta con el codigo {codigo}.")
@@ -280,6 +283,7 @@ def create_account(
         naturaleza_saldo=naturaleza_saldo,
         estado=EstadoCuenta.ACTIVA,
         orden_presentacion=orden_presentacion,
+        grupo_analisis=grupo_analisis,
     )
     session.add(account)
     session.flush()
@@ -482,6 +486,116 @@ def set_statement_status(
         log_change(session, "statement_status", status.id, f"estado_{tipo.value}", status.estado.value, estado.value,
                    "EDITAR", fiscal_period_id=fiscal_period_id)
         status.estado = estado
+
+
+# ---------------------------------------------------------------------------
+# Trazabilidad de datos originales (adaptacion Alutech, migracion v4)
+# ---------------------------------------------------------------------------
+
+def list_fuentes(session: Session, fiscal_period_id: int | None = None) -> list[FuenteImporte]:
+    stmt = select(FuenteImporte).join(Account, FuenteImporte.account_id == Account.id)
+    if fiscal_period_id is not None:
+        stmt = stmt.where(FuenteImporte.fiscal_period_id == fiscal_period_id)
+    stmt = stmt.order_by(FuenteImporte.fiscal_period_id, FuenteImporte.tipo, Account.orden_presentacion, Account.codigo)
+    return list(session.execute(stmt).scalars())
+
+
+def get_fuente(session: Session, *, fiscal_period_id: int, account_id: int, tipo: TipoEstadoFinanciero) -> FuenteImporte | None:
+    return session.execute(
+        select(FuenteImporte).where(
+            FuenteImporte.fiscal_period_id == fiscal_period_id,
+            FuenteImporte.account_id == account_id,
+            FuenteImporte.tipo == tipo,
+        )
+    ).scalars().first()
+
+
+def registrar_fuente(
+    session: Session,
+    *,
+    fiscal_period_id: int,
+    account_id: int,
+    tipo: TipoEstadoFinanciero,
+    documento: str,
+    pagina: int | None,
+    estado_financiero: str,
+    nombre_original: str,
+    importe_documento: str,
+    valor_registrado,
+) -> str | None:
+    """Registra la fuente de un importe. Nunca sobrescribe una fuente distinta:
+    si ya existe con otros datos lanza ValueError (la correccion debe ser
+    explicita). Devuelve "CREAR" o None si ya estaba registrada igual."""
+    valor = parse_importe(valor_registrado)
+    _verificar_ejercicio_abierto(session, fiscal_period_id)
+    nuevos = dict(documento=documento, pagina=pagina, estado_financiero=estado_financiero,
+                  nombre_original=nombre_original, importe_documento=importe_documento, valor_registrado=valor)
+    existente = get_fuente(session, fiscal_period_id=fiscal_period_id, account_id=account_id, tipo=tipo)
+    if existente is not None:
+        distintos = [c for c, v in nuevos.items() if getattr(existente, c) != v]
+        if distintos:
+            raise ValueError(
+                f"La fuente del importe (ejercicio {fiscal_period_id}, cuenta {account_id}) ya está registrada con otros "
+                f"datos ({', '.join(distintos)}); no se sobrescribe."
+            )
+        return None
+    fuente = FuenteImporte(fiscal_period_id=fiscal_period_id, account_id=account_id, tipo=tipo, **nuevos)
+    session.add(fuente)
+    session.flush()
+    log_change(session, "fuente_importe", fuente.id, "fuente", None,
+               f"{documento} p.{pagina}: {nombre_original} = {importe_documento}"[:200], "CREAR",
+               fiscal_period_id=fiscal_period_id, account_id=account_id)
+    return "CREAR"
+
+
+def list_datos_complementarios(session: Session, fiscal_period_id: int | None = None) -> list[DatoComplementario]:
+    stmt = select(DatoComplementario)
+    if fiscal_period_id is not None:
+        stmt = stmt.where(DatoComplementario.fiscal_period_id == fiscal_period_id)
+    stmt = stmt.order_by(DatoComplementario.fiscal_period_id, DatoComplementario.tipo, DatoComplementario.id)
+    return list(session.execute(stmt).scalars())
+
+
+def registrar_dato_complementario(
+    session: Session,
+    *,
+    fiscal_period_id: int,
+    clave: str,
+    tipo: str,
+    valor,
+    documento: str,
+    pagina: int | None,
+    estado_financiero: str,
+    nombre_original: str,
+    importe_documento: str,
+) -> str | None:
+    """Registra un total impreso o un dato complementario original. Igual que
+    registrar_fuente: nunca sobrescribe un dato distinto."""
+    if tipo not in ("TOTAL_DECLARADO", "COMPLEMENTARIO"):
+        raise ValueError(f"Tipo de dato complementario no válido: {tipo}.")
+    valor = parse_importe(valor)
+    _verificar_ejercicio_abierto(session, fiscal_period_id)
+    nuevos = dict(tipo=tipo, valor=valor, documento=documento, pagina=pagina, estado_financiero=estado_financiero,
+                  nombre_original=nombre_original, importe_documento=importe_documento)
+    existente = session.execute(
+        select(DatoComplementario).where(
+            DatoComplementario.fiscal_period_id == fiscal_period_id, DatoComplementario.clave == clave
+        )
+    ).scalars().first()
+    if existente is not None:
+        distintos = [c for c, v in nuevos.items() if getattr(existente, c) != v]
+        if distintos:
+            raise ValueError(
+                f"El dato '{clave}' del ejercicio {fiscal_period_id} ya está registrado con otros datos "
+                f"({', '.join(distintos)}); no se sobrescribe."
+            )
+        return None
+    dato = DatoComplementario(fiscal_period_id=fiscal_period_id, clave=clave, **nuevos)
+    session.add(dato)
+    session.flush()
+    log_change(session, "dato_complementario", dato.id, clave, None, str(valor), "CREAR",
+               fiscal_period_id=fiscal_period_id)
+    return "CREAR"
 
 
 # ---------------------------------------------------------------------------

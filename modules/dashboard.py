@@ -50,6 +50,60 @@ def _estado_roe(dp) -> tuple[str, str, str | None]:
     return "ROE (DuPont) — definitivo", format_percent(dp.roe_dupont_pct), None
 
 
+def _analisis_multianual(session: Session, company: Company) -> None:
+    """Capital de trabajo, liquidez, resultados e indicadores de todos los
+    ejercicios. Los valores salen de calculations/indicadores.py, igual que
+    en los reportes y las exportaciones."""
+    from calculations import indicadores as ind
+    from calculations.rubros import datos_todos
+
+    lista = [d for d in datos_todos(session) if d.bs.tiene_datos and d.inc.tiene_datos]
+    if not lista:
+        return
+    ultimo = lista[-1]
+    st.markdown(f"### Capital de trabajo, liquidez y rentabilidad — {ultimo.anio}")
+    valor = lambda clave: ind.formatear(ind.POR_CLAVE[clave].unidad, ind.calcular(ultimo, clave).valor)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Activo corriente", format_money(ultimo.bs.activo_corriente.subtotal, company.moneda))
+    c2.metric("Pasivo corriente", format_money(ultimo.bs.pasivo_corriente.subtotal, company.moneda))
+    c3.metric("Capital de trabajo neto", valor("ctn"))
+    c4.metric("Razón corriente / prueba ácida", f"{valor('razon_corriente')} / {valor('prueba_acida')}")
+    c5, c6, c7, c8 = st.columns(4)
+    c5.metric("Costo de ventas", format_money(ultimo.inc.costo_ventas.subtotal, company.moneda))
+    c6.metric("Margen neto", valor("margen_neto"))
+    c7.metric("Endeudamiento", valor("endeudamiento"))
+    c8.metric("ROE (al cierre)", valor("roe"))
+
+    anios = [d.anio for d in lista]
+    a_float = lambda v: float(v) if v is not None else None
+    fig = go.Figure()
+    for etiqueta, obtener in (("Activo corriente", lambda d: d.bs.activo_corriente.subtotal),
+                              ("Pasivo corriente", lambda d: d.bs.pasivo_corriente.subtotal),
+                              ("Capital de trabajo neto", lambda d: ind.calcular(d, "ctn").valor)):
+        fig.add_trace(go.Bar(x=anios, y=[a_float(obtener(d)) for d in lista], name=etiqueta))
+    fig.update_layout(title="Capital de trabajo por ejercicio", barmode="group", xaxis=dict(dtick=1),
+                      yaxis_title=f"Importe ({company.moneda})")
+    st.plotly_chart(fig, width="stretch", key="dash_ctn")
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        fig = go.Figure()
+        for clave in ("razon_corriente", "prueba_acida", "deuda_capital"):
+            fig.add_trace(go.Scatter(x=anios, y=[a_float(ind.calcular(d, clave).valor) for d in lista], mode="lines+markers",
+                                     name=ind.POR_CLAVE[clave].nombre))
+        fig.update_layout(title="Liquidez y apalancamiento (veces)", xaxis=dict(dtick=1))
+        st.plotly_chart(fig, width="stretch", key="dash_liquidez")
+    with col_b:
+        fig = go.Figure()
+        for clave in ("margen_bruto", "margen_operativo", "margen_neto", "roa", "roe", "endeudamiento"):
+            fig.add_trace(go.Scatter(x=anios, y=[a_float(ind.calcular(d, clave).valor) for d in lista], mode="lines+markers",
+                                     name=ind.POR_CLAVE[clave].nombre))
+        fig.update_layout(title="Rentabilidad y endeudamiento (%)", xaxis=dict(dtick=1))
+        st.plotly_chart(fig, width="stretch", key="dash_rentabilidad")
+    st.caption("Indicadores con saldos al cierre (criterio del trabajo ANF). Detalle, fórmulas e interpretación en "
+               "«Reportes › Indicadores financieros».")
+
+
 def render(session: Session, company: Company) -> None:
     st.header("Dashboard")
     st.subheader(md(company.nombre_legal))
@@ -93,6 +147,8 @@ def render(session: Session, company: Company) -> None:
             f"Estado Balance General: {etiqueta(estado_balance)} ({validacion_eq}; {estado_bs}) · "
             f"Estado de Resultados: {etiqueta(estado_resultados)} ({estado_inc})"
         )
+
+    _analisis_multianual(session, company)
 
     st.markdown("### Evolución entre ejercicios")
     anios_disponibles = [p.anio for p in periodos]

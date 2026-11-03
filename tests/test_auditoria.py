@@ -493,7 +493,17 @@ def test_E03_captura_formulario_float(db):
 
 def test_F01_depreciacion_positiva_no_resta(db):
     """La depreciacion acumulada (cuenta correctora) capturada en positivo
-    debe restar del activo o ser rechazada/advertida."""
+    debe restar del activo o ser rechazada/advertida.
+
+    Revision final (2026-11-02): la convencion aprobada por el usuario prohibe
+    invertir signos (README 4.2, calculations/validation.py). La version
+    anterior de esta prueba exigia que el total cambiara a 700 invirtiendo el
+    signo en silencio, lo que contradice esa convencion; se actualiza para
+    exigir la alternativa que la propia prueba admite ("advertida"): el importe
+    no se altera, se advierte y el reporte deja de ser DEFINITIVO. La captura
+    con el signo correcto (-300) resta (ver F02 y la ultima asercion)."""
+    from calculations.banderas import SIGNO_ATIPICO, banderas_balance, resumen
+
     with session_scope() as s:
         p, _ = get_or_create_fiscal_period(s, 2021)
         s.flush()
@@ -501,8 +511,17 @@ def test_F01_depreciacion_positiva_no_resta(db):
         _be(s, p.id, "1102", "300")
         s.flush()
         bs = compute_balance_sheet(s, p.id)
-    print("activo no corriente con depreciacion +300:", bs.activo_no_corriente.subtotal)
-    assert bs.activo_no_corriente.subtotal == Decimal("700.00")
+        print("activo no corriente con depreciacion +300:", bs.activo_no_corriente.subtotal)
+        # No se invierte en silencio: el total refleja lo capturado...
+        assert bs.activo_no_corriente.subtotal == Decimal("1300.00")
+        # ...pero se advierte y el reporte no es DEFINITIVO.
+        assert any("1102" in a and "correctora" in a for a in bs.advertencias_signo)
+        assert SIGNO_ATIPICO in resumen(banderas_balance(bs))
+        # Con el signo de la convencion la depreciacion resta.
+        _be(s, p.id, "1102", "-300")
+        s.flush()
+        bs = compute_balance_sheet(s, p.id)
+        assert bs.activo_no_corriente.subtotal == Decimal("700.00") and not bs.advertencias_signo
 
 
 def test_F02_depreciacion_negativa_resta(db):
@@ -516,16 +535,33 @@ def test_F02_depreciacion_negativa_resta(db):
 
 
 def test_F03_costo_negativo_no_infla_utilidad(db):
-    """Costo de ventas capturado como (600) negativo no debe sumar a la utilidad."""
+    """Costo de ventas capturado como (600) negativo no debe sumar a la utilidad.
+
+    Revision final (2026-11-02): con la convencion aprobada (los signos nunca se
+    invierten) un costo negativo no se corrige en silencio; se advierte, exige
+    confirmacion al capturarlo y el Estado de Resultados queda marcado SIGNO
+    ATIPICO, de modo que la utilidad inflada nunca se presenta como DEFINITIVA.
+    La version anterior exigia invertir el signo; se actualiza para comprobar
+    esa proteccion y que la captura correcta (+600) da la utilidad de 400."""
+    from calculations.banderas import DEFINITIVO, SIGNO_ATIPICO, banderas_resultados, resumen
+
     with session_scope() as s:
         p, _ = get_or_create_fiscal_period(s, 2021)
         s.flush()
         _ie(s, p.id, "4001", "1000")
         _ie(s, p.id, "5001", "-600")
         s.flush()
-        ub = compute_income_statement(s, p.id).utilidad_bruta
-    print("utilidad bruta con costo -600:", ub)
-    assert ub == Decimal("400.00")
+        inc = compute_income_statement(s, p.id)
+        ub = inc.utilidad_bruta
+        print("utilidad bruta con costo -600:", ub)
+        assert ub == Decimal("1600.00")  # lo capturado, sin inversion silenciosa
+        assert any("5001" in a and "negativo" in a for a in inc.advertencias_signo)
+        estado = resumen(banderas_resultados(inc))
+        assert SIGNO_ATIPICO in estado and estado != DEFINITIVO
+        _ie(s, p.id, "5001", "600")
+        s.flush()
+        inc = compute_income_statement(s, p.id)
+        assert inc.utilidad_bruta == Decimal("400.00") and not inc.advertencias_signo
 
 
 def test_F04_estado_resultados_completo(db):

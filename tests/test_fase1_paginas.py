@@ -91,3 +91,45 @@ def test_paginas_verticales_muestran_importes_y_porcentajes(resultado_humo, etiq
     assert {f["Código"]: (f["Valor"], f["Participación %"]) for f in tablas[0] if f["Código"]} == cuentas
     por_concepto = {f["Concepto"]: (f["Valor"], f["Participación %"]) for f in tablas[0] if not f["Código"]}
     assert subtotales.items() <= por_concepto.items()
+
+
+# ------------------------------------------------------------ menu simplificado
+MENU_ESPERADO = ["Ingreso de datos", "Modificación de datos", "Balance General", "Estado de Resultados",
+                 "Análisis Vertical del Balance General", "Análisis Vertical del Estado de Resultados",
+                 "Rentabilidad mediante fórmula DuPont"]
+DESTINO = {"Ingreso de datos": ("entry_data", "Ingreso de datos — Balance General"),
+           "Modificación de datos": ("edit_data", "Modificación de datos"),
+           "Balance General": ("report_balance", "Reporte — Balance General"),
+           "Estado de Resultados": ("report_income", "Reporte — Estado de Resultados"),
+           "Análisis Vertical del Balance General": ("report_vertical_balance", "Reporte — Análisis Vertical del Balance General"),
+           "Análisis Vertical del Estado de Resultados": ("report_vertical_income",
+                                                         "Reporte — Análisis Vertical del Estado de Resultados"),
+           "Rentabilidad mediante fórmula DuPont": ("report_dupont", "Reporte — Análisis de Rentabilidad (Modelo DuPont)")}
+
+
+def test_menu_solo_muestra_las_opciones_pedidas(resultado_humo):
+    menu = resultado_humo[0]["_menu"]
+    assert menu["opciones"] == MENU_ESPERADO
+    assert menu["expansores"] == ["Generación de reportes"]
+    assert menu["inicial"] == "entry_data"
+
+
+@pytest.mark.parametrize("opcion", MENU_ESPERADO)
+def test_cada_opcion_del_menu_abre_su_pagina_y_queda_resaltada(resultado_humo, opcion):
+    clic = resultado_humo[0]["_menu"]["clics"][opcion]
+    clave, encabezado = DESTINO[opcion]
+    assert clic["pagina"] == clave
+    assert clic["encabezados"][0] == encabezado
+    assert clic["activos"] == [opcion]  # solo la pagina abierta se resalta
+    assert not clic["excepciones"]
+
+
+def test_paginas_ocultas_siguen_en_el_catalogo_y_enrutadas():
+    from components.navigation import MENU_PRINCIPAL, MENU_REPORTES, PAGINAS_OCULTAS
+
+    app = (Path(__file__).resolve().parent.parent / "app.py").read_text(encoding="utf-8")
+    ocultas = {c for _, c in PAGINAS_OCULTAS}
+    assert len(ocultas) == 18 and len(PAGINAS) == len(ocultas) + len(MENU_PRINCIPAL) + len(MENU_REPORTES)
+    for clave in ocultas - {"report_horizontal", "report_vertical_comp", "report_indicadores", "report_wacc",
+                            "report_fuentes_usos", "report_integral", "validacion_anf"}:
+        assert f'"{clave}"' in app, clave  # enrutada en app.py (las de analisis, via PAGINAS_ANALISIS)

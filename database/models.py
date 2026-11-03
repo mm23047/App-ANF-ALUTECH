@@ -154,6 +154,10 @@ class Account(Base):
         _enum_col(EstadoCuenta, 10), default=EstadoCuenta.ACTIVA
     )
     orden_presentacion: Mapped[int] = mapped_column(default=0)
+    # Grupo de analisis normalizado (calculations/rubros.py). Permite comparar
+    # cuentas cuya denominacion cambia entre ejercicios sin depender del texto
+    # del nombre. No altera los estados: solo los analisis por grupo/rubro.
+    grupo_analisis: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     balance_entries: Mapped[list["BalanceEntry"]] = relationship(
         back_populates="account"
@@ -268,6 +272,58 @@ class StatementStatus(Base):
     )
 
     fiscal_period: Mapped[FiscalPeriod] = relationship(back_populates="statement_statuses")
+
+
+class FuenteImporte(Base):
+    """Trazabilidad de un importe cargado desde un documento original:
+    documento, pagina, estado financiero y denominacion tal como aparece
+    impresa. `importe_documento` es la cifra impresa (texto, con sus
+    parentesis) y `valor_registrado` el importe que se guardo segun la
+    convencion de signos; si el importe vigente difiere de este, el control
+    de trazabilidad lo senala (nunca se corrige automaticamente)."""
+
+    __tablename__ = "fuente_importe"
+    __table_args__ = (
+        UniqueConstraint("fiscal_period_id", "account_id", "tipo", name="uq_fuente_importe"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fiscal_period_id: Mapped[int] = mapped_column(ForeignKey("fiscal_period.id", ondelete="CASCADE"))
+    account_id: Mapped[int] = mapped_column(ForeignKey("account.id", ondelete="RESTRICT"))
+    tipo: Mapped[TipoEstadoFinanciero] = mapped_column(_enum_col(TipoEstadoFinanciero, 20))
+    documento: Mapped[str] = mapped_column(String(300))
+    pagina: Mapped[int | None] = mapped_column(nullable=True)
+    estado_financiero: Mapped[str] = mapped_column(String(200))
+    nombre_original: Mapped[str] = mapped_column(String(300))
+    importe_documento: Mapped[str] = mapped_column(String(40))
+    valor_registrado: Mapped[Decimal] = mapped_column(MONEY)
+    fecha_carga: Mapped[datetime.datetime] = mapped_column(default=_utcnow)
+
+    account: Mapped[Account] = relationship()
+
+
+class DatoComplementario(Base):
+    """Dato original de un documento que no es el importe de una cuenta:
+    totales y subtotales impresos (para controlar la carga) y datos de otros
+    estados (utilidad atribuible a la controladora, depreciacion del flujo de
+    efectivo). `tipo` es TOTAL_DECLARADO o COMPLEMENTARIO."""
+
+    __tablename__ = "dato_complementario"
+    __table_args__ = (
+        UniqueConstraint("fiscal_period_id", "clave", name="uq_dato_complementario"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fiscal_period_id: Mapped[int] = mapped_column(ForeignKey("fiscal_period.id", ondelete="CASCADE"))
+    clave: Mapped[str] = mapped_column(String(60))
+    tipo: Mapped[str] = mapped_column(String(20))
+    valor: Mapped[Decimal] = mapped_column(MONEY)
+    documento: Mapped[str] = mapped_column(String(300))
+    pagina: Mapped[int | None] = mapped_column(nullable=True)
+    estado_financiero: Mapped[str] = mapped_column(String(200))
+    nombre_original: Mapped[str] = mapped_column(String(300))
+    importe_documento: Mapped[str] = mapped_column(String(40))
+    fecha_carga: Mapped[datetime.datetime] = mapped_column(default=_utcnow)
 
 
 class ChangeHistory(Base):

@@ -105,7 +105,8 @@ def test_bd_migrada_tiene_el_mismo_esquema_que_una_nueva(tmp_path):
     columnas_migrada, triggers_migrada = _esquema(bd)
     columnas_nueva, triggers_nueva = _esquema(nueva)
     assert columnas_migrada == columnas_nueva
-    assert triggers_migrada == triggers_nueva and len(triggers_nueva) == 13
+    # 13 de la v3 + 6 de la v4 (cierre de fuente_importe y dato_complementario).
+    assert triggers_migrada == triggers_nueva and len(triggers_nueva) == 19
 
 
 @pytest.mark.parametrize("valor_ambiguo", [0.30000000000000004, 2.675, 12345678901234.56, "abc"])

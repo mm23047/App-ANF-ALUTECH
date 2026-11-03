@@ -22,6 +22,7 @@ connection.DB_PATH = RUTA  # antes de importar app.py: nunca la BD real
 
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
+from components.navigation import CLAVE_PAGINA, PAGINAS  # noqa: E402
 from database.backup_utils import sha256_archivo  # noqa: E402
 
 CAPTURA = "Ingreso de datos › Balance General"
@@ -37,12 +38,19 @@ def importes():
     return dict(filas)
 
 
+def ir(at, pagina):
+    """Navega a la pagina con esa etiqueta (por su clave: el menu ya no es un radio)."""
+    clave = next(c for e, c in PAGINAS if e == pagina)
+    at.session_state[CLAVE_PAGINA] = clave
+    at.run()
+    assert at.session_state[CLAVE_PAGINA] == clave, at.session_state[CLAVE_PAGINA]
+    return at
+
+
 def abrir(pagina):
     at = AppTest.from_file(str(PROYECTO / "app.py"), default_timeout=60)
     at.run()
-    at.sidebar.radio[0].set_value(pagina).run()
-    assert at.sidebar.radio[0].value == pagina, at.sidebar.radio[0].value
-    return at
+    return ir(at, pagina)
 
 
 def boton(at, etiqueta):
@@ -111,8 +119,8 @@ cerrar(at)
 
 # ---- D08: navegar a otra pagina y volver
 at = proponer_captura(abrir(CAPTURA), {"1001": 100.0})
-at.sidebar.radio[0].set_value("Dashboard").run()
-at.sidebar.radio[0].set_value(CAPTURA).run()
+ir(at, "Dashboard")
+ir(at, CAPTURA)
 r["d08_navegar_sin_boton_confirmar"] = not hay_boton(at, "Confirmar y guardar")
 r["d08_navegar_hash_igual"] = sha256_archivo(RUTA) == hash0
 cerrar(at)
