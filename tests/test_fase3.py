@@ -3,7 +3,7 @@
 LibreOffice no esta instalado en este equipo, asi que las formulas de
 control de los Excel se verifican con un evaluador propio (_evaluar) de la
 gramatica que genera reports/excel_export.py: =SUM(Cn:Cm), =±Cn±Cm, =0,
-=Cn-Dn y =Cn/$C$b*100.
+=Cn-Dn y =Cn/$C$b*100 (con signo menos en las lineas que restan).
 """
 import io
 import re
@@ -16,7 +16,6 @@ from reportlab import rl_config
 
 from calculations.balance_sheet import compute_balance_sheet
 from calculations.banderas import (
-    APROXIMADO,
     DEFINITIVO,
     INCOMPLETO,
     NO_INTERPRETABLE,
@@ -85,8 +84,8 @@ def _evaluar(ws, formula: str) -> Decimal:
     cuerpo = formula[1:]
     if m := re.fullmatch(r"SUM\(C(\d+):C(\d+)\)", cuerpo):
         return sum((_numero(ws, f"C{f}") for f in range(int(m[1]), int(m[2]) + 1)), Decimal(0))
-    if m := re.fullmatch(r"C(\d+)/\$C\$(\d+)\*100", cuerpo):
-        return _numero(ws, f"C{m[1]}") / _numero(ws, f"C{m[2]}") * 100
+    if m := re.fullmatch(r"(-?)C(\d+)/\$C\$(\d+)\*100", cuerpo):
+        return (-1 if m[1] else 1) * _numero(ws, f"C{m[2]}") / _numero(ws, f"C{m[3]}") * 100
     if m := re.fullmatch(r"C(\d+)-D(\d+)", cuerpo):
         return _numero(ws, f"C{m[1]}") - _evaluar(ws, ws[f"D{m[2]}"].value)
     if cuerpo == "0":
@@ -211,17 +210,17 @@ def test_vertical_resultados_incluye_ingresos_utilidades_y_efecto(bd):
         r = compute_vertical_income(s, p.id)
     sub = {l.etiqueta: (l.valor, l.porcentaje, l.efecto) for l in r.subtotales}
     assert sub["Ingresos netos"] == (Decimal("10000.00"), Decimal("100.00"), "")
-    assert sub["Costo de ventas"] == (Decimal("6000.00"), Decimal("60.00"), "resta")
+    assert sub["Costo de ventas"] == (Decimal("6000.00"), Decimal("-60.00"), "resta")  # importe positivo, % negativo
     assert sub["UTILIDAD BRUTA"][:2] == (Decimal("4000.00"), Decimal("40.00"))
-    assert sub["Gastos operativos netos"] == (Decimal("1700.00"), Decimal("17.00"), "resta")
+    assert sub["Gastos operativos netos"] == (Decimal("1700.00"), Decimal("-17.00"), "resta")
     assert sub["UTILIDAD OPERATIVA"][:2] == (Decimal("2300.00"), Decimal("23.00"))
     assert sub["Resultado financiero"][:2] == (Decimal("-300.00"), Decimal("-3.00"))
     assert sub["UTILIDAD ANTES DE IMPUESTOS"][:2] == (Decimal("2020.00"), Decimal("20.20"))
-    assert sub["Impuesto sobre la renta"] == (Decimal("605.00"), Decimal("6.05"), "resta")
+    assert sub["Impuesto sobre la renta"] == (Decimal("605.00"), Decimal("-6.05"), "resta")
     assert sub["UTILIDAD NETA"][:2] == (Decimal("1415.00"), Decimal("14.15"))
-    # Margenes coherentes: UB% - gastos% = UO%; UO% + RF% + OR% = UAI%; UAI% - ISR% = UN%.
-    assert sub["UTILIDAD BRUTA"][1] - sub["Gastos operativos netos"][1] == sub["UTILIDAD OPERATIVA"][1]
-    assert sub["UTILIDAD ANTES DE IMPUESTOS"][1] - sub["Impuesto sobre la renta"][1] == sub["UTILIDAD NETA"][1]
+    # Margenes coherentes con los signos del trabajo: UB% + gastos% = UO%; UAI% + ISR% = UN%.
+    assert sub["UTILIDAD BRUTA"][1] + sub["Gastos operativos netos"][1] == sub["UTILIDAD OPERATIVA"][1]
+    assert sub["UTILIDAD ANTES DE IMPUESTOS"][1] + sub["Impuesto sobre la renta"][1] == sub["UTILIDAD NETA"][1]
 
 
 def test_vertical_grupos_vacios_sin_datos_y_base_cero(bd):
@@ -266,18 +265,18 @@ def test_excel_vertical_formato_anterior_base_numerica(bd):
 
 # ------------------------------------------------------------------ DuPont Excel / PDF
 
-def test_excel_dupont_aproximado_y_no_interpretable(bd):
+def test_excel_dupont_primer_ejercicio_y_no_interpretable(bd):
     with session_scope() as s:
-        aprox = compute_dupont(s, _capturar(s, 2021, {"1001": "1000", "2001": "400", "3001": "600"}, {"4001": "1000", "8001": "900"}))
-        ws = load_workbook(io.BytesIO(export_dupont_excel(get_company(s), get_fiscal_period(s, 2021), aprox))).active
+        primero = compute_dupont(s, _capturar(s, 2021, {"1001": "1000", "2001": "400", "3001": "600"}, {"4001": "1000", "8001": "900"}))
+        ws = load_workbook(io.BytesIO(export_dupont_excel(get_company(s), get_fiscal_period(s, 2021), primero))).active
         malo = compute_dupont(s, _capturar(s, 2025, {"1001": "1000", "2001": "1200", "3003": "-200"}, {"4001": "1000", "8001": "1100"}))
         ws2 = load_workbook(io.BytesIO(export_dupont_excel(get_company(s), get_fiscal_period(s, 2025), malo))).active
     textos = [c.value for c in ws["A"] if isinstance(c.value, str)]
-    assert any(t.startswith("Estado del reporte:") and APROXIMADO in t for t in textos)
-    assert any(t.startswith(f"{APROXIMADO}:") and "no existe el ejercicio 2020" in t for t in textos)
-    assert not any(t.startswith(f"{APROXIMADO}: {APROXIMADO}") for t in textos)  # sin prefijo duplicado
+    assert any(t.startswith("Estado del reporte:") for t in textos)
+    assert not any("APROXIMADO" in t or "promedio" in t.split(":")[0].lower() for t in textos)
+    assert "Enfoque total" in textos and "Enfoque de la controladora" in textos
     valores = {ws2.cell(r, 1).value: ws2.cell(r, 2).value for r in range(1, ws2.max_row + 1)}
-    assert valores["ROE DuPont (%)"] == "NO INTERPRETABLE" and valores["ROE directo (%)"] == "NO INTERPRETABLE"
+    assert valores["RSP / ROE DuPont (%)"] == "NO INTERPRETABLE" and valores["ROE directo (comprobación) (%)"] == "NO INTERPRETABLE"
     assert any(isinstance(v, str) and v.startswith(f"Estado del reporte: {NO_INTERPRETABLE}") for v in valores)
 
 
@@ -329,7 +328,7 @@ def test_pdf_vertical_y_dupont(bd, pdf_sin_compresion):
         dupont_malo = _pdf_texto(export_dupont_pdf(get_company(s), get_fiscal_period(s, 2025), malo))
     for texto in ("UTILIDAD NETA", "14.15%", "UTILIDAD BRUTA", "40.00%", "resta"):
         assert texto in vertical
-    assert APROXIMADO in dupont and "Controles de los datos" in dupont
+    assert "APROXIMADO" not in dupont and "Controles de los datos" in dupont and "Enfoque total" in dupont
     assert NO_INTERPRETABLE in dupont_malo and "%PDF" in dupont_malo[:5]
 
 
@@ -350,13 +349,13 @@ def _metricas_dashboard(monkeypatch):
     return metricas, avisos
 
 
-def test_dashboard_roe_aproximado_indica_la_causa(bd, monkeypatch):
+def test_dashboard_primer_ejercicio_no_es_aproximado(bd, monkeypatch):
     with session_scope() as s:
         _capturar(s, 2021, {"1001": "1000", "2001": "400", "3001": "500", "3004": "100"},
                   {"4001": "1000", "5001": "900", "6001": "0", "8001": "0"})
     metricas, avisos = _metricas_dashboard(monkeypatch)
-    assert metricas["ROE (DuPont) — APROXIMADO"] == "16.67%"  # 100 / 600 (promedio = saldo final)
-    assert any("no existe el ejercicio 2020" in a for a in avisos)
+    assert metricas["ROE (DuPont) — definitivo"] == "16.67%"  # 100 / 600, saldos al cierre
+    assert metricas["ROE (al cierre)"] == "16.67%" and not avisos
     assert metricas["Total Activos"] == "USD 1,000.00"  # balance completo y conciliado: sin etiqueta
 
 

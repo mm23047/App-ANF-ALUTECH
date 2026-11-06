@@ -446,8 +446,8 @@ from openpyxl import load_workbook  # noqa: E402
 
 @pytest.fixture()
 def libros_excel(bd):
-    """Reportes Excel de 2021 (primer ejercicio: DuPont APROXIMADO con fuente
-    larga) con las mismas banderas que pasan las paginas."""
+    """Reportes Excel de 2021 con las mismas banderas que pasan las paginas, y un
+    DuPont descuadrado de 2022 para comprobar los textos largos de las banderas."""
     from calculations.balance_sheet import compute_balance_sheet
     from calculations.banderas import banderas_balance, banderas_resultados
     from calculations.controls import conciliar_resultado
@@ -479,6 +479,11 @@ def libros_excel(bd):
                 vb.base_total_activo, "Total Activo"),
             "dupont": export_dupont_excel(c, p, compute_dupont(s, p)),
         }
+        p22, _ = get_or_create_fiscal_period(s, 2022)
+        for codigo, valor, tipo in (("1101", "900", Tipo.BALANCE), ("2001", "100", Tipo.BALANCE), ("3001", "500", Tipo.BALANCE),
+                                    ("4001", "1000", Tipo.RESULTADOS), ("8001", "50", Tipo.RESULTADOS)):
+            upsert_entry(s, fiscal_period_id=p22.id, account_id=_id(s, codigo), valor=valor, tipo=tipo)
+        datos["dupont_con_banderas"] = export_dupont_excel(c, p22, compute_dupont(s, p22))
     return {k: load_workbook(io.BytesIO(v)).active for k, v in datos.items()}
 
 
@@ -513,20 +518,21 @@ def test_o3_etiqueta_de_la_diferencia_cabe_en_la_columna_b(libros_excel):
 
 def test_o3_textos_largos_se_ajustan_sin_perder_informacion(libros_excel):
     ws = libros_excel["dupont"]
-    fuente = next(c for c in ws["A"] if c.value == "Fuente de saldos iniciales:")
+    fuente = next(c for c in ws["A"] if c.value == "Base de saldos:")
     valor = ws.cell(fuente.row, 2)
-    assert valor.value.startswith("APROXIMADO") and len(valor.value) > 100  # texto completo, sin recortes
+    assert valor.value.startswith("Saldos al cierre") and len(valor.value) > 100  # texto completo, sin recortes
     assert f"B{fuente.row}:C{fuente.row}" in {str(r) for r in ws.merged_cells.ranges}
     assert valor.alignment.wrap_text and ws.row_dimensions[fuente.row].height >= 30
     assert fuente.alignment.vertical == "top"  # la etiqueta queda junto al inicio del texto
-    banderas = [c for c in ws["A"] if isinstance(c.value, str) and c.value.startswith("APROXIMADO:")]
+    ws = libros_excel["dupont_con_banderas"]
+    banderas = [c for c in ws["A"] if isinstance(c.value, str) and c.value.startswith("DESCUADRADO:")]
     assert banderas and all(f"A{b.row}:C{b.row}" in {str(r) for r in ws.merged_cells.ranges} for b in banderas)
     assert all(b.alignment.wrap_text for b in banderas)
 
 
 def test_o3_detalle_de_controles_en_varias_lineas_y_alineado(libros_excel):
     ws = libros_excel["dupont"]
-    fila = next(c.row for c in ws["A"] if c.value == "Saldos iniciales reales (no aproximados)")
+    fila = next(c.row for c in ws["A"] if c.value == "Resultado del ejercicio conciliado con la utilidad neta")
     detalle = ws.cell(fila, 3)
     assert detalle.alignment.wrap_text and len(detalle.value) > 60
     assert ws.row_dimensions[fila].height >= 30
@@ -579,7 +585,9 @@ def test_o5_tabla_de_resultados_muestra_todas_las_filas_incluido_el_roe(bd, monk
     llamadas = _render_dupont(monkeypatch, anio)
     tabla, opciones = next((df, k) for df, k in llamadas["dataframe"] if "Componente" in df.columns)
     assert opciones.get("height") == "content"  # sin desplazamiento interno
-    assert len(tabla) == 13 and tabla["Componente"].iloc[-2] == "ROE (DuPont)"
+    assert len(tabla) == 11 and tabla["Componente"].iloc[-3] == "RSP / ROE DuPont"
+    controladora = [df for df, _ in llamadas["dataframe"] if "Componente" in df.columns][1]
+    assert len(controladora) == 8 and controladora["Componente"].iloc[-2] == "RSP / ROE (controladora)"
 
 
 @pytest.mark.parametrize("anio", [2020, 2022])
@@ -587,11 +595,10 @@ def test_o5_controles_dupont_con_el_detalle_completo(bd, monkeypatch, anio):
     _datos_varios_anios()
     llamadas = _render_dupont(monkeypatch, anio)
     controles, opciones = next((df, k) for df, k in llamadas["table"] if "Detalle" in df.columns)
-    assert opciones.get("hide_index") is True and len(controles) == 7
+    assert opciones.get("hide_index") is True and len(controles) == 6
     detalles = list(controles["Detalle"])
     assert any(len(d) > 60 for d in detalles)  # textos largos completos (st.table los ajusta)
-    if anio == 2020:  # primer ejercicio: saldos aproximados, con la causa completa
-        assert any(d.startswith("APROXIMADO") and "no existe el ejercicio 2019" in d for d in detalles)
+    assert not any("APROXIMADO" in d for d in detalles)  # tampoco el primer ejercicio (2020)
 
 
 def test_o5_modificacion_de_datos_oculta_account_id_y_sigue_guardando(bd, monkeypatch):

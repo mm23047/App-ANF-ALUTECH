@@ -44,14 +44,14 @@ def test_analisis_vertical_del_estado_de_resultados(db_session):
         upsert_entry(db_session, fiscal_period_id=periodo.id, account_id=cuenta.id, valor=Decimal(valor), tipo=Tipo.RESULTADOS)
 
     ie("4001", "1000.00")  # ingresos netos (base)
-    ie("5001", "250.00")   # costo de ventas -> 25%
+    ie("5001", "250.00")   # costo de ventas -> -25% (resta, como en la tabla 7.1)
     db_session.commit()
 
     resultado = compute_vertical_income(db_session, periodo.id)
     assert resultado.disponible is True
     assert resultado.base_ingresos_netos == Decimal("1000.00")
     fila_costo = next(f for f in resultado.filas if f.cuenta.codigo == "5001")
-    assert fila_costo.porcentaje == Decimal("25.00")
+    assert fila_costo.valor == Decimal("250.00") and fila_costo.porcentaje == Decimal("-25.00")
 
 
 def test_analisis_vertical_resultados_ingresos_cero_no_disponible(db_session):

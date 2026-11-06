@@ -226,18 +226,17 @@ def test_estados_cuadrados_conciliados_y_con_estado_correcto(flujo, anio):
     assert bs.cuadra and bs.completo and inc.completo and conciliacion.estado == CONCILIADO
     assert resumen(banderas_balance(bs, conciliacion)) == "DEFINITIVO"
     assert resumen(banderas_resultados(inc, conciliacion)) == "DEFINITIVO"
-    # 2020 es el primer ejercicio: sin Balance anterior ni saldos manuales, el ROE es APROXIMADO.
-    assert dp.saldos_aproximados is (anio == 2020)
-    assert resumen(banderas_dupont(dp)) == ("APROXIMADO" if anio == 2020 else "DEFINITIVO")
-    if anio > 2020:
-        assert dp.fuente_saldos_iniciales == f"Balance final del ejercicio {anio - 1}"
+    # Saldos al cierre: tambien el primer ejercicio (2020) es definitivo.
+    assert resumen(banderas_dupont(dp)) == "DEFINITIVO"
+    assert dp.activo_total == bs.total_activo and dp.patrimonio_total == bs.total_patrimonio
 
 
 def test_las_16_paginas_se_renderizan_sin_modificar_la_bd(flujo):
     paginas = flujo["paginas"]
-    # 16 paginas originales + 8 del analisis 2021-2025 + "Ingreso de datos" del menu simplificado.
+    # 16 paginas originales + 8 del analisis 2021-2025 + "Ingreso de datos" del menu simplificado
+    # + analisis horizontal del Balance y del Estado de Resultados.
     paginas = {k: v for k, v in paginas.items() if k != "_menu"}
-    assert len(paginas) == 25
+    assert len(paginas) == 27
     for etiqueta, resultado in paginas.items():
         assert resultado["pagina"] == etiqueta and not resultado["excepciones"], (etiqueta, resultado["excepciones"])
     assert flujo["paginas_sin_cambios"]

@@ -86,20 +86,19 @@ def _ejercicio(s, anio, activo, patrimonio, ingresos, utilidad):
 # ---------------------------------------------------------------- DuPont
 
 def test_A01_dupont_no_encadena_ejercicio_no_consecutivo(db):
-    """2021 y 2023 registrados (sin 2022). El saldo inicial de 2023 NO debe
-    tomarse silenciosamente del balance final de 2021."""
+    """2021 y 2023 registrados (sin 2022). El DuPont de 2023 solo usa sus
+    propios saldos al cierre; el balance de 2021 no interviene."""
     with session_scope() as s:
         _ejercicio(s, 2021, 1000, 600, 1000, 100)
         p23 = _ejercicio(s, 2023, 2000, 1000, 2000, 200)
         s.flush()
         r = compute_dupont(s, p23)
-        print("fuente:", r.fuente_saldos_iniciales, "aprox:", r.saldos_aproximados, "activo_ini:", r.activo_inicial)
-        assert not (r.activo_inicial == Decimal("1000.00") and r.saldos_aproximados is False), \
-            "Usa el balance de 2021 como saldo inicial de 2023 sin marcarlo como aproximacion"
+        assert r.activo_total == Decimal("2000.00") and r.rotacion_activos == Decimal("1")
+        assert r.multiplicador_capital == Decimal("2")
 
 
-def test_A02_dupont_patrimonio_promedio_negativo_advierte(db):
-    """Patrimonio promedio negativo: el ROE no debe presentarse como valido."""
+def test_A02_dupont_patrimonio_negativo_advierte(db):
+    """Patrimonio al cierre negativo: el ROE no debe presentarse como valido."""
     with session_scope() as s:
         p = _ejercicio(s, 2021, 1000, -200, 1000, -100)
         s.flush()
@@ -111,7 +110,7 @@ def test_A02_dupont_patrimonio_promedio_negativo_advierte(db):
 
 def test_A03_dupont_saldo_inicial_cero_por_ejercicio_guardado_en_ceros(db):
     """Si el ejercicio anterior solo tiene ceros (el formulario guarda 0.00 en
-    todas las cuentas), no debe usarse 0 como saldo inicial real."""
+    todas las cuentas), el DuPont no cambia: solo usa los saldos al cierre."""
     with session_scope() as s:
         p22, _ = get_or_create_fiscal_period(s, 2022)
         s.flush()
@@ -120,21 +119,20 @@ def test_A03_dupont_saldo_inicial_cero_por_ejercicio_guardado_en_ceros(db):
         p23 = _ejercicio(s, 2023, 2000, 1000, 2000, 200)
         s.flush()
         r = compute_dupont(s, p23)
-        print("activo_ini:", r.activo_inicial, "prom:", r.activo_promedio, "aprox:", r.saldos_aproximados, r.fuente_saldos_iniciales)
-        assert r.activo_inicial != Decimal("0.00"), "Activo inicial 0 tomado como dato real"
+        assert r.disponible and r.activo_total == Decimal("2000.00") and r.rotacion_activos == Decimal("1")
 
 
 def test_A04_dupont_saldos_iniciales_manuales_parciales(db):
-    """Saldos iniciales manuales solo de patrimonio: el activo inicial no debe
-    asumirse 0 sin advertencia."""
+    """Saldos iniciales manuales solo de patrimonio: se conservan, pero el
+    DuPont no los usa."""
     with session_scope() as s:
         p = _ejercicio(s, 2021, 1000, 600, 1000, 100)
         s.flush()
         upsert_initial_balance(s, fiscal_period_id=p.id, account_id=get_account_by_codigo(s, "3001").id, valor=Decimal("500"))
         s.flush()
         r = compute_dupont(s, p)
-        print("activo_ini:", r.activo_inicial, "aprox:", r.saldos_aproximados, "rot:", r.rotacion_activos)
-        assert r.activo_inicial != Decimal("0.00") or r.saldos_aproximados
+        assert r.disponible and r.rotacion_activos == Decimal("1")
+        assert r.multiplicador_capital == Decimal("1000") / Decimal("600")
 
 
 def test_A05_dupont_roe_coincide_con_roe_directo(db):
@@ -144,7 +142,7 @@ def test_A05_dupont_roe_coincide_con_roe_directo(db):
         p = _ejercicio(s, 2022, 1300, 700, 1234.56, 98.76)
         s.flush()
         r = compute_dupont(s, p)
-        esperado = (Decimal("98.76") / ((Decimal("600") + Decimal("700")) / 2) * 100).quantize(Decimal("0.01"))
+        esperado = (Decimal("98.76") / Decimal("700") * 100).quantize(Decimal("0.01"))
         print("dupont", r.roe_dupont_pct, "directo", r.roe_directo_pct, "esperado", esperado)
         assert r.roe_directo_pct == esperado and r.coincide_redondeo
 
@@ -170,7 +168,7 @@ def test_A07_dupont_ingresos_cero(db):
         assert r.disponible is False
 
 
-def test_A08_dupont_activo_promedio_cero(db):
+def test_A08_dupont_activo_al_cierre_cero(db):
     with session_scope() as s:
         p, _ = get_or_create_fiscal_period(s, 2021)
         s.flush()

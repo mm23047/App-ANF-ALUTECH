@@ -136,3 +136,110 @@ las 247 fuentes, los 74 totales y datos complementarios, los 5 ejercicios y la e
 2023, y los reportes de Balance y Resultados 2021 son DEFINITIVOS. La comparación con el trabajo no cambia (672 / 6 / 43
 / 0 / 15). Se actualizó `tests/test_fase4.py` (la BD real tiene ahora 18 ceros y el borrado en el historial). Suite:
 **515 aprobadas de 515**.
+
+## 10. Fase 2: corrección del análisis horizontal en el trabajo académico (2026-11-03)
+
+**Autorización:** exclusivamente el análisis horizontal (hallazgos D‑01 a D‑08 y D‑19 de `AUDITORIA_DOCUMENTAL_TRABAJO_ANF_FASE2.md`). Sin commit. Base: HEAD `4506ed8`.
+
+**Archivo modificado:** `Trabajo de investigación ANF.md`, SHA-256 `bcfeb15d9278dc55f974e572735e138eb23080d16bb22dd52cbf2c31ae78ece4` → `5d5e316425292d83e65a436a8a167239dfb1e0daf669442bd20828b23156b80c`. No se modificó el PDF, que ahora **no refleja** estas correcciones.
+
+**Respaldo:** `C:\Users\estua\Documents\ANF\respaldos_appfinanciera\fase2_horizontal_20261103_165827\` (MD y PDF originales, con hashes verificados).
+
+| Ubicación (línea original) | Concepto | Antes | Después |
+|---|---|---|---|
+| Tabla 3 (L498) | Activo corriente 2023 | 541,094,544 | 429,794,544 |
+| Tabla 3 (L498) | Var. AC 2022–2023 | +92,422,143 / +20.60 % | −18,877,857 / −4.21 % |
+| Tabla 3 (L499) | Pasivo corriente 2022 | 231,914,180 | 231,944,180 |
+| Tabla 3 (L499) | Var. PC 2021–2022 | +25,940,950 / +12.59 % | +25,970,950 / +12.61 % |
+| Tabla 3 (L499) | Pasivo corriente 2023 | 342,120,685 | 333,120,685 |
+| Tabla 3 (L499) | Var. PC 2022–2023 | +110,206,505 / +47.52 % | +101,176,505 / +43.62 % |
+| Tabla 4 (L511) | Var. AC 2023–2024 | −108,322,866 / −20.02 % | +2,977,134 / +0.69 % |
+| Tabla 4 (L512) | Var. PC 2023–2024 | +20,845,530 / +6.09 % | +29,845,530 / +8.96 % |
+| Tabla 5 (L527) | Utilidad operativa 2022 | 31,200,000\* | 31,200,977 (variaciones sin cambio: −69.88 % y +43.23 %) |
+| Tablas 6 y 7 | CTN 2022 | +216,758,221 | +216,728,221 |
+| Tablas 6 y 7 | Var. CTN 2022 | +38,849,904 / +21.84 % | +38,819,904 / +21.82 % |
+| Tablas 6 y 7 | CTN 2023 | +198,973,859 | +96,673,859 |
+| Tablas 6 y 7 | Var. CTN 2023 | −17,784,362 / −8.20 % | −120,054,362 / −55.39 % |
+| Tablas 6 y 7 | Var. CTN 2024 | −129,168,396 / −64.92 % | −26,868,396 / −27.79 % |
+| Tabla 6 | RC 2023 / PA 2023 | 1.58x / 1.17x | 1.29x / 0.87x |
+
+Las mismas cifras de AC y PC se corrigieron en cada aparición de las Tablas 4, 6 y 7.
+
+**Texto y presentación:** 6.5 puntos 1, 2 y 3 (incluido el título del punto 3, porque el activo corriente subió en 2024); 6.6 («comparaciones interanuales»); 6.8; título de 6.4 y su entrada del índice (L83; el ancla no cambia); errata «2021-20252» (L489 y L517). Notas nuevas: fuente y cambio de estados combinados a consolidados (6.2); base de cuentas por cobrar (Tablas 3 y 4); definiciones y derivaciones (Tabla 5).
+
+**Verificación:** 93 cifras impresas halladas en los documentos originales (2024 por lectura de la imagen); 240 celdas de las Tablas 3 a 7 recalculadas sin discrepancias; 31 importes, 16 porcentajes y las razones del texto de 6.5–6.8 respaldados; sin cifras erróneas residuales en el documento. Fuera de la sección 6 solo cambió la L83; las secciones 1–5 (salvo esa línea), 6.1, 6.3 y de la 7 al final son idénticas. Desde la sección 7, las líneas del Markdown aumentan en 14 respecto de las citadas en los informes de auditoría.
+
+**Sin modificar por estar fuera de la autorización:** `fuentes/anf/resultados_referencia.json`, `fuentes/anf/observaciones_validacion.json` e `INFORME_VALIDACION_FINANCIERA.md`, que siguen reflejando la versión anterior del trabajo; la aplicación, la base de datos y el resto del documento.
+
+## 11. Fase 2: actualización del PDF del trabajo académico (2026-11-03)
+
+**Autorización:** actualizar `Trabajo de investigación ANF.pdf` para que coincida con el Markdown corregido. Sin commit. Siguen pendientes, para una fase independiente, `fuentes/anf/resultados_referencia.json`, `fuentes/anf/observaciones_validacion.json`, `INFORME_VALIDACION_FINANCIERA.md` y las pruebas de la aplicación.
+
+**Procedimiento de exportación identificado:** el proyecto no tiene ninguno. El PDF original indica como productor «Skia/PDF m159 Google Docs Renderer», es decir, se exportó desde Google Docs, y el Markdown tiene el formato de una exportación de ese documento. No hay scripts del trabajo en el repositorio. No se pudo consultar Google Drive (el conector requiere volver a iniciar sesión), por lo que no se confirmó si el documento fuente sigue disponible, y **ese documento, si existe, no tiene estas correcciones**.
+
+**Procedimiento aplicado:** reconstrucción parcial del PDF original con PyMuPDF, instalado solo en el directorio temporal de la sesión, no en el proyecto. Las páginas 1, 3–20 y 29–83 originales se conservaron. Las páginas 21–28 se recompusieron línea por línea y fila por fila desde el propio PDF, con el mismo tamaño de página, márgenes, Arial y tablas. Solo se reescribieron las 45 celdas y los párrafos que cambiaron en el Markdown y se añadieron sus notas. En la página 2 se sustituyó la línea 6.4 del índice.
+
+| Dato | Antes | Después |
+|---|---|---|
+| SHA-256 del PDF | `e0776984035f86911afe…` | `14be92f6df2d1e1a406560b8dcea6feb5a2926dd7401e093f1537224160a2b1f` |
+| Páginas | 83 | 84 (las notas nuevas añaden una página; la sección 7 empieza en la 30) |
+| Tamaño | 8,233,187 bytes | 8,812,834 bytes |
+| Markdown | `5d5e316425292d83…` | Sin cambios |
+
+**Respaldo:** `C:\Users\estua\Documents\ANF\respaldos_appfinanciera\fase2_pdf_20261103_171131\`.
+
+**Verificación:** 74 de las 75 páginas no reconstruidas son idénticas en texto e imagen (la restante es la página 2, modificada a propósito); 240 de 240 celdas de las Tablas 3 a 7 y 17 de 17 párrafos coinciden con el Markdown; sin cifras antiguas en todo el PDF; 52 de 52 enlaces del índice y los 56 marcadores llevan a la página correcta (2 marcadores sin título ya existían en el original); revisión visual de las páginas 2 y 21–29.
+
+**Limitaciones:**
+- La línea 6.4 del índice se imprime a 10.1 pt en lugar de 11 pt para caber en una línea.
+- **Los números de página impresos en el índice se conservan iguales al Markdown** y, desde 6.5, ya no coinciden con la paginación real: la diferencia es de +1 en la mayoría de las entradas y de +3 o +4 desde 9.3, porque el índice ya estaba desfasado (D‑37). Los enlaces y marcadores sí llevan a la página correcta.
+- Las referencias a páginas del PDF en los informes de auditoría aumentan en 1 desde la sección 7.
+
+## 12. Análisis vertical y DuPont alineados con el trabajo ANF (2026-11-05)
+
+**Autorización:** fase 2 de la auditoría metodológica, decisiones D-1 a D-6. Sin commit. Sin cambios en la base de datos, en `fuentes/` ni en el trabajo académico.
+
+**Respaldo:** `C:\Users\estua\Documents\ANF\respaldo_fase2_vertical_dupont_20261105\`, con manifiesto SHA-256.
+
+| Archivo | Cambio |
+|---|---|
+| `calculations/dupont.py` | Única fuente del modelo, con saldos al cierre: `factores_dupont`, `factores_total` y `factores_controladora`. Se eliminan los promedios y los saldos iniciales. El resultado incluye RSA, comprobación directa y enfoque de la controladora |
+| `calculations/indicadores.py` | `_maf`, `_roa_dupont`, `_roe_dupont` y los de la controladora delegan en `calculations/dupont.py`. Rotación, margen, ROA y ROE directos no cambian |
+| `calculations/banderas.py` | Se elimina APROXIMADO. «Sin datos para conciliar» ya no se presenta como SIN CONCILIAR |
+| `calculations/vertical_analysis.py` | Los costos, gastos e impuestos del Estado de Resultados tienen porcentaje negativo. El importe y `efecto` no cambian |
+| `reports/dupont_report.py`, `reports/pdf_export.py`, `reports/excel_export.py` | Enfoque total y de la controladora por separado, con las filas comunes de `calculations/dupont.py`. Excel: la fórmula de control del vertical incluye el signo |
+| `reports/vertical_report.py`, `reports/secciones.py`, `modules/dashboard.py` | Textos, notas y estados coherentes con lo anterior. El Informe integral lee los factores de la fuente única |
+| `modules/data_entry.py` | La página Saldos iniciales se conserva y deja de depender del cálculo DuPont |
+| `tests/` | Pruebas y `caso_controlado.json` actualizados al criterio del trabajo, sin eliminar casos. Nuevos: `test_fase8_vertical_dupont.py` y `humo_vertical_dupont.py` |
+| `README.md`, `MATRIZ_ADAPTACION.md` | Referencias a saldos promedio y al carácter aproximado de 2021 |
+
+## 13. Auditoría integral conforme a la rúbrica (2026-11-05)
+
+**Informe:** `INFORME_AUDITORIA_RUBRICA_ANF.md`; matriz completa en `MATRIZ_CONCORDANCIA_ANF.md`. Sin commit. Sin cambios en la base de datos, en el trabajo académico ni en `fuentes/alutech/`.
+
+**Respaldo:** `C:\Users\estua\Documents\ANF\respaldos_appfinanciera\rubrica_integral_20261105\`, con manifiesto SHA-256.
+
+| Archivo | Cambio |
+|---|---|
+| `calculations/comparativo.py`, `reports/secciones.py`, `reports/analisis_alutech.py`, `components/navigation.py`, `app.py` | Reportes de análisis horizontal del Balance y de Resultados en el menú: Tablas 3 a 7 y comparación de dos ejercicios. El grupo de otros no operativos conserva su signo |
+| `reports/vertical_report.py`, `reports/dupont_report.py` | Comparativos de los ejercicios (7.1, 7.2, 9.5 y 9.6), sin cambiar el cálculo |
+| `calculations/indicadores.py`, `reports/indicadores_financieros.py` | Cobertura de pagos fijos según 8.3 C; base financiera, EPS y descargas por apartado |
+| `reports/exportar_secciones.py` | PDF con anchos medidos, sin cifras partidas; Excel con anchos y formatos con signo |
+| `calculations/validation.py`, `calculations/vertical_analysis.py`, `reports/balance_report.py`, `reports/pdf_export.py`, `reports/excel_export.py`, `components/tables.py` | Los importes 0.00 de cuentas sin mapear no se presentan si el grupo ya tiene cuentas mapeadas; siguen en la base y en Modificación de datos |
+| `components/secciones_ui.py`, `.streamlit/config.toml` | Cifras a la derecha, etiquetas completas, exportación al pulsar el botón y barra mínima |
+| `fuentes/anf/resultados_referencia.json`, `fuentes/anf/observaciones_validacion.json` | 37 referencias al día con la versión vigente y 5 nuevas de 8.3 C; 6 observaciones obsoletas pasan a una sección histórica. Validación: 714, 6, 6 y 15 |
+| `tests/` | Nuevos: `test_fase9_rubrica.py`, `concordancia_documento.py` y `humo_horizontal.py`. Ajustadas 7 pruebas en 5 archivos, ninguna eliminada. Suite: 656 de 656 |
+
+## 14. Unificación metodológica con el documento ANF (2026-11-05)
+
+**Informe:** `INFORME_UNIFICACION_METODOLOGICA_ANF.md`. Sin commit. Sin cambios en la base de datos, en el trabajo académico ni en `fuentes/alutech/`.
+
+**Respaldo:** `C:\Users\estua\Documents\ANF\respaldos_appfinanciera\unificacion_metodologica_20261105\`, con manifiesto SHA-256.
+
+| Archivo | Cambio |
+|---|---|
+| `calculations/indicadores.py` | Ciclo operativo y CCE con operandos a 2 decimales, como escribe 9.3, con una regla general. Interpretaciones con la misma cifra que las tablas |
+| `components/money.py`, `reports/secciones.py` | Redondeo único, mitad hacia arriba y una sola vez |
+| `reports/secciones.py`, `reports/indicadores_financieros.py` | Tabla de las dos bases de cuentas por cobrar, en pantalla, PDF y Excel |
+| `calculations/comparacion_anf.py`, `fuentes/anf/*.json` | Estado «Resultado derivado» para 8.3 C y observaciones OBS-07, 08, 09 y 14. Validación: 711, 4, 5, 6 y 15. Ningún valor de referencia cambió |
+| `tests/` | Nuevo `test_fase10_metodologia.py`; expectativas ajustadas, ninguna prueba eliminada. Suite: 695 de 695 |

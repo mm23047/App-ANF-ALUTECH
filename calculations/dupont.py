@@ -1,29 +1,29 @@
-"""Modelo DuPont de tres factores (seccion 9.5).
+"""Modelo DuPont con saldos al cierre (trabajo ANF, secciones 8.4, 9.5 y 9.6).
 
-ROE = Margen neto x Rotacion de activos x Multiplicador del capital
-  Margen neto          = Utilidad neta / Ingresos netos
-  Rotacion de activos  = Ingresos netos / Activos totales promedio
-  Multiplicador capital= Activos totales promedio / Patrimonio promedio
-  ROE directo          = Utilidad neta / Patrimonio promedio x 100
-El patrimonio es el patrimonio total del Balance (criterio aprobado para el
-consolidado de Alutech; revisable al disponer de los estados publicados).
+Unica fuente de calculo del modelo. La usan el reporte DuPont (pantalla, PDF y
+Excel), el Dashboard, el Informe integral y los indicadores que alimentan la
+comparacion con el trabajo:
 
-Saldos iniciales del ejercicio N (hallazgos A-01 y A-02):
-  1. Balance final del ejercicio N-1 (exactamente el inmediato anterior;
-     nunca otro anterior) si esta completo, con activo total > 0 y cuadra.
-  2. Si no, saldos iniciales capturados manualmente para N, solo si son
-     completos: al menos una cuenta de Activo y una de Patrimonio, con
-     activo total > 0.
-  3. Si no, se usa el saldo final de N como aproximacion: aproximado=True y
-     `fuente` indica la causa concreta.
+  Margen neto          = Ganancia neta / Ventas
+  Rotacion de activos  = Ventas / Activos totales al cierre
+  RSA (ROA)            = Margen neto x Rotacion de activos
+  MAF                  = Activos totales al cierre / Patrimonio total al cierre
+  RSP (ROE)            = RSA x MAF
+  Comprobacion directa = Ganancia neta / Patrimonio total al cierre
 
-Si el patrimonio inicial, final o promedio es <= 0, el ROE no es
-interpretable (A-04): disponible=False, interpretable=False, y no se genera
-interpretacion de los factores.
+No se usan saldos promedio ni el balance del ejercicio anterior: todos los
+ejercicios, incluido el primero, se calculan solo con sus propios saldos.
 
-Todos los calculos usan Decimal sin redondeo intermedio (B-01); los
-porcentajes roe_*_pct se cuantizan a 2 decimales solo como valor final de
-presentacion.
+Hay dos enfoques que nunca se mezclan. El total usa la ganancia neta del año y
+el patrimonio total. El de la controladora usa la ganancia y el patrimonio
+atribuibles a sus propietarios. Ambos usan los activos totales de la empresa.
+
+Si el patrimonio al cierre es negativo, el ROE no es interpretable: los factores
+quedan solo como referencia y no se genera interpretacion. Si es cero, no se
+puede calcular.
+
+Todos los calculos usan Decimal sin redondeo intermedio; los porcentajes *_pct
+se cuantizan a 2 decimales solo como valor final de presentacion.
 """
 from __future__ import annotations
 
@@ -32,26 +32,85 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from calculations.balance_sheet import BalanceSheetResult, compute_balance_sheet
-from calculations.controls import CONCILIADO, conciliar_resultado
-from calculations.income_statement import compute_income_statement
-from components.money import format_money, q2
-from database.enums import CategoriaPrincipal as Cat
+from calculations.controls import CONCILIADO, SIN_DATOS, conciliar_resultado
+from calculations.rubros import DatosEjercicio, datos_ejercicio
+from components.money import format_money, format_percent, format_ratio, q2
 from database.models import FiscalPeriod
-from database.repositories import get_fiscal_period, get_initial_balances_map, list_accounts
 
 CERO = Decimal("0.00")
 CIEN = Decimal("100")
-DOS = Decimal("2")
 TOLERANCIA_PCT = Decimal("0.01")
+NO_INTERPRETABLE = "NO INTERPRETABLE"
+BASE_SALDOS = ("Saldos al cierre del ejercicio, como en las secciones 8.4, 9.5 y 9.6 del trabajo; no se usan saldos "
+               "promedio ni el balance del ejercicio anterior.")
+# Tipos de valor de las filas de presentacion
+IMPORTE, PORCENTAJE, VECES = "importe", "porcentaje", "veces"
 
 
-@dataclass
-class SaldosIniciales:
-    activo: Decimal | None
-    patrimonio: Decimal | None
-    aproximado: bool
-    fuente: str
+@dataclass(frozen=True)
+class FactoresDuPont:
+    """Factores sin redondear, en fraccion (no x100). None: no calculable."""
+    margen_neto: Decimal | None
+    rotacion_activos: Decimal | None
+    rsa: Decimal | None
+    maf: Decimal | None
+    rsp: Decimal | None
+    rsa_directo: Decimal | None
+    roe_directo: Decimal | None
+    patrimonio_positivo: bool
+
+    @property
+    def maf_interpretable(self) -> Decimal | None:
+        return self.maf if self.patrimonio_positivo else None
+
+    @property
+    def rsp_interpretable(self) -> Decimal | None:
+        return self.rsp if self.patrimonio_positivo else None
+
+
+def factores_dupont(
+    utilidad: Decimal | None, ingresos: Decimal | None, activo: Decimal | None, patrimonio: Decimal | None
+) -> FactoresDuPont:
+    """Unica definicion de las formulas. Un dato None o un denominador invalido
+    deja en None solo los factores que dependen de el."""
+    margen = utilidad / ingresos if utilidad is not None and ingresos is not None and ingresos != CERO else None
+    activo_valido = activo is not None and activo > CERO
+    rotacion = ingresos / activo if ingresos is not None and activo_valido else None
+    rsa = margen * rotacion if margen is not None and rotacion is not None else None
+    con_patrimonio = activo is not None and patrimonio is not None and patrimonio != CERO
+    maf = activo / patrimonio if con_patrimonio else None
+    return FactoresDuPont(
+        margen_neto=margen,
+        rotacion_activos=rotacion,
+        rsa=rsa,
+        maf=maf,
+        rsp=rsa * maf if rsa is not None and maf is not None else None,
+        rsa_directo=utilidad / activo if utilidad is not None and activo_valido else None,
+        roe_directo=utilidad / patrimonio if utilidad is not None and con_patrimonio else None,
+        patrimonio_positivo=patrimonio is not None and patrimonio > CERO,
+    )
+
+
+def factores_total(d: DatosEjercicio) -> FactoresDuPont:
+    """Enfoque total: ganancia neta del año y patrimonio total."""
+    return factores_dupont(
+        d.inc.utilidad_neta if d.inc.tiene_datos else None,
+        d.inc.ingresos_netos.subtotal if d.inc.tiene_datos else None,
+        d.bs.total_activo if d.bs.tiene_datos else None,
+        d.bs.total_patrimonio if d.bs.tiene_datos else None,
+    )
+
+
+def factores_controladora(d: DatosEjercicio) -> tuple[FactoresDuPont, str]:
+    """Enfoque de la controladora: (factores, fuente de la utilidad atribuible)."""
+    utilidad, fuente = d.utilidad_controladora()
+    factores = factores_dupont(
+        utilidad,
+        d.inc.ingresos_netos.subtotal if d.inc.tiene_datos else None,
+        d.bs.total_activo if d.bs.tiene_datos else None,
+        d.patrimonio_controladora if d.bs.tiene_datos else None,
+    )
+    return factores, fuente
 
 
 @dataclass
@@ -59,80 +118,25 @@ class Control:
     nombre: str
     correcto: bool
     detalle: str
+    sin_datos: bool = False  # no se pudo comprobar: no es una diferencia
+
+    @property
+    def resultado(self) -> str:
+        if self.sin_datos:
+            return "Sin datos para conciliar"
+        return "Correcto" if self.correcto else "Revisar"
 
 
-def _problemas_balance_inicial(bs: BalanceSheetResult) -> list[str]:
-    if not bs.tiene_datos:
-        return ["no tiene datos de Balance"]
-    problemas = []
-    if not bs.completo:
-        problemas.append(f"está incompleto (sin datos de {', '.join(bs.categorias_faltantes)})")
-    if bs.total_activo <= CERO:
-        problemas.append("tiene un activo total menor o igual a cero")
-    if not bs.cuadra:
-        problemas.append(f"no cuadra (diferencia {format_money(bs.diferencia)})")
-    return problemas
+@dataclass
+class EnfoqueControladora:
+    utilidad: Decimal | None
+    patrimonio: Decimal | None
+    factores: FactoresDuPont
+    fuente: str
 
-
-def evaluar_balance_anterior(session: Session, fiscal_period: FiscalPeriod) -> tuple[BalanceSheetResult | None, str | None]:
-    """(balance de N-1, None) si es utilizable como saldo inicial de N; si
-    no, (None, causa)."""
-    anio_previo = fiscal_period.anio - 1
-    anterior = get_fiscal_period(session, anio_previo)
-    if anterior is None:
-        return None, f"no existe el ejercicio {anio_previo}"
-    bs = compute_balance_sheet(session, anterior.id)
-    problemas = _problemas_balance_inicial(bs)
-    if problemas:
-        return None, f"el Balance del ejercicio {anio_previo} {'; '.join(problemas)}"
-    return bs, None
-
-
-def _saldos_manuales(session: Session, fiscal_period_id: int) -> tuple[Decimal | None, Decimal | None, str | None]:
-    """(activo, patrimonio, None) si los saldos manuales son completos; si
-    no, (None, None, causa) o (None, None, None) si no hay ninguno."""
-    mapa = get_initial_balances_map(session, fiscal_period_id)
-    if not mapa:
-        return None, None, None
-    cuentas = {a.id: a for a in list_accounts(session)}
-    activos = [v for i, v in mapa.items() if cuentas[i].categoria_principal == Cat.ACTIVO]
-    patrimonio = [v for i, v in mapa.items() if cuentas[i].categoria_principal == Cat.PATRIMONIO]
-    faltan = [n for n, valores in (("Activo", activos), ("Patrimonio", patrimonio)) if not valores]
-    if faltan:
-        return None, None, f"los saldos iniciales manuales están incompletos (sin datos de {', '.join(faltan)})"
-    total_activo = sum(activos, CERO)
-    if total_activo <= CERO:
-        return None, None, "los saldos iniciales manuales tienen un activo total menor o igual a cero"
-    return total_activo, sum(patrimonio, CERO), None
-
-
-def get_saldos_iniciales(
-    session: Session, fiscal_period: FiscalPeriod, saldo_final_activo: Decimal, saldo_final_patrimonio: Decimal
-) -> SaldosIniciales:
-    bs_anterior, causa = evaluar_balance_anterior(session, fiscal_period)
-    if bs_anterior is not None:
-        return SaldosIniciales(
-            activo=bs_anterior.total_activo,
-            patrimonio=bs_anterior.total_patrimonio,
-            aproximado=False,
-            fuente=f"Balance final del ejercicio {fiscal_period.anio - 1}",
-        )
-
-    activo, patrimonio, causa_manual = _saldos_manuales(session, fiscal_period.id)
-    if activo is not None:
-        return SaldosIniciales(
-            activo=activo,
-            patrimonio=patrimonio,
-            aproximado=False,
-            fuente=f"Saldos iniciales capturados manualmente (porque {causa})",
-        )
-    causas = [causa] + ([causa_manual] if causa_manual else ["no hay saldos iniciales manuales"])
-    return SaldosIniciales(
-        activo=saldo_final_activo,
-        patrimonio=saldo_final_patrimonio,
-        aproximado=True,
-        fuente=f"APROXIMADO: se usa el saldo final del propio ejercicio como saldo inicial porque {'; '.join(causas)}",
-    )
+    @property
+    def disponible(self) -> bool:
+        return self.factores.rsp_interpretable is not None
 
 
 @dataclass
@@ -141,36 +145,33 @@ class DuPontResult:
     motivo_no_disponible: str | None
     utilidad_neta: Decimal | None
     ingresos_netos: Decimal | None
-    activo_inicial: Decimal | None
-    activo_final: Decimal | None
-    activo_promedio: Decimal | None
-    patrimonio_inicial: Decimal | None
-    patrimonio_final: Decimal | None
-    patrimonio_promedio: Decimal | None
+    activo_total: Decimal | None
+    patrimonio_total: Decimal | None
     margen_neto: Decimal | None  # fraccion (no x100), sin redondear
     rotacion_activos: Decimal | None  # veces, sin redondear
-    multiplicador_capital: Decimal | None  # veces, sin redondear
+    rsa: Decimal | None  # fraccion, sin redondear
+    multiplicador_capital: Decimal | None  # MAF, veces, sin redondear
+    rsa_directo: Decimal | None  # comprobacion: ganancia neta / activos, fraccion
     roe_dupont_pct: Decimal | None  # presentacion: 2 decimales
     roe_directo_pct: Decimal | None  # presentacion: 2 decimales
     coincide_redondeo: bool | None  # identidad algebraica; no es un control (B-02)
-    saldos_aproximados: bool
-    fuente_saldos_iniciales: str | None
     interpretable: bool = True
-    roe: Decimal | None = None  # fraccion sin redondear
+    roe: Decimal | None = None  # RSP en fraccion, sin redondear
+    roe_directo: Decimal | None = None  # comprobacion en fraccion, sin redondear
+    controladora: EnfoqueControladora | None = None
     advertencias: list[str] = field(default_factory=list)
     controles: list[Control] = field(default_factory=list)
 
 
 def compute_dupont(session: Session, fiscal_period: FiscalPeriod) -> DuPontResult:
-    bs = compute_balance_sheet(session, fiscal_period.id)
-    inc = compute_income_statement(session, fiscal_period.id)
+    d = datos_ejercicio(session, fiscal_period)
+    bs, inc = d.bs, d.inc
 
     def vacio(motivo: str, **datos) -> DuPontResult:
         base = dict(
-            utilidad_neta=None, ingresos_netos=None, activo_inicial=None, activo_final=None, activo_promedio=None,
-            patrimonio_inicial=None, patrimonio_final=None, patrimonio_promedio=None, margen_neto=None,
-            rotacion_activos=None, multiplicador_capital=None, roe_dupont_pct=None, roe_directo_pct=None,
-            coincide_redondeo=None, saldos_aproximados=False, fuente_saldos_iniciales=None,
+            utilidad_neta=None, ingresos_netos=None, activo_total=None, patrimonio_total=None, margen_neto=None,
+            rotacion_activos=None, rsa=None, multiplicador_capital=None, rsa_directo=None, roe_dupont_pct=None,
+            roe_directo_pct=None, coincide_redondeo=None,
         )
         base.update(datos)
         return DuPontResult(disponible=False, motivo_no_disponible=motivo, **base)
@@ -180,16 +181,11 @@ def compute_dupont(session: Session, fiscal_period: FiscalPeriod) -> DuPontResul
     if not inc.tiene_datos:
         return vacio("No hay datos de Estado de Resultados capturados para este ejercicio.")
 
-    saldos = get_saldos_iniciales(session, fiscal_period, bs.total_activo, bs.total_patrimonio)
-    activo_promedio = (saldos.activo + bs.total_activo) / DOS
-    patrimonio_promedio = (saldos.patrimonio + bs.total_patrimonio) / DOS
     utilidad_neta = inc.utilidad_neta
     ingresos_netos = inc.ingresos_netos.subtotal
     conciliacion = conciliar_resultado(bs, inc)
 
     advertencias = []
-    if saldos.aproximado:
-        advertencias.append(saldos.fuente + ". Los promedios y el ROE son aproximados.")
     if not bs.completo:
         advertencias.append(f"Balance General INCOMPLETO (sin datos de {', '.join(bs.categorias_faltantes)}).")
     if not inc.completo:
@@ -205,57 +201,113 @@ def compute_dupont(session: Session, fiscal_period: FiscalPeriod) -> DuPontResul
                 "Completo" if bs.completo else f"Sin datos de {', '.join(bs.categorias_faltantes)}"),
         Control("Estado de Resultados completo", inc.completo,
                 "Completo" if inc.completo else f"Sin datos de {', '.join(inc.categorias_faltantes)}"),
-        Control("Saldos iniciales reales (no aproximados)", not saldos.aproximado, saldos.fuente),
         Control("Resultado del ejercicio conciliado con la utilidad neta", conciliacion.estado == CONCILIADO,
-                conciliacion.mensaje),
+                conciliacion.mensaje, sin_datos=conciliacion.estado == SIN_DATOS),
         Control("Signos según la convención", not (bs.advertencias_signo or inc.advertencias_signo),
                 f"{len(bs.advertencias_signo) + len(inc.advertencias_signo)} importe(s) con signo atípico"),
     ]
     comunes = dict(
-        utilidad_neta=utilidad_neta, ingresos_netos=ingresos_netos, activo_inicial=saldos.activo,
-        activo_final=bs.total_activo, activo_promedio=activo_promedio, patrimonio_inicial=saldos.patrimonio,
-        patrimonio_final=bs.total_patrimonio, patrimonio_promedio=patrimonio_promedio,
-        saldos_aproximados=saldos.aproximado, fuente_saldos_iniciales=saldos.fuente,
-        advertencias=advertencias, controles=controles,
+        utilidad_neta=utilidad_neta, ingresos_netos=ingresos_netos, activo_total=bs.total_activo,
+        patrimonio_total=bs.total_patrimonio, advertencias=advertencias, controles=controles,
     )
 
     if ingresos_netos == CERO:
         return vacio("Los ingresos netos son cero; no se puede calcular el margen neto ni la rotacion de activos.", **comunes)
-    if activo_promedio <= CERO:
-        return vacio("El activo total promedio es cero o negativo; no se puede calcular la rotacion de activos.", **comunes)
-    if patrimonio_promedio == CERO:
-        return vacio("El patrimonio promedio es cero; no se puede calcular el multiplicador del capital ni el ROE.", **comunes)
+    if bs.total_activo <= CERO:
+        return vacio("El activo total al cierre es cero o negativo; no se puede calcular la rotacion de activos.", **comunes)
+    if bs.total_patrimonio == CERO:
+        return vacio("El patrimonio total al cierre es cero; no se puede calcular el multiplicador del capital ni el ROE.", **comunes)
 
-    margen_neto = utilidad_neta / ingresos_netos
-    rotacion_activos = ingresos_netos / activo_promedio
-    multiplicador_capital = activo_promedio / patrimonio_promedio
-    roe = margen_neto * rotacion_activos * multiplicador_capital
-    roe_directo = utilidad_neta / patrimonio_promedio
+    total = factores_total(d)
+    f_controladora, fuente_controladora = factores_controladora(d)
+    utilidad_controladora = d.utilidad_controladora()[0]
     factores = dict(
-        margen_neto=margen_neto, rotacion_activos=rotacion_activos, multiplicador_capital=multiplicador_capital,
-        roe_dupont_pct=q2(roe * CIEN), roe_directo_pct=q2(roe_directo * CIEN),
-        coincide_redondeo=abs(q2(roe * CIEN) - q2(roe_directo * CIEN)) <= TOLERANCIA_PCT,
+        margen_neto=total.margen_neto, rotacion_activos=total.rotacion_activos, rsa=total.rsa,
+        multiplicador_capital=total.maf, rsa_directo=total.rsa_directo,
+        roe_dupont_pct=q2(total.rsp * CIEN), roe_directo_pct=q2(total.roe_directo * CIEN),
+        coincide_redondeo=abs(q2(total.rsp * CIEN) - q2(total.roe_directo * CIEN)) <= TOLERANCIA_PCT,
+        roe=total.rsp, roe_directo=total.roe_directo,
+        controladora=EnfoqueControladora(utilidad_controladora, d.patrimonio_controladora, f_controladora, fuente_controladora),
     )
 
-    no_positivos = [
-        f"{nombre} ({format_money(valor)})"
-        for nombre, valor in (("inicial", saldos.patrimonio), ("final", bs.total_patrimonio), ("promedio", patrimonio_promedio))
-        if valor <= CERO
-    ]
-    controles.append(Control("Patrimonio inicial, final y promedio positivos", not no_positivos,
-                             "Positivos" if not no_positivos else "No positivo: " + ", ".join(no_positivos)))
-    if no_positivos:
+    positivo = total.patrimonio_positivo
+    controles.append(Control("Patrimonio total al cierre positivo", positivo,
+                             "Positivo" if positivo else f"No positivo: {format_money(bs.total_patrimonio)}"))
+    if not positivo:
         motivo = (
-            "ROE NO INTERPRETABLE: el patrimonio " + ", ".join(no_positivos) + " es cero o negativo. Con patrimonio "
-            "negativo el cociente puede dar un ROE positivo aunque haya pérdidas, y el multiplicador pierde su "
-            "significado. Los factores se muestran solo como referencia."
+            f"ROE {NO_INTERPRETABLE}: el patrimonio total al cierre ({format_money(bs.total_patrimonio)}) es cero o "
+            "negativo. Con patrimonio negativo el cociente puede dar un ROE positivo aunque haya pérdidas, y el "
+            "multiplicador pierde su significado. Los factores se muestran solo como referencia."
         )
         resultado = vacio(motivo, **comunes, **factores)
         resultado.interpretable = False
-        resultado.roe = roe
         return resultado
 
-    return DuPontResult(disponible=True, motivo_no_disponible=None, roe=roe, **comunes, **factores)
+    return DuPontResult(disponible=True, motivo_no_disponible=None, **comunes, **factores)
+
+
+# ------------------------------------------------------------- presentacion
+@dataclass(frozen=True)
+class FilaDuPont:
+    """Fila comun de pantalla, PDF y Excel. `valor` None: no disponible; texto:
+    se muestra tal cual (NO INTERPRETABLE)."""
+    etiqueta: str
+    valor: Decimal | str | None
+    tipo: str
+    decimales: int = 4
+
+
+def formatear_fila(fila: FilaDuPont, moneda: str = "") -> str:
+    """Texto de la fila en pantalla y PDF."""
+    if isinstance(fila.valor, str):
+        return fila.valor
+    if fila.tipo == IMPORTE:
+        return format_money(fila.valor, moneda)
+    if fila.tipo == PORCENTAJE:
+        return format_percent(fila.valor, fila.decimales)
+    return format_ratio(fila.valor, fila.decimales)
+
+
+def _pct(fraccion: Decimal | None) -> Decimal | None:
+    return fraccion * CIEN if fraccion is not None else None
+
+
+def filas_enfoque_total(r: DuPontResult) -> list[FilaDuPont]:
+    def roe(valor: Decimal | None) -> Decimal | str | None:
+        return valor if r.interpretable else NO_INTERPRETABLE
+
+    return [
+        FilaDuPont("Ganancia neta del año", r.utilidad_neta, IMPORTE),
+        FilaDuPont("Ventas (ingresos ordinarios)", r.ingresos_netos, IMPORTE),
+        FilaDuPont("Activos totales al cierre", r.activo_total, IMPORTE),
+        FilaDuPont("Patrimonio total al cierre", r.patrimonio_total, IMPORTE),
+        FilaDuPont("Margen neto", _pct(r.margen_neto), PORCENTAJE),
+        FilaDuPont("Rotación de activos", r.rotacion_activos, VECES),
+        FilaDuPont("RSA / ROA", _pct(r.rsa), PORCENTAJE),
+        FilaDuPont("Multiplicador del capital (MAF)", r.multiplicador_capital, VECES),
+        FilaDuPont("RSP / ROE DuPont", roe(r.roe_dupont_pct), PORCENTAJE, 2),
+        FilaDuPont("ROA directo (comprobación)", _pct(r.rsa_directo), PORCENTAJE),
+        FilaDuPont("ROE directo (comprobación)", roe(r.roe_directo_pct), PORCENTAJE, 2),
+    ]
+
+
+def filas_enfoque_controladora(r: DuPontResult) -> list[FilaDuPont]:
+    c = r.controladora
+    if c is None:
+        return []
+    f = c.factores
+    rsp = _pct(f.rsp_interpretable) if f.patrimonio_positivo else NO_INTERPRETABLE
+    directo = _pct(f.roe_directo) if f.patrimonio_positivo else NO_INTERPRETABLE
+    return [
+        FilaDuPont("Ganancia atribuible a la controladora", c.utilidad, IMPORTE),
+        FilaDuPont("Patrimonio atribuible a la controladora", c.patrimonio, IMPORTE),
+        FilaDuPont("Margen neto (controladora)", _pct(f.margen_neto), PORCENTAJE),
+        FilaDuPont("Rotación de activos", f.rotacion_activos, VECES),
+        FilaDuPont("RSA (controladora)", _pct(f.rsa), PORCENTAJE),
+        FilaDuPont("MAF (controladora)", f.maf, VECES),
+        FilaDuPont("RSP / ROE (controladora)", rsp, PORCENTAJE, 2),
+        FilaDuPont("ROE directo de la controladora (comprobación)", directo, PORCENTAJE, 2),
+    ]
 
 
 def generar_interpretacion(resultado: DuPontResult) -> str:
@@ -266,22 +318,29 @@ def generar_interpretacion(resultado: DuPontResult) -> str:
 
     margen_pct = resultado.margen_neto * CIEN
     partes = [
-        f"El margen neto fue de {margen_pct:.4f}%, es decir, de cada 100 unidades monetarias de ingresos netos "
-        f"la empresa convirtio {margen_pct:.2f} en utilidad neta.",
-        f"La rotacion de activos fue de {resultado.rotacion_activos:.4f} veces: los activos totales promedio "
-        f"generaron {resultado.rotacion_activos:.2f} veces su valor en ingresos netos durante el ejercicio.",
-        f"El multiplicador del capital fue de {resultado.multiplicador_capital:.4f} veces: los activos totales "
-        f"promedio equivalen a {resultado.multiplicador_capital:.2f} veces el patrimonio promedio (a mayor "
+        f"El margen neto fue de {margen_pct:.4f}%: de cada 100 unidades monetarias de ventas, "
+        f"{margen_pct:.2f} se convirtieron en ganancia neta.",
+        f"La rotacion de activos fue de {resultado.rotacion_activos:.4f} veces: los activos totales al cierre "
+        f"generaron {resultado.rotacion_activos:.2f} veces su valor en ventas durante el ejercicio.",
+        f"El margen neto por la rotacion da un RSA de {resultado.rsa * CIEN:.2f}%.",
+        f"El multiplicador del capital (MAF) fue de {resultado.multiplicador_capital:.4f} veces: los activos totales "
+        f"equivalen a {resultado.multiplicador_capital:.2f} veces el patrimonio total al cierre (a mayor "
         "multiplicador, mayor proporcion de los activos financiada con pasivos en lugar de patrimonio).",
-        f"El producto de los tres factores da un ROE de {resultado.roe_dupont_pct:.2f}% (utilidad neta / "
-        "patrimonio promedio, calculado con el patrimonio total).",
+        f"El RSA por el MAF da un RSP / ROE de {resultado.roe_dupont_pct:.2f}%, igual a la ganancia neta del año "
+        "entre el patrimonio total al cierre.",
     ]
-    if resultado.saldos_aproximados:
-        partes.append(
-            "Advertencia: no se dispuso de un saldo inicial real para este ejercicio, por lo que el activo y "
-            "patrimonio promedio se aproximaron usando el saldo final como saldo inicial. Los resultados de este "
-            "modelo DuPont deben interpretarse con esa limitacion."
-        )
     if any("INCOMPLETO" in a for a in resultado.advertencias):
         partes.append("Advertencia: al menos un estado financiero del ejercicio está incompleto.")
     return " ".join(partes)
+
+
+def interpretacion_controladora(resultado: DuPontResult) -> str | None:
+    """Lectura del enfoque de la controladora, separada de la del enfoque total."""
+    c = resultado.controladora
+    if not resultado.disponible or c is None or not c.disponible:
+        return None
+    return (
+        f"Con la ganancia y el patrimonio atribuibles a los propietarios de la controladora, el RSA fue de "
+        f"{c.factores.rsa * CIEN:.2f}% y el RSP / ROE de {c.factores.rsp * CIEN:.2f}%. Estas cifras no se suman ni "
+        "se comparan como si fueran del enfoque total: usan bases diferentes."
+    )

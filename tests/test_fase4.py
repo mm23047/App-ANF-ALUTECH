@@ -253,7 +253,8 @@ def test_requirements_cubre_las_librerias_importadas():
                 importados |= {a.name.split(".")[0] for a in nodo.names}
             elif isinstance(nodo, ast.ImportFrom) and nodo.module and nodo.level == 0:
                 importados.add(nodo.module.split(".")[0])
-    locales = {"app", "calculations", "components", "database", "modules", "reports", "scripts", "conftest", "humo_paginas"}
+    locales = {"app", "calculations", "components", "database", "modules", "reports", "scripts", "conftest", "humo_paginas",
+               "concordancia_documento", "test_fase8_vertical_dupont"}
     externos = {m for m in importados - locales if m not in sys.stdlib_module_names}
     assert externos == terceros
     assert {l.partition("==")[0].lower() for l in _requisitos()} == terceros

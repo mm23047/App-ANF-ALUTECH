@@ -80,7 +80,7 @@ RAMÍREZ VÁSQUEZ, GLORIA MARISOL RV20037
 
 [6.3 Fórmulas del análisis horizontal	21](#6.3-fórmulas-del-análisis-horizontal)
 
-[6.4 Análisis horizontal del estado de resultados	22](#6.4-análisis-horizontal-del-estado-de-resultados)
+[6.4 Análisis horizontal del estado de situación financiera y del estado de resultados	22](#6.4-análisis-horizontal-del-estado-de-resultados)
 
 [6.5 Análisis horizontal del capital de trabajo	25](#6.5-análisis-horizontal-del-capital-de-trabajo)
 
@@ -463,6 +463,8 @@ Para evaluar la evolución financiera de la empresa, se comparan los saldos de l
 
 Las comparaciones toman como base el saldo del período anterior. Asimismo, se consideran las posibles diferencias de presentación o clasificación entre los estados financieros de los distintos ejercicios, con el propósito de mantener la comparabilidad de las partidas analizadas.
 
+Las cifras provienen de las certificaciones de los estados financieros combinados auditados de 2021, 2022 y 2023 (Alutech – División Acero) y de los estados financieros consolidados de 2024 y 2025 (Alutech, S. A. de C. V. y subsidiarias, División Acero). El cambio de estados combinados a consolidados modifica la presentación de varias partidas, por lo que las variaciones 2023–2024 deben interpretarse con cautela.
+
 #### **6.3 Fórmulas del análisis horizontal** {#6.3-fórmulas-del-análisis-horizontal}
 
 Para determinar los cambios cuantitativos y porcentuales de las partidas financieras se utilizan las siguientes fórmulas:
@@ -484,9 +486,9 @@ $Δ%\ =\frac{(Vₜ\ -\ Vₜ₋₁)\ }{Vₜ₋₁}\ \times 100$
 
 La variación absoluta expresa cuánto aumentó o disminuyó una partida en términos monetarios, mientras que la variación relativa indica el cambio porcentual con respecto al saldo del período anterior. Cuando el valor del período anterior es igual a cero, la variación relativa no puede calcularse mediante esta fórmula. Si el saldo base es negativo, el resultado porcentual debe interpretarse con cautela, considerando la naturaleza de la partida y el sentido económico de la variación.
 
-#### **6.4 Análisis horizontal del estado de resultados** {#6.4-análisis-horizontal-del-estado-de-resultados}
+#### **6.4 Análisis horizontal del estado de situación financiera y del estado de resultados** {#6.4-análisis-horizontal-del-estado-de-resultados}
 
-A continuación se presentan los saldos y las variaciones absolutas y relativas de las cuentas estructurales del Estado de Situación Financiera de Alutech, S.A. de C.V. y subsidiarias (División Acero) durante el período 2021-20252
+A continuación se presentan los saldos y las variaciones absolutas y relativas de las cuentas estructurales del Estado de Situación Financiera de Alutech, S.A. de C.V. y subsidiarias (División Acero) durante el período 2021-2025.
 
 **Tabla 3\. Análisis Horizontal del Estado de Situación Financiera (2021 \- 2023\) \[USD \$\]**
 
@@ -495,11 +497,13 @@ A continuación se presentan los saldos y las variaciones absolutas y relativas 
 | **Efectivo y Equivalentes** | 10,840,865 | 20,155,298 | \+9,314,433 | \+85.92% | 12,130,206 | \-8,025,092 | \-39.82% |
 | **Cuentas por Cobrar Com.** | 53,081,088 | 32,581,092 | \-20,499,996 | \-38.62% | 41,272,525 | \+8,691,433 | \+26.68% |
 | **Inventarios (Neto)** | 148,440,504 | 141,069,442 | \-7,371,062 | \-4.97% | 141,491,319 | \+421,877 | \+0.30% |
-| **Total Activo Corriente** | **383,881,547** | **448,672,401** | **\+64,790,854** | **\+16.88%** | **541,094,544** | **\+92,422,143** | **\+20.60%** |
-| **Total Pasivo Corriente** | **205,973,230** | **231,914,180** | **\+25,940,950** | **\+12.59%** | **342,120,685** | **\+110,206,505** | **\+47.52%** |
+| **Total Activo Corriente** | **383,881,547** | **448,672,401** | **\+64,790,854** | **\+16.88%** | **429,794,544** | **\-18,877,857** | **\-4.21%** |
+| **Total Pasivo Corriente** | **205,973,230** | **231,944,180** | **\+25,970,950** | **\+12.61%** | **333,120,685** | **\+101,176,505** | **\+43.62%** |
 | **Total Activo** | 553,955,185 | 672,025,093 | \+118,069,908 | \+21.31% | 809,100,946 | \+137,075,853 | \+20.40% |
 | **Total Pasivo** | 408,633,995 | 458,148,329 | \+49,514,334 | \+12.12% | 581,427,552 | \+123,279,223 | \+26.91% |
 | **Total Patrimonio** | 145,321,190 | 213,876,764 | \+68,555,574 | \+47.18% | 227,673,394 | \+13,796,630 | \+6.45% |
+
+Nota: en esta tabla, las cuentas por cobrar corresponden únicamente a la línea «Cuentas por cobrar comerciales» de los estados combinados de 2021–2023.
 
 **Tabla 4\. Análisis Horizontal del Estado de Situación Financiera (2023 \- 2025\) \[USD \$\]**
 
@@ -508,13 +512,15 @@ A continuación se presentan los saldos y las variaciones absolutas y relativas 
 | Efectivo y equivalentes | 12,130,206 | 15,782,257 | \+3,652,051 | \+30.11% | 12,551,085 | −3,231,172 | −20.47% |
 | Cuentas por cobrar comerciales y otras cuentas por cobrar | 96,097,483 | 97,204,415 | \+1,106,932 | \+1.15% | 70,169,882 | −27,034,533 | −27.81% |
 | Inventarios (neto) | 141,491,319 | 116,761,311 | −24,730,008 | −17.48% | 69,818,060 | −46,943,251 | −40.20% |
-| Total activo corriente | 541,094,544 | 432,771,678 | −108,322,866 | −20.02% | 247,705,981 | −185,065,697 | −42.76% |
-| Total pasivo corriente | 342,120,685 | 362,966,215 | \+20,845,530 | \+6.09% | 371,274,007 | \+8,307,792 | \+2.29% |
+| Total activo corriente | 429,794,544 | 432,771,678 | \+2,977,134 | \+0.69% | 247,705,981 | −185,065,697 | −42.76% |
+| Total pasivo corriente | 333,120,685 | 362,966,215 | \+29,845,530 | \+8.96% | 371,274,007 | \+8,307,792 | \+2.29% |
 | Total activo | 809,100,946 | 827,176,374 | \+18,075,428 | \+2.23% | 782,049,561 | −45,126,813 | −5.46% |
 | Total pasivo | 581,427,552 | 601,114,586 | \+19,687,034 | \+3.39% | 550,889,363 | −50,225,223 | −8.36% |
 | Total patrimonio | 227,673,394 | 226,061,788 | −1,611,606 | −0.71% | 231,160,198 | \+5,098,410 | \+2.26% |
 
-Se analizan los rubros clave del desempeño económico y operativo de Alutech, S.A. de C.V. y subsidiarias (División Acero) durante el período 2021-20252.
+Nota: el importe de cuentas por cobrar de 2023 suma las cuentas por cobrar comerciales (41,272,525) y las otras cuentas por cobrar (54,824,958), porque los estados de 2024 y 2025 presentan ambas en una sola línea («Deudores comerciales y Otras Cuentas por Cobrar»). Por esa razón difiere del importe de 2023 de la Tabla 3.
+
+Se analizan los rubros clave del desempeño económico y operativo de Alutech, S.A. de C.V. y subsidiarias (División Acero) durante el período 2021-2025.
 
 **Tabla 5\. Análisis Horizontal del Estado de Resultados (2021 \- 2025\) \[USD \$\]**
 
@@ -524,9 +530,17 @@ Se analizan los rubros clave del desempeño económico y operativo de Alutech, S
 | Costo de ventas | 367,252,613 | 410,331,156 | 373,545,631 | 377,459,424 | 331,430,173 | \+11.73% | −8.96% | \+1.05% | −12.19% |
 | Utilidad bruta | 156,712,614 | 89,322,338 | 105,077,441 | 101,547,295 | 108,274,394 | −43.00% | \+17.64% | −3.36% | \+6.62% |
 | Gastos operativos\* | 53,179,448 | 58,057,208 | 63,602,388 | 66,353,377 | 53,608,750 | \+9.17% | \+9.55% | \+4.33% | −19.21% |
-| Utilidad operativa | 103,578,903 | 31,200,000\* | 44,689,021 | 35,193,918 | 54,665,644 | −69.88% | \+43.23% | −21.25% | \+55.33% |
+| Utilidad operativa | 103,578,903 | 31,200,977 | 44,689,021 | 35,193,918 | 54,665,644 | −69.88% | \+43.23% | −21.25% | \+55.33% |
 | Gastos financieros netos | 21,777,725 | 17,181,342 | 22,016,927 | 28,064,310 | 37,399,011 | −21.11% | \+28.14% | \+27.47% | \+33.26% |
 | Utilidad neta del año | 68,602,739 | 10,059,310 | 13,330,680 | 3,060,981 | 11,898,987 | −85.34% | \+32.52% | −77.04% | \+288.73% |
+
+Notas de la Tabla 5:
+
+\* Gastos operativos: gastos de administración y de venta o distribución y, en 2024–2025, gastos de personal y de depreciación y amortización. No incluyen el deterioro de cuentas por cobrar ni los otros ingresos netos de 2021–2023, que sí forman parte de la utilidad operativa.
+
+Utilidad operativa: los estados de 2022 y 2023 no imprimen este subtotal; se obtiene de sus partidas impresas (2022: 89,322,338 − 18,344,656 − 39,712,552 − 397,016 + 332,863 = 31,200,977).
+
+Gastos financieros netos: en 2021–2023 los estados presentan directamente el importe neto; en 2024–2025 corresponden a gastos financieros menos ingresos financieros (2024: 43,089,283 − 15,024,973; 2025: 51,914,906 − 14,515,895).
 
 #### **6.5 Análisis horizontal del capital de trabajo** {#6.5-análisis-horizontal-del-capital-de-trabajo}
 
@@ -537,31 +551,31 @@ El capital de trabajo neto ($CTN$) de Alutech experimentó transformaciones seve
 | Período | Activo Corriente (\$) | Pasivo Corriente (\$) | Capital de Trabajo Neto (\$) | Var. Absoluta CTN (\$) | Var. Relativa CTN (%) | Razón Corriente | Prueba Ácida |
 | :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- |
 | **2021** | 383,881,547 | 205,973,230 | **\+177,908,317** | Base | Base | 1.86x | 1.14x |
-| **2022** | 448,672,401 | 231,914,180 | **\+216,758,221** | \+38,849,904 | \+21.84% | 1.93x | 1.33x |
-| **2023** | 541,094,544 | 342,120,685 | **\+198,973,859** | \-17,784,362 | \-8.20% | 1.58x | 1.17x |
-| **2024** | 432,771,678 | 362,966,215 | **\+69,805,463** | \-129,168,396 | \-64.92% | 1.19x | 0.87x |
+| **2022** | 448,672,401 | 231,944,180 | **\+216,728,221** | \+38,819,904 | \+21.82% | 1.93x | 1.33x |
+| **2023** | 429,794,544 | 333,120,685 | **\+96,673,859** | \-120,054,362 | \-55.39% | 1.29x | 0.87x |
+| **2024** | 432,771,678 | 362,966,215 | **\+69,805,463** | \-26,868,396 | \-27.79% | 1.19x | 0.87x |
 | **2025** | 247,705,981 | 371,274,007 | **\-123,568,026** | \-193,373,489 | \-277.02% | 0.67x | 0.48x |
 
 **Análisis por subperíodos**
 
-**1\. 2021–2022 (Mejora del capital de trabajo y la liquidez):** El capital de trabajo neto (CTN) aumentó en USD 38.85 millones, equivalente a un crecimiento del 21.84%, al pasar de USD 177.91 millones en 2021 a USD 216.76 millones en 2022\. Este comportamiento se relaciona con un incremento del activo corriente del 16.88%, superior al crecimiento del pasivo corriente, que fue del 12.59%. En consecuencia, la razón corriente mejoró de 1.86x a 1.93x, lo que indica una mayor cobertura de las obligaciones corrientes mediante los activos corrientes.
+**1\. 2021–2022 (Mejora del capital de trabajo y la liquidez):** El capital de trabajo neto (CTN) aumentó en USD 38.82 millones, equivalente a un crecimiento del 21.82%, al pasar de USD 177.91 millones en 2021 a USD 216.73 millones en 2022\. Este comportamiento se relaciona con un incremento del activo corriente del 16.88%, superior al crecimiento del pasivo corriente, que fue del 12.61%. En consecuencia, la razón corriente mejoró de 1.86x a 1.93x, lo que indica una mayor cobertura de las obligaciones corrientes mediante los activos corrientes.
 
-**2\. 2022–2023 (Presión sobre el capital de trabajo):** En 2023, el activo corriente aumentó un 20.60%, hasta alcanzar USD 541.09 millones. Sin embargo, el pasivo corriente creció a un ritmo considerablemente mayor, del 47.52%, y llegó a USD 342.12 millones. Esta diferencia provocó una disminución del CTN de USD 17.78 millones, equivalente al 8.20%, hasta situarse en USD 198.97 millones. Asimismo, la razón corriente descendió de 1.93x a 1.58x. Estos resultados evidencian una presión creciente sobre la posición de liquidez, aunque para determinar qué obligaciones específicas explicaron el aumento del pasivo corriente es necesario revisar su composición en los estados financieros.
+**2\. 2022–2023 (Presión sobre el capital de trabajo):** En 2023, el activo corriente disminuyó un 4.21%, hasta USD 429.79 millones, mientras que el pasivo corriente aumentó un 43.62%, hasta USD 333.12 millones. Esta combinación provocó una disminución del CTN de USD 120.05 millones, equivalente al 55.39%, hasta situarse en USD 96.67 millones. Asimismo, la razón corriente descendió de 1.93x a 1.29x y la prueba ácida, de 1.33x a 0.87x, por debajo de 1.0. Estos resultados evidencian una presión creciente sobre la posición de liquidez, aunque para determinar qué obligaciones específicas explicaron el aumento del pasivo corriente es necesario revisar su composición en los estados financieros.
 
-**3\. 2023–2024 (Contracción del activo corriente y deterioro de la liquidez):** Durante 2024, el activo corriente disminuyó un 20.02%, hasta USD 432.77 millones, mientras que el pasivo corriente aumentó un 6.09%, hasta USD 362.97 millones. Entre los cambios observados destaca la reducción del inventario, que fue del 17.48%. La combinación de una menor cantidad de activos corrientes y un mayor pasivo corriente provocó una caída del CTN de USD 129.17 millones, equivalente al 64.92%, hasta USD 69.81 millones. Además, la razón corriente descendió a 1.19x y la prueba ácida se situó en 0.87x, por debajo de 1.0. Esto indica que, al excluir los inventarios, los activos corrientes considerados en la prueba ácida no alcanzaban a cubrir íntegramente las obligaciones corrientes.
+**3\. 2023–2024 (Activo corriente casi estable y menor capital de trabajo):** Durante 2024, el activo corriente aumentó un 0.69%, hasta USD 432.77 millones, mientras que el pasivo corriente aumentó un 8.96%, hasta USD 362.97 millones. Entre los cambios observados destaca la reducción del inventario, que fue del 17.48%. Como el pasivo corriente creció más que el activo corriente, el CTN cayó USD 26.87 millones, equivalente al 27.79%, hasta USD 69.81 millones. Además, la razón corriente descendió de 1.29x a 1.19x y la prueba ácida se mantuvo en 0.87x, por debajo de 1.0. Esto indica que, al excluir los inventarios, los activos corrientes considerados en la prueba ácida no alcanzaban a cubrir íntegramente las obligaciones corrientes. Estas variaciones deben interpretarse considerando el cambio de estados combinados a consolidados.
 
 **4\. 2024–2025 (Déficit de capital de trabajo):** En 2025 se produjo un deterioro adicional de la posición de liquidez. El activo corriente disminuyó un 42.76%, hasta USD 247.71 millones, y el inventario registró una reducción del 40.20%, hasta USD 69.82 millones. Paralelamente, el pasivo corriente aumentó un 2.29%, hasta USD 371.27 millones. Como resultado, el CTN pasó de un saldo positivo de USD 69.81 millones en 2024 a un saldo negativo de USD 123.57 millones en 2025, lo que representa una variación absoluta desfavorable de USD 193.37 millones. La razón corriente cayó de 1.19x a 0.67x y la prueba ácida descendió de 0.87x a 0.48x. Por tanto, al cierre de 2025, la empresa presentaba un déficit de capital de trabajo: por cada dólar de pasivo corriente disponía de aproximadamente USD 0.67 en activos corrientes y USD 0.48 en activos corrientes excluyendo inventarios.
 
 #### **6.6 Tablas de resultados** {#6.6-tablas-de-resultados}
 
-A continuación se resumen las comparaciones acumuladas consolidadas del capital de trabajo para la empresa estudiada.  
+A continuación se resumen las comparaciones interanuales del capital de trabajo para la empresa estudiada.  
 **Tabla 7\. Resumen de Variaciones del Capital de Trabajo Neto (2021 \- 2025\) \[USD \$\]**
 
 | Período Comparativo | Activo Corriente Inicial (\$) | Activo Corriente Final (\$) | Pasivo Corriente Inicial (\$) | Pasivo Corriente Final (\$) | CTN Inicial (\$) | CTN Final (\$) | Variación Absoluta CTN (\$) | Variación Relativa CTN (%) |
 | :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- |
-| **2021 vs 2022** | 383,881,547 | 448,672,401 | 205,973,230 | 231,914,180 | \+177,908,317 | \+216,758,221 | \+38,849,904 | \+21.84% |
-| **2022 vs 2023** | 448,672,401 | 541,094,544 | 231,914,180 | 342,120,685 | \+216,758,221 | \+198,973,859 | \-17,784,362 | \-8.20% |
-| **2023 vs 2024** | 541,094,544 | 432,771,678 | 342,120,685 | 362,966,215 | \+198,973,859 | \+69,805,463 | \-129,168,396 | \-64.92% |
+| **2021 vs 2022** | 383,881,547 | 448,672,401 | 205,973,230 | 231,944,180 | \+177,908,317 | \+216,728,221 | \+38,819,904 | \+21.82% |
+| **2022 vs 2023** | 448,672,401 | 429,794,544 | 231,944,180 | 333,120,685 | \+216,728,221 | \+96,673,859 | \-120,054,362 | \-55.39% |
+| **2023 vs 2024** | 429,794,544 | 432,771,678 | 333,120,685 | 362,966,215 | \+96,673,859 | \+69,805,463 | \-26,868,396 | \-27.79% |
 | **2024 vs 2025** | 432,771,678 | 247,705,981 | 362,966,215 | 371,274,007 | \+69,805,463 | \-123,568,026 | \-193,373,489 | \-277.02% |
 
 #### **6.7 Interpretación de resultados** {#6.7-interpretación-de-resultados}
@@ -578,7 +592,7 @@ El análisis horizontal de Alutech, S. A. de C. V. y subsidiarias, División Ace
 
 El análisis horizontal de Alutech, S. A. de C. V. y subsidiarias, División Acero, evidencia un deterioro significativo de la posición de capital de trabajo durante el período 2021–2025, particularmente a partir de 2023\.
 
-En 2021 y 2022, la empresa presentó un capital de trabajo neto positivo de USD 177.91 millones y USD 216.76 millones, respectivamente, con razones corrientes de 1.86x y 1.93x. No obstante, desde 2023 se observa un debilitamiento progresivo de estos indicadores. En 2024, el CTN disminuyó a USD 69.81 millones y la prueba ácida cayó a 0.87x. La situación se agravó en 2025, cuando el activo corriente descendió a USD 247.71 millones y el pasivo corriente aumentó a USD 371.27 millones. Como resultado, el CTN pasó a un saldo negativo de USD 123.57 millones, la razón corriente se redujo a 0.67x y la prueba ácida llegó a 0.48x.
+En 2021 y 2022, la empresa presentó un capital de trabajo neto positivo de USD 177.91 millones y USD 216.73 millones, respectivamente, con razones corrientes de 1.86x y 1.93x. No obstante, desde 2023 se observa un debilitamiento progresivo de estos indicadores. En 2023, el CTN disminuyó a USD 96.67 millones, la razón corriente a 1.29x y la prueba ácida a 0.87x. En 2024, el CTN disminuyó a USD 69.81 millones y la razón corriente a 1.19x, mientras que la prueba ácida se mantuvo en 0.87x. La situación se agravó en 2025, cuando el activo corriente descendió a USD 247.71 millones y el pasivo corriente aumentó a USD 371.27 millones. Como resultado, el CTN pasó a un saldo negativo de USD 123.57 millones, la razón corriente se redujo a 0.67x y la prueba ácida llegó a 0.48x.
 
 Estos indicadores reflejan que, al cierre de 2025, los activos corrientes eran insuficientes para cubrir la totalidad de las obligaciones corrientes, incluso antes de considerar los posibles plazos de recuperación de las cuentas por cobrar. Sin embargo, este resultado no demuestra por sí solo una insolvencia inmediata ni permite concluir que la empresa haya incumplido sus obligaciones de pago.
 

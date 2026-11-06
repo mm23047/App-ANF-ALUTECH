@@ -57,20 +57,17 @@
       },
       "vertical_resultados": {
         "4001": ["10000.00", "100.00"], "Ingresos netos": ["10000.00", "100.00"],
-        "5001": ["6000.00", "60.00"], "Costo de ventas": ["6000.00", "60.00"], "UTILIDAD BRUTA": ["4000.00", "40.00"],
-        "6001": ["1200.00", "12.00"], "6002": ["800.00", "8.00"], "6003": ["150.00", "1.50"], "6004": ["50.00", "0.50"],
-        "Gastos operativos netos": ["1900.00", "19.00"], "UTILIDAD OPERATIVA": ["2100.00", "21.00"],
-        "7001": ["30.00", "0.30"], "7002": ["230.00", "2.30"], "Resultado financiero": ["-200.00", "-2.00"],
-        "7003": ["20.00", "0.20"], "7004": ["70.00", "0.70"], "Otros resultados no operativos": ["-50.00", "-0.50"],
+        "5001": ["6000.00", "-60.00"], "Costo de ventas": ["6000.00", "-60.00"], "UTILIDAD BRUTA": ["4000.00", "40.00"],
+        "6001": ["1200.00", "-12.00"], "6002": ["800.00", "-8.00"], "6003": ["150.00", "1.50"], "6004": ["50.00", "-0.50"],
+        "Gastos operativos netos": ["1900.00", "-19.00"], "UTILIDAD OPERATIVA": ["2100.00", "21.00"],
+        "7001": ["30.00", "0.30"], "7002": ["230.00", "-2.30"], "Resultado financiero": ["-200.00", "-2.00"],
+        "7003": ["20.00", "0.20"], "7004": ["70.00", "-0.70"], "Otros resultados no operativos": ["-50.00", "-0.50"],
         "UTILIDAD ANTES DE IMPUESTOS": ["1850.00", "18.50"],
-        "8001": ["555.00", "5.55"], "Impuesto sobre la renta": ["555.00", "5.55"], "UTILIDAD NETA": ["1295.00", "12.95"]
+        "8001": ["555.00", "-5.55"], "Impuesto sobre la renta": ["555.00", "-5.55"], "UTILIDAD NETA": ["1295.00", "12.95"]
       },
-      "dupont": {"activo_inicial": "13000.00", "activo_final": "15000.00", "activo_promedio": "14000.00",
-                 "patrimonio_inicial": "6000.00", "patrimonio_final": "7000.00", "patrimonio_promedio": "6500.00",
-                 "utilidad_neta": "1295.00", "ingresos_netos": "10000.00",
-                 "margen_neto": "1295/10000", "rotacion_activos": "10000/14000", "multiplicador_capital": "14000/6500",
-                 "roe": "1295/6500", "roe_pct": "19.92", "saldos_aproximados": false, "interpretable": true,
-                 "fuente": "Saldos iniciales capturados manualmente"},
+      "dupont": {"activo_total": "15000.00", "patrimonio_total": "7000.00", "utilidad_neta": "1295.00", "ingresos_netos": "10000.00",
+                 "margen_neto": "1295/10000", "rotacion_activos": "10000/15000", "multiplicador_capital": "15000/7000",
+                 "roe": "1295/7000", "roe_pct": "18.50", "interpretable": true},
       "estado": "DEFINITIVO"
     },
     "2022": {
@@ -96,20 +93,17 @@
       },
       "vertical_resultados": {
         "4001": ["12000.00", "100.00"], "Ingresos netos": ["12000.00", "100.00"],
-        "5001": ["7450.00", "62.08"], "Costo de ventas": ["7450.00", "62.08"], "UTILIDAD BRUTA": ["4550.00", "37.92"],
-        "6001": ["1333.33", "11.11"], "6002": ["900.00", "7.50"], "6004": ["116.67", "0.97"],
-        "Gastos operativos netos": ["2350.00", "19.58"], "UTILIDAD OPERATIVA": ["2200.00", "18.33"],
-        "7001": ["45.00", "0.38"], "7002": ["245.00", "2.04"], "Resultado financiero": ["-200.00", "-1.67"],
+        "5001": ["7450.00", "-62.08"], "Costo de ventas": ["7450.00", "-62.08"], "UTILIDAD BRUTA": ["4550.00", "37.92"],
+        "6001": ["1333.33", "-11.11"], "6002": ["900.00", "-7.50"], "6004": ["116.67", "-0.97"],
+        "Gastos operativos netos": ["2350.00", "-19.58"], "UTILIDAD OPERATIVA": ["2200.00", "18.33"],
+        "7001": ["45.00", "0.38"], "7002": ["245.00", "-2.04"], "Resultado financiero": ["-200.00", "-1.67"],
         "Otros resultados no operativos": [null, null],
         "UTILIDAD ANTES DE IMPUESTOS": ["2000.00", "16.67"],
-        "8001": ["600.00", "5.00"], "Impuesto sobre la renta": ["600.00", "5.00"], "UTILIDAD NETA": ["1400.00", "11.67"]
+        "8001": ["600.00", "-5.00"], "Impuesto sobre la renta": ["600.00", "-5.00"], "UTILIDAD NETA": ["1400.00", "11.67"]
       },
-      "dupont": {"activo_inicial": "15000.00", "activo_final": "17000.00", "activo_promedio": "16000.00",
-                 "patrimonio_inicial": "7000.00", "patrimonio_final": "8500.00", "patrimonio_promedio": "7750.00",
-                 "utilidad_neta": "1400.00", "ingresos_netos": "12000.00",
-                 "margen_neto": "1400/12000", "rotacion_activos": "12000/16000", "multiplicador_capital": "16000/7750",
-                 "roe": "1400/7750", "roe_pct": "18.06", "saldos_aproximados": false, "interpretable": true,
-                 "fuente": "Balance final del ejercicio 2021"},
+      "dupont": {"activo_total": "17000.00", "patrimonio_total": "8500.00", "utilidad_neta": "1400.00", "ingresos_netos": "12000.00",
+                 "margen_neto": "1400/12000", "rotacion_activos": "12000/17000", "multiplicador_capital": "17000/8500",
+                 "roe": "1400/8500", "roe_pct": "16.47", "interpretable": true},
       "estado": "DEFINITIVO"
     },
     "2023": {
@@ -135,21 +129,17 @@
       },
       "vertical_resultados": {
         "4001": ["9876.54", "100.00"], "Ingresos netos": ["9876.54", "100.00"],
-        "5001": ["7000.00", "70.88"], "Costo de ventas": ["7000.00", "70.88"], "UTILIDAD BRUTA": ["2876.54", "29.12"],
-        "6001": ["1800.00", "18.23"], "6002": ["1000.00", "10.13"], "6003": ["123.45", "1.25"],
-        "Gastos operativos netos": ["2676.55", "27.10"], "UTILIDAD OPERATIVA": ["199.99", "2.02"],
-        "7002": ["300.00", "3.04"], "Resultado financiero": ["-300.00", "-3.04"],
+        "5001": ["7000.00", "-70.88"], "Costo de ventas": ["7000.00", "-70.88"], "UTILIDAD BRUTA": ["2876.54", "29.12"],
+        "6001": ["1800.00", "-18.23"], "6002": ["1000.00", "-10.13"], "6003": ["123.45", "1.25"],
+        "Gastos operativos netos": ["2676.55", "-27.10"], "UTILIDAD OPERATIVA": ["199.99", "2.02"],
+        "7002": ["300.00", "-3.04"], "Resultado financiero": ["-300.00", "-3.04"],
         "Otros resultados no operativos": [null, null],
         "UTILIDAD ANTES DE IMPUESTOS": ["-100.01", "-1.01"],
         "8001": ["0.00", "0.00"], "Impuesto sobre la renta": ["0.00", "0.00"], "UTILIDAD NETA": ["-100.01", "-1.01"]
       },
-      "dupont": {"activo_inicial": "17000.00", "activo_final": "17200.00", "activo_promedio": "17100.00",
-                 "patrimonio_inicial": "8500.00", "patrimonio_final": "8399.99", "patrimonio_promedio": "8449.995",
-                 "utilidad_neta": "-100.01", "ingresos_netos": "9876.54",
-                 "margen_neto": "-10001/987654", "rotacion_activos": "987654/1710000",
-                 "multiplicador_capital": "17100000/8449995",
-                 "roe": "-100010/8449995", "roe_pct": "-1.18", "saldos_aproximados": false, "interpretable": true,
-                 "fuente": "Balance final del ejercicio 2022"},
+      "dupont": {"activo_total": "17200.00", "patrimonio_total": "8399.99", "utilidad_neta": "-100.01", "ingresos_netos": "9876.54",
+                 "margen_neto": "-10001/987654", "rotacion_activos": "987654/1720000", "multiplicador_capital": "1720000/839999",
+                 "roe": "-10001/839999", "roe_pct": "-1.19", "interpretable": true},
       "estado": "DEFINITIVO"
     }
   }

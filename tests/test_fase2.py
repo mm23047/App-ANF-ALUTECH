@@ -9,6 +9,7 @@ from openpyxl import Workbook
 
 from calculations.balance_sheet import compute_balance_sheet
 from calculations.controls import CONCILIADO, DIFERENCIA, SIN_DATOS, conciliar_resultado
+from calculations.banderas import banderas_dupont, resumen
 from calculations.dupont import compute_dupont, generar_interpretacion
 from calculations.income_statement import compute_income_statement
 from calculations.validation import aviso_signo
@@ -22,6 +23,7 @@ from database.repositories import (
     get_company,
     get_entries_map,
     get_fiscal_period,
+    get_initial_balances_map,
     get_or_create_fiscal_period,
     save_company,
     upsert_entry,
@@ -65,76 +67,77 @@ def _completo(s, anio, activo, patrimonio, ingresos, utilidad):
     )
 
 
-# ------------------------------------------------------------------ A-01 / A-02 saldos iniciales
+# ------------------------------------------------------------------ saldos al cierre (trabajo ANF, 8.4, 9.5 y 9.6)
 
-def test_usa_el_balance_completo_del_ejercicio_inmediato_anterior(bd):
+def test_no_usa_el_balance_del_ejercicio_inmediato_anterior(bd):
     with session_scope() as s:
         _completo(s, 2021, 1000, 600, 1000, 100)
         r = compute_dupont(s, _completo(s, 2022, 1200, 700, 1200, 150))
-    assert r.saldos_aproximados is False and r.fuente_saldos_iniciales == "Balance final del ejercicio 2021"
-    assert (r.activo_inicial, r.patrimonio_inicial) == (Decimal("1000.00"), Decimal("600.00"))
+    assert (r.activo_total, r.patrimonio_total) == (Decimal("1200.00"), Decimal("700.00"))
+    assert r.roe_directo_pct == Decimal("21.43")  # 150 / 700
+    assert not hasattr(r, "activo_promedio") and not hasattr(r, "patrimonio_promedio")
 
 
-@pytest.mark.parametrize("balance_2022, causa", [
-    (None, "no existe el ejercicio 2022"),
-    ({"1001": 1000, "3001": 1000}, "incompleto (sin datos de Pasivo)"),
-    ({"1001": 1000, "2001": 100, "3001": 500}, "no cuadra (diferencia 400.00)"),
-    ({"1001": 0, "2001": 0, "3001": 0}, "activo total menor o igual a cero"),
+@pytest.mark.parametrize("balance_2022", [
+    None,
+    {"1001": 1000, "3001": 1000},  # incompleto (sin Pasivo)
+    {"1001": 1000, "2001": 100, "3001": 500},  # no cuadra
+    {"1001": 0, "2001": 0, "3001": 0},  # activo total cero
 ])
-def test_balance_anterior_inexistente_o_inutilizable_aproxima_con_causa(bd, balance_2022, causa):
+def test_el_estado_del_balance_anterior_no_afecta_ni_aproxima(bd, balance_2022):
     with session_scope() as s:
-        _completo(s, 2021, 5000, 3000, 5000, 1)  # ejercicio no consecutivo: nunca debe usarse
+        _completo(s, 2021, 5000, 3000, 5000, 1)
         if balance_2022 is not None:
             _capturar(s, 2022, balance_2022)
         r = compute_dupont(s, _completo(s, 2023, 2000, 1000, 2000, 200))
-    assert r.saldos_aproximados is True
-    assert causa in r.fuente_saldos_iniciales and "APROXIMADO" in r.fuente_saldos_iniciales
-    assert (r.activo_inicial, r.patrimonio_inicial) == (Decimal("2000.00"), Decimal("1000.00"))
-    assert any("aproximados" in a for a in r.advertencias)
+    assert r.disponible and resumen(banderas_dupont(r)) == "DEFINITIVO"
+    assert r.rotacion_activos == Decimal("1") and r.multiplicador_capital == Decimal("2")
+    assert r.roe_dupont_pct == Decimal("20.00")
+    assert not any("aproximad" in a.lower() for a in r.advertencias)
 
 
-def test_saldos_manuales_completos_se_usan_e_indican_por_que(bd):
+def test_saldos_manuales_completos_se_conservan_pero_no_se_usan(bd):
     with session_scope() as s:
         p = _completo(s, 2021, 1200, 700, 1200, 150)
+        sin_manuales = compute_dupont(s, p)
         for codigo, valor in (("1001", "600"), ("1101", "400"), ("3001", "550"), ("3003", "50")):
             upsert_initial_balance(s, fiscal_period_id=p.id, account_id=_cuenta(s, codigo).id, valor=valor)
         r = compute_dupont(s, p)
-    assert r.saldos_aproximados is False
-    assert (r.activo_inicial, r.patrimonio_inicial) == (Decimal("1000.00"), Decimal("600.00"))
-    assert "manualmente" in r.fuente_saldos_iniciales and "no existe el ejercicio 2020" in r.fuente_saldos_iniciales
+        guardados = get_initial_balances_map(s, p.id)
+    assert len(guardados) == 4  # la funcionalidad de saldos iniciales sigue guardando
+    assert r.roe == sin_manuales.roe and r.multiplicador_capital == Decimal("1200") / Decimal("700")
 
 
-@pytest.mark.parametrize("manuales, causa", [
-    ({"3001": "500"}, "sin datos de Activo"),
-    ({"1001": "800"}, "sin datos de Patrimonio"),
-    ({"1001": "0", "3001": "0"}, "activo total menor o igual a cero"),
-])
-def test_saldos_manuales_parciales_no_se_usan_como_completos(bd, manuales, causa):
+@pytest.mark.parametrize("manuales", [{"3001": "500"}, {"1001": "800"}, {"1001": "0", "3001": "0"}])
+def test_saldos_manuales_parciales_tampoco_afectan(bd, manuales):
     with session_scope() as s:
         p = _completo(s, 2021, 1000, 600, 1000, 100)
         for codigo, valor in manuales.items():
             upsert_initial_balance(s, fiscal_period_id=p.id, account_id=_cuenta(s, codigo).id, valor=valor)
         r = compute_dupont(s, p)
-    assert r.saldos_aproximados is True and causa in r.fuente_saldos_iniciales
-    assert r.activo_inicial == Decimal("1000.00") and r.rotacion_activos == Decimal("1")
+    assert r.disponible and r.rotacion_activos == Decimal("1") and r.roe_dupont_pct == Decimal("16.67")
 
 
 # ------------------------------------------------------------------ A-04 patrimonio no positivo
 
-@pytest.mark.parametrize("inicial, final, texto", [
-    ((1000, -200), (1000, -200), "final"),            # perdida con patrimonio negativo
-    ((1000, -100), (1000, 400), "inicial"),            # promedio positivo, inicial negativo
-    ((1000, 0), (1000, 300), "inicial"),               # patrimonio inicial cero
-])
-def test_patrimonio_no_positivo_hace_el_roe_no_interpretable(bd, inicial, final, texto):
+def test_patrimonio_negativo_al_cierre_hace_el_roe_no_interpretable(bd):
     with session_scope() as s:
-        _completo(s, 2021, inicial[0], inicial[1], 1000, 0)
-        r = compute_dupont(s, _completo(s, 2022, final[0], final[1], 1000, -100))
+        _completo(s, 2021, 1000, -200, 1000, 0)  # perdida con patrimonio negativo
+        r = compute_dupont(s, _completo(s, 2022, 1000, -200, 1000, -100))
     assert r.disponible is False and r.interpretable is False
-    assert "ROE NO INTERPRETABLE" in r.motivo_no_disponible and texto in r.motivo_no_disponible
+    assert "ROE NO INTERPRETABLE" in r.motivo_no_disponible and "al cierre" in r.motivo_no_disponible
     assert r.margen_neto == Decimal("-0.1")  # los factores quedan solo como referencia
     assert generar_interpretacion(r).startswith("No es posible generar una interpretacion")
     assert any(c.nombre.startswith("Patrimonio") and not c.correcto for c in r.controles)
+
+
+@pytest.mark.parametrize("patrimonio_anterior", [-100, 0])
+def test_patrimonio_anterior_no_positivo_no_invalida_el_ejercicio(bd, patrimonio_anterior):
+    """Con saldos al cierre, el patrimonio del ejercicio anterior no interviene."""
+    with session_scope() as s:
+        _completo(s, 2021, 1000, patrimonio_anterior, 1000, 0)
+        r = compute_dupont(s, _completo(s, 2022, 1000, 400, 1000, -100))
+    assert r.disponible and r.interpretable and r.roe_directo_pct == Decimal("-25.00")
 
 
 def test_perdida_con_patrimonio_positivo_sigue_siendo_valida(bd):
@@ -160,20 +163,20 @@ def test_reporte_dupont_no_interpretable_no_muestra_roe_ni_interpretacion(bd, mo
     assert any(e.startswith("ROE NO INTERPRETABLE") for e in errores)
     assert escritos == []  # sin interpretacion automatica
     valores = dict(zip(tablas[0]["Componente"], tablas[0]["Valor"]))
-    assert valores["ROE (DuPont)"] == "NO INTERPRETABLE"
+    assert valores["RSP / ROE DuPont"] == "NO INTERPRETABLE"
     assert "50.00%" not in " ".join(valores.values())
 
 
 # ------------------------------------------------------------------ B-01 precision
 
-def test_factores_y_promedios_sin_redondeo_intermedio(bd):
+def test_factores_sin_redondeo_intermedio(bd):
     with session_scope() as s:
         _capturar(s, 2021, {"1001": "1000.01", "2001": "400.00", "3001": "600.01"})
         r = compute_dupont(s, _capturar(s, 2022, {"1001": "1000.00", "2001": "400.00", "3001": "600.00"},
                                         {"4001": "1000", "8001": "900"}))
-    assert r.activo_promedio == Decimal("1000.005") and r.patrimonio_promedio == Decimal("600.005")
-    assert r.multiplicador_capital == Decimal("1000.005") / Decimal("600.005")
-    assert r.roe == r.margen_neto * r.rotacion_activos * r.multiplicador_capital
+    assert r.multiplicador_capital == Decimal("1000.00") / Decimal("600.00")
+    assert r.rsa == r.margen_neto * r.rotacion_activos
+    assert r.roe == r.rsa * r.multiplicador_capital
 
 
 @pytest.mark.parametrize("activo, patrimonio, ingresos, utilidad", [
@@ -202,12 +205,12 @@ def test_controles_utiles_en_lugar_de_la_identidad(bd):
                                            {"4001": 1000, "8001": 900}))
     assert [c.nombre for c in bueno.controles] == [
         "Balance del ejercicio cuadra", "Balance del ejercicio completo", "Estado de Resultados completo",
-        "Saldos iniciales reales (no aproximados)", "Resultado del ejercicio conciliado con la utilidad neta",
-        "Signos según la convención", "Patrimonio inicial, final y promedio positivos",
+        "Resultado del ejercicio conciliado con la utilidad neta",
+        "Signos según la convención", "Patrimonio total al cierre positivo",
     ]
     assert all(c.correcto for c in bueno.controles)
     fallidos = {c.nombre for c in malo.controles if not c.correcto}
-    assert {"Balance del ejercicio cuadra", "Estado de Resultados completo", "Saldos iniciales reales (no aproximados)",
+    assert {"Balance del ejercicio cuadra", "Estado de Resultados completo",
             "Resultado del ejercicio conciliado con la utilidad neta"} <= fallidos
     assert "coincide" not in generar_interpretacion(bueno)
 

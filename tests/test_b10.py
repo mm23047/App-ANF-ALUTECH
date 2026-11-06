@@ -51,7 +51,7 @@ ESPECIALES = [
     "=",
 ]
 # Unicas formulas que genera la aplicacion (columnas D, E y F).
-FORMULA_LEGITIMA = re.compile(r"^=(SUM\(C\d+:C\d+\)|0|-?C\d+([+-]C\d+)*|C\d+-D\d+|C\d+/\$C\$\d+\*100)$")
+FORMULA_LEGITIMA = re.compile(r"^=(SUM\(C\d+:C\d+\)|0|-?C\d+([+-]C\d+)*|C\d+-D\d+|-?C\d+/\$C\$\d+\*100)$")
 
 
 def _guardar_y_leer(wb):

@@ -16,7 +16,15 @@ Criterios (los del trabajo, seccion 8.2 y 8.4):
     al cierre. El enfoque de la controladora usa la utilidad y el
     patrimonio atribuibles a los propietarios de la controladora.
 Los valores se calculan con Decimal sin redondeo intermedio; el redondeo
-solo se aplica al presentar.
+solo se aplica al presentar. Unica excepcion, porque el trabajo la escribe asi
+(9.3): el ciclo operativo suma EPI y PPC ya redondeados a 2 decimales y el CCE
+resta de ese resultado el PPP a 2 decimales. La regla es la misma en todos los
+ejercicios y solo depende de los importes.
+
+Cuentas por cobrar: el indicador principal usa la linea comercial presentada,
+la formula explicita de 9.3 en todos los ejercicios. La cartera comercial y
+otras es un indicador distinto, tambien para todos los ejercicios; 8.2 B
+publica su valor solo en 2023 (ver reports/secciones.py, bases_cxc).
 """
 from __future__ import annotations
 
@@ -24,12 +32,14 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Callable
 
+from calculations.dupont import factores_controladora, factores_total
 from calculations.rubros import RUBROS, DatosEjercicio
-from components.money import format_money, format_percent
+from components.money import format_money, format_percent, redondear
 
 CERO = Decimal("0")
 CIEN = Decimal("100")
 DIAS = Decimal("365")
+DECIMALES_CICLO = 2  # precision de los operandos que 9.3 suma y resta
 
 USD, VECES, PCT, DIAS_U = "USD", "veces", "%", "días"
 
@@ -189,19 +199,21 @@ def _ppp(d):
 
 
 def _ciclo_operativo(d):
+    """CO = EPI + PPC con los operandos a 2 decimales: el desarrollo escrito de 9.3 (p. ej. 125.48 + 23.80 = 149.28)."""
     ppi, m1, _ = _ppi(d)
     ppc, m2, _ = _ppc(d)
     if ppi is None or ppc is None:
         return None, m1 or m2, None
-    return ppi + ppc, None, None
+    return redondear(ppi, DECIMALES_CICLO) + redondear(ppc, DECIMALES_CICLO), None, None
 
 
 def _cce(d):
+    """CCE = CO − PPP, con el CO anterior y el PPP a 2 decimales (9.3, p. ej. 169.72 − 191.12 = −21.40)."""
     co, m1, _ = _ciclo_operativo(d)
     ppp, m2, _ = _ppp(d)
     if co is None or ppp is None:
         return None, m1 or m2, None
-    return co - ppp, None, None
+    return co - redondear(ppp, DECIMALES_CICLO), None, None
 
 
 @_con(BS, ER)
@@ -241,8 +253,11 @@ def _cobertura_intereses_bruta(d):
 
 
 def _cobertura_pagos_fijos(d):
-    return None, ("Los estados no informan las cuotas de arrendamiento ni la amortización obligatoria del principal; "
-                  "con la información disponible el índice no puede separarse de la razón de cargos de interés fijo."), None
+    """Criterio del trabajo (8.3 C): sin desglose de cuotas de arrendamiento ni de amortizacion del principal, ambos
+    terminos valen cero en la formula y el indice iguala a la razon de cargos de interes fijo."""
+    valor, motivo, _ = _cobertura_intereses(d)
+    return valor, motivo, ("Los estados no desglosan las cuotas de arrendamiento ni la amortización obligatoria del principal: el índice "
+                           "iguala a la razón de cargos de interés fijo (trabajo, 8.3 C). No mide la cobertura con esos pagos.")
 
 
 @_con(ER)
@@ -292,60 +307,77 @@ _MOTIVO_PRECIO = ("No se dispone de un precio de mercado verificable de acciones
                   "de inversión, títulos de deuda) ni del número de acciones.")
 
 
+# DuPont: las formulas estan solo en calculations/dupont.py. Estas funciones las
+# exponen como indicadores (fuente de la comparacion con el trabajo ANF).
 @_con(BS)
 def _maf(d):
-    if d.bs.total_patrimonio <= CERO:
+    maf = factores_total(d).maf_interpretable
+    if maf is None:
         return None, "El patrimonio es cero o negativo.", None
-    return _div(d.bs.total_activo, d.bs.total_patrimonio, "el multiplicador del apalancamiento financiero")
+    return maf, None, None
+
+
+def _motivo_rsa(d, margen):
+    if margen is None:
+        return _margen_neto(d)[1]
+    return _rotacion_activos(d)[1] or "El activo total es cero o negativo."
 
 
 def _roa_dupont(d):
-    margen, m1, _ = _margen_neto(d)
-    rotacion, m2, _ = _rotacion_activos(d)
-    if margen is None or rotacion is None:
-        return None, m1 or m2, None
-    return margen * rotacion, None, None
+    f = factores_total(d)
+    if f.rsa is None:
+        return None, _motivo_rsa(d, f.margen_neto), None
+    return f.rsa * CIEN, None, None
 
 
 def _roe_dupont(d):
-    roa, m1, _ = _roa_dupont(d)
-    maf, m2, _ = _maf(d)
+    roa, motivo, _ = _roa_dupont(d)
+    maf, motivo_maf, _ = _maf(d)
     if roa is None or maf is None:
-        return None, m1 or m2, None
-    return roa * maf, None, None
+        return None, motivo or motivo_maf, None
+    return factores_total(d).rsp * CIEN, None, None
 
 
 @_con(BS, ER)
 def _margen_neto_controladora(d):
-    utilidad, fuente = d.utilidad_controladora()
-    valor, motivo, _ = _pct(_div(utilidad, d.inc.ingresos_netos.subtotal, "el margen neto de la controladora"))
-    return valor, motivo or (None if utilidad is not None else fuente), f"Utilidad atribuible: {fuente}."
+    f, fuente = factores_controladora(d)
+    nota = f"Utilidad atribuible: {fuente}."
+    if f.margen_neto is None:
+        que = "Falta un dato para calcular" if d.utilidad_controladora()[0] is None else "El denominador es cero en"
+        return None, f"{que} el margen neto de la controladora.", nota
+    return f.margen_neto * CIEN, None, nota
 
 
 def _roa_controladora(d):
-    margen, m1, nota = _margen_neto_controladora(d)
-    rotacion, m2, _ = _rotacion_activos(d)
-    if margen is None or rotacion is None:
-        return None, m1 or m2, nota
-    return margen * rotacion, None, nota
+    margen, motivo, nota = _margen_neto_controladora(d)
+    f = factores_controladora(d)[0]
+    if margen is None or f.rsa is None:
+        return None, motivo or _motivo_rsa(d, margen), nota
+    return f.rsa * CIEN, None, nota
 
 
 @_con(BS)
 def _maf_controladora(d):
-    if d.patrimonio_controladora <= CERO:
+    maf = factores_controladora(d)[0].maf_interpretable
+    if maf is None:
         return None, "El patrimonio de la controladora es cero o negativo.", None
-    return _div(d.bs.total_activo, d.patrimonio_controladora, "el MAF de la controladora")
+    return maf, None, None
 
 
 def _roe_controladora(d):
-    roa, m1, nota = _roa_controladora(d)
-    maf, m2, _ = _maf_controladora(d)
+    roa, motivo, nota = _roa_controladora(d)
+    maf, motivo_maf, _ = _maf_controladora(d)
     if roa is None or maf is None:
-        return None, m1 or m2, nota
-    return roa * maf, None, nota
+        return None, motivo or motivo_maf, nota
+    return factores_controladora(d)[0].rsp * CIEN, None, nota
 
 
 # ---------------------------------------------------------- interpretaciones
+def _n(valor: Decimal) -> str:
+    """Cifra de las interpretaciones: mismo redondeo y misma precision que las tablas."""
+    return f"{redondear(valor, 2):,.2f}"
+
+
 def _i_ctn(v):
     if v > 0:
         return "Positivo: el activo corriente supera al pasivo corriente; por sí solo no garantiza efectivo suficiente."
@@ -356,20 +388,20 @@ def _i_ctn(v):
 
 def _i_cobertura(nombre_activo: str, nombre_pasivo: str = "pasivo corriente"):
     def texto(v):
-        return f"Por cada $1.00 de {nombre_pasivo} hay ${v:,.2f} de {nombre_activo}; {'supera' if v > 1 else 'no alcanza'} la unidad."
+        return f"Por cada $1.00 de {nombre_pasivo} hay ${_n(v)} de {nombre_activo}; {'supera' if v > 1 else 'no alcanza'} la unidad."
     return texto
 
 
 def _i_dias(que):
-    return lambda v: f"{que} de aproximadamente {v:,.1f} días."
+    return lambda v: f"{que} de aproximadamente {_n(v)} días."
 
 
 def _i_veces(que):
-    return lambda v: f"{que} {v:,.2f} veces en el ejercicio."
+    return lambda v: f"{que} {_n(v)} veces en el ejercicio."
 
 
 def _i_pct(que):
-    return lambda v: f"{que} {v:,.2f}%."
+    return lambda v: f"{que} {_n(v)}%."
 
 
 INDICADORES: list[Indicador] = [
@@ -387,7 +419,7 @@ INDICADORES: list[Indicador] = [
               "5.6 d (definida; el trabajo no presenta resultados)", _i_cobertura("efectivo")),
     Indicador("razon_tesoreria", "Razón de tesorería", LIQUIDEZ, "(Efectivo + inversiones y depósitos corrientes) / Pasivo corriente × 100",
               "Efectivo; certificados de depósito, bonos e inversiones corrientes; total pasivo corriente", PCT, _razon_tesoreria,
-              ("rubro:TESORERIA", "clase:PC"), "9.1", lambda v: f"Por cada $100 de pasivo corriente hay ${v:,.2f} de tesorería."),
+              ("rubro:TESORERIA", "clase:PC"), "9.1", lambda v: f"Por cada $100 de pasivo corriente hay ${_n(v)} de tesorería."),
     Indicador("capitales_permanentes", "Capitales permanentes", LIQUIDEZ, "Patrimonio + Pasivo no corriente",
               "Total patrimonio; total pasivo no corriente", USD, _capitales_permanentes, ("clase:PAT", "clase:PNC"), "9.2.2"),
     Indicador("fondo_maniobra_lp", "Fondo de maniobra a largo plazo", LIQUIDEZ, "Capitales permanentes − Activo no corriente",
@@ -418,14 +450,14 @@ INDICADORES: list[Indicador] = [
     Indicador("ppp", "Período promedio de pago", ACTIVIDAD, "Cuentas por pagar comerciales / Costo de ventas × 365",
               "Cuentas por pagar comerciales (línea presentada); costo de ventas (aproximación de las compras)", DIAS_U, _ppp,
               ("rubro:CXP_COMERCIALES_PRESENTADA", "grupo:COSTO_VENTAS"), "9.3", _i_dias("Plazo de pago a proveedores")),
-    Indicador("ciclo_operativo", "Ciclo operativo", ACTIVIDAD, "PPI + PPC", "Período promedio de inventario; período promedio de cobro",
+    Indicador("ciclo_operativo", "Ciclo operativo", ACTIVIDAD, "PPI + PPC, ambos a 2 decimales", "Período promedio de inventario; período promedio de cobro",
               DIAS_U, _ciclo_operativo, ("rubro:INVENTARIOS", "rubro:CXC_COMERCIALES_PRESENTADA"), "8.2 C, 9.3", _i_dias("Ciclo operativo")),
-    Indicador("cce", "Ciclo de conversión del efectivo", ACTIVIDAD, "Ciclo operativo − PPP", "Ciclo operativo; período promedio de pago",
+    Indicador("cce", "Ciclo de conversión del efectivo", ACTIVIDAD, "Ciclo operativo − PPP, con PPP a 2 decimales", "Ciclo operativo; período promedio de pago",
               DIAS_U, _cce, ("rubro:INVENTARIOS", "rubro:CXC_COMERCIALES_PRESENTADA", "rubro:CXP_COMERCIALES_PRESENTADA"), "5.6 k, 9.3",
-              lambda v: f"Ciclo de {v:,.2f} días; {'negativo: los proveedores financian el ciclo operativo' if v < 0 else 'días que la empresa financia con recursos propios o deuda'}."),
+              lambda v: f"Ciclo de {_n(v)} días; {'negativo: los proveedores financian el ciclo operativo' if v < 0 else 'días que la empresa financia con recursos propios o deuda'}."),
     Indicador("rotacion_activos", "Rotación de activos totales", ACTIVIDAD, "Ingresos ordinarios / Activo total",
               "Ingresos ordinarios; total activo", VECES, _rotacion_activos, ("clase:AC", "clase:ANC", "grupo:INGRESOS_ORDINARIOS"),
-              "8.2 D, 9.5", lambda v: f"Se generaron ${v:,.2f} de ingresos por cada $1.00 de activos."),
+              "8.2 D, 9.5", lambda v: f"Se generaron ${_n(v)} de ingresos por cada $1.00 de activos."),
     # Endeudamiento
     Indicador("endeudamiento", "Índice de endeudamiento", ENDEUDAMIENTO, "Pasivo total / Activo total × 100",
               "Total pasivo; total activo", PCT, _endeudamiento, ("clase:PC", "clase:PNC", "clase:AC", "clase:ANC"), "8.3 A",
@@ -435,34 +467,36 @@ INDICADORES: list[Indicador] = [
               _i_pct("Parte del pasivo exigible a corto plazo:")),
     Indicador("deuda_capital", "Razón deuda-capital patrimonial", ENDEUDAMIENTO, "Pasivo total / Patrimonio total",
               "Total pasivo; total patrimonio", VECES, _deuda_capital, ("clase:PC", "clase:PNC", "clase:PAT"), "8.3 D",
-              lambda v: f"${v:,.2f} de pasivo por cada $1.00 de patrimonio."),
+              lambda v: f"${_n(v)} de pasivo por cada $1.00 de patrimonio."),
     Indicador("cobertura_intereses", "Razón de cargos de interés fijo", ENDEUDAMIENTO,
               "Utilidad de operación / Gastos financieros netos", "Utilidad de operación; gastos financieros − ingresos financieros",
               VECES, _cobertura_intereses, ("grupo:GASTOS_FINANCIEROS", "grupo:GASTOS_FINANCIEROS_NETOS", "grupo:INGRESOS_FINANCIEROS"),
-              "8.3 B", lambda v: f"La utilidad de operación cubre {v:,.2f} veces los gastos financieros netos."),
+              "8.3 B", lambda v: f"La utilidad de operación cubre {_n(v)} veces los gastos financieros netos."),
     Indicador("cobertura_intereses_bruta", "Cobertura con gastos financieros brutos", ENDEUDAMIENTO,
               "Utilidad de operación / Gastos financieros (brutos)", "Utilidad de operación; gastos financieros", VECES,
               _cobertura_intereses_bruta, ("grupo:GASTOS_FINANCIEROS",), "Complementario (no figura en el trabajo)",
-              lambda v: f"La utilidad de operación cubre {v:,.2f} veces los gastos financieros brutos."),
+              lambda v: f"La utilidad de operación cubre {_n(v)} veces los gastos financieros brutos."),
     Indicador("cobertura_pagos_fijos", "Índice de cobertura de pagos fijos", ENDEUDAMIENTO,
-              "(UAII + arrendamientos) / (intereses + arrendamientos + principal / (1 − t))", "No disponible en los documentos",
-              "veces", _cobertura_pagos_fijos, (), "8.3 C"),
+              "(UAII + arrendamientos) / (intereses + arrendamientos + principal / (1 − t)); sin desglose = UAII / intereses",
+              "Utilidad de operación; gastos financieros netos (arrendamientos y principal no informados)",
+              VECES, _cobertura_pagos_fijos, ("grupo:GASTOS_FINANCIEROS", "grupo:GASTOS_FINANCIEROS_NETOS", "grupo:INGRESOS_FINANCIEROS"),
+              "8.3 C", lambda v: f"Iguala a la razón de cargos de interés fijo: {_n(v)} veces, por falta de desglose."),
     # Rentabilidad
     Indicador("margen_bruto", "Margen de utilidad bruta", RENTABILIDAD, "Utilidad bruta / Ingresos ordinarios × 100",
               "Utilidad bruta; ingresos ordinarios", PCT, _margen_bruto, ("grupo:INGRESOS_ORDINARIOS", "grupo:COSTO_VENTAS"), "8.4 A",
-              lambda v: f"De cada $100 de ingresos quedaron ${v:,.2f} tras el costo de ventas."),
+              lambda v: f"De cada $100 de ingresos quedaron ${_n(v)} tras el costo de ventas."),
     Indicador("margen_operativo", "Margen de utilidad operativa", RENTABILIDAD, "Utilidad de operación / Ingresos ordinarios × 100",
               "Utilidad de operación; ingresos ordinarios", PCT, _margen_operativo, ("grupo:INGRESOS_ORDINARIOS",), "8.4 B",
-              lambda v: f"De cada $100 de ingresos quedaron ${v:,.2f} de resultado de operación."),
+              lambda v: f"De cada $100 de ingresos quedaron ${_n(v)} de resultado de operación."),
     Indicador("margen_neto", "Margen de utilidad neta", RENTABILIDAD, "Utilidad neta / Ingresos ordinarios × 100",
               "Utilidad neta del ejercicio; ingresos ordinarios", PCT, _margen_neto, ("grupo:INGRESOS_ORDINARIOS",), "8.4 C, 9.5",
-              lambda v: f"De cada $100 de ingresos quedaron ${v:,.2f} de utilidad neta."),
+              lambda v: f"De cada $100 de ingresos quedaron ${_n(v)} de utilidad neta."),
     Indicador("roa", "Rendimiento sobre los activos totales (ROA)", RENTABILIDAD, "Utilidad neta / Activo total al cierre × 100",
               "Utilidad neta; total activo", PCT, _roa, ("clase:AC", "clase:ANC"), "8.4 E",
-              lambda v: f"${v:,.2f} de utilidad neta por cada $100 de activos."),
+              lambda v: f"${_n(v)} de utilidad neta por cada $100 de activos."),
     Indicador("roe", "Retorno sobre el patrimonio (ROE)", RENTABILIDAD, "Utilidad neta / Patrimonio total al cierre × 100",
               "Utilidad neta; total patrimonio (incluye participaciones no controladoras)", PCT, _roe, ("clase:PAT",), "8.4 F",
-              lambda v: f"${v:,.2f} de utilidad neta por cada $100 de patrimonio contable."),
+              lambda v: f"${_n(v)} de utilidad neta por cada $100 de patrimonio contable."),
     Indicador("ebitda", "EBITDA", RENTABILIDAD, "Utilidad de operación + Depreciación y amortización",
               "Utilidad de operación; depreciación y amortización (estado de resultados o flujo de efectivo)", USD, _ebitda,
               ("grupo:DEPRECIACION_AMORTIZACION",), "6.7 (texto, 2025)"),
@@ -475,7 +509,7 @@ INDICADORES: list[Indicador] = [
     # DuPont al cierre (enfoque del trabajo, 9.5 y 9.6)
     Indicador("maf", "Multiplicador del apalancamiento financiero (MAF)", DUPONT, "Activo total / Patrimonio total",
               "Total activo; total patrimonio", VECES, _maf, ("clase:PAT",), "9.6",
-              lambda v: f"Los activos equivalen a {v:,.2f} veces el patrimonio."),
+              lambda v: f"Los activos equivalen a {_n(v)} veces el patrimonio."),
     Indicador("roa_dupont", "RSA (ROA) por DuPont", DUPONT, "Margen de utilidad neta × Rotación de activos totales",
               "Margen neto; rotación de activos", PCT, _roa_dupont, (), "9.5"),
     Indicador("roe_dupont", "RSP (ROE) por DuPont modificado", DUPONT, "RSA × MAF", "RSA; MAF", PCT, _roe_dupont, (), "9.6"),
@@ -515,8 +549,8 @@ def formatear(unidad: str, valor: Decimal | None) -> str:
     if unidad == PCT:
         return format_percent(valor)
     if unidad == DIAS_U:
-        return f"{valor:,.2f} días"
-    return f"{valor:,.2f} veces"
+        return f"{redondear(valor, 2):,.2f} días"
+    return f"{redondear(valor, 2):,.2f} veces"
 
 
 def interpretacion(resultado: ResultadoIndicador) -> str:

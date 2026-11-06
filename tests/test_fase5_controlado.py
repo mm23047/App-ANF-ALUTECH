@@ -133,10 +133,7 @@ def test_dupont(bd, anio):
     with session_scope() as s:
         dp = compute_dupont(s, _periodo(s, anio))
     assert dp.disponible and dp.interpretable is esperado["interpretable"]
-    assert dp.saldos_aproximados is esperado["saldos_aproximados"]
-    assert dp.fuente_saldos_iniciales.startswith(esperado["fuente"]), dp.fuente_saldos_iniciales
-    for clave in ("activo_inicial", "activo_final", "activo_promedio", "patrimonio_inicial", "patrimonio_final",
-                  "patrimonio_promedio", "utilidad_neta", "ingresos_netos"):
+    for clave in ("activo_total", "patrimonio_total", "utilidad_neta", "ingresos_netos"):
         assert getattr(dp, clave) - Decimal(esperado[clave]) == 0, (anio, clave, getattr(dp, clave), esperado[clave])
     for clave in ("margen_neto", "rotacion_activos", "multiplicador_capital", "roe"):
         fraccion = Fraction(esperado[clave])

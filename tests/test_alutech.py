@@ -192,7 +192,8 @@ def test_todas_las_cuentas_tienen_un_grupo_valido():
     (2024, "ppp", D(225126517) / D(377459424) * 365),
     (2024, "cobertura_intereses", D(35193918) / (D(43089283) - D(15024973))),
     (2025, "roe", D(11898987) / D(231160198) * 100),
-    (2025, "cce", (D(69818060) / D(331430173) + D(70169882) / D(439704567) - D(173120913) / D(331430173)) * 365),
+    # 9.3: operandos a 2 decimales, 76.89 + 58.25 − 190.66.
+    (2025, "cce", D("76.89") + D("58.25") - D("190.66")),
     (2022, "margen_operativo", D(31200977) / D(499653494) * 100),
     (2023, "roe_controladora", D(12309102) / D(227673394) * 100),
     (2021, "maf_controladora", D(553955185) / D(142057829)),
@@ -231,8 +232,10 @@ def test_wacc_sin_tasa_supuesta_no_se_calcula(datos):
 
 def test_indicadores_de_mercado_no_calculables(datos):
     por_anio, _ = datos
-    for clave in ("eps", "per", "ml", "cobertura_pagos_fijos"):
+    for clave in ("eps", "per", "ml"):
         assert ind.calcular(por_anio[2025], clave).valor is None
+    # 8.3 C del trabajo: sin desglose, el indice de pagos fijos iguala a la razon de cargos de interes fijo.
+    assert ind.calcular(por_anio[2025], "cobertura_pagos_fijos").valor == ind.calcular(por_anio[2025], "cobertura_intereses").valor
 
 
 def test_fuentes_y_usos_cuadran_y_reproducen_los_totales_del_trabajo(datos):
@@ -295,7 +298,10 @@ def test_comparacion_completa_con_el_trabajo(datos):
     por_anio, _ = datos
     comparaciones = comparar(list(por_anio.values()))
     assert metricas_desconocidas() == []
-    assert resumen(comparaciones) == {COINCIDE: 672, REDONDEO: 6, DIFERENCIA: 43, NO_VERIFICABLE: 0, NO_APLICA: 15}
+    conteo = resumen(comparaciones)
+    # 5 de E-CPF son resultados derivados: 8.3 C no publica cifras propias.
+    assert conteo.pop("Resultado derivado") == 5
+    assert conteo == {COINCIDE: 711, REDONDEO: 4, DIFERENCIA: 6, NO_VERIFICABLE: 0, NO_APLICA: 15}
     # Toda discrepancia tiene una causa investigada y documentada.
     sin_causa = [(c.referencia.id, c.anio) for c in comparaciones if c.estado in (DIFERENCIA, REDONDEO) and not c.causa]
     assert sin_causa == []
@@ -421,7 +427,7 @@ def test_paginas_con_los_datos_de_alutech(bd_cargada, tmp_path):
     errores = {k: v["excepciones"] for k, v in resultados.items() if k != "_menu" and (v["excepciones"] or v["pagina"] != k)}
     assert errores == {}
     validacion = resultados["Validación › Comparación con el trabajo ANF"]["tablas"][0]
-    assert {f["Estado"] for f in validacion} == {"Coincidencia por redondeo", "Diferencia", "No aplica"}
+    assert {f["Estado"] for f in validacion} == {"Coincidencia por redondeo", "Diferencia", "No aplica", "Resultado derivado"}
 
 
 def test_los_indicadores_y_analisis_se_actualizan_al_cambiar_el_mapeo(tmp_path):

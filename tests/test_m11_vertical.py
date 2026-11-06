@@ -69,11 +69,11 @@ def test_vertical_resultados_con_positivos_negativos_y_ceros(bd):
     assert r.disponible and r.base_ingresos_netos == Decimal("2000.00")
     assert _por_codigo(r) == {
         "4001": (Decimal("2000.00"), Decimal("100.00")),  # desde M-03 (fase 3) se incluye la base
-        "5001": (Decimal("1200.00"), Decimal("60.00")),
-        "6001": (Decimal("300.00"), Decimal("15.00")),
+        "5001": (Decimal("1200.00"), Decimal("-60.00")),  # importe sin invertir; % negativo (tabla 7.1)
+        "6001": (Decimal("300.00"), Decimal("-15.00")),
         "6003": (Decimal("50.00"), Decimal("2.50")),
         "7002": (Decimal("0.00"), Decimal("0.00")),
-        "8001": (Decimal("-25.00"), Decimal("-1.25")),
+        "8001": (Decimal("-25.00"), Decimal("1.25")),  # beneficio fiscal: resta de un negativo
     }
 
 
@@ -102,7 +102,7 @@ def test_tabla_de_pantalla_se_formatea_desde_decimal(bd):
     assert filas["1102"] == ("USD -300.00", "-25.00%")
     assert filas["2001"] == ("USD 1,300.00", "108.33%")
     filas = {f["Código"]: (f["Valor"], f["Participación %"]) for f in resultados.to_dict("records") if f["Código"]}
-    assert filas["8001"] == ("USD -25.00", "-1.25%")
+    assert filas["8001"] == ("USD -25.00", "1.25%")  # ISR negativo (beneficio fiscal): resta de un negativo
 
 
 def test_tabla_de_pantalla_con_porcentaje_none_y_sin_filas():

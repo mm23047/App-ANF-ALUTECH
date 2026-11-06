@@ -13,7 +13,6 @@ from components.money import format_money
 
 INCOMPLETO = "INCOMPLETO"
 DESCUADRADO = "DESCUADRADO"
-APROXIMADO = "APROXIMADO"
 NO_INTERPRETABLE = "NO INTERPRETABLE"
 SIGNO_ATIPICO = "SIGNO ATÍPICO"
 SIN_CONCILIAR = "SIN CONCILIAR"
@@ -59,8 +58,6 @@ def banderas_dupont(dp) -> list[Bandera]:
     banderas = []
     if not dp.interpretable:
         banderas.append(Bandera(NO_INTERPRETABLE, dp.motivo_no_disponible))
-    if dp.saldos_aproximados:
-        banderas.append(Bandera(APROXIMADO, dp.fuente_saldos_iniciales.removeprefix(f"{APROXIMADO}: ")))
     for control in dp.controles:
         if control.correcto:
             continue
@@ -70,12 +67,13 @@ def banderas_dupont(dp) -> list[Bandera]:
             banderas.append(Bandera(INCOMPLETO, f"{control.nombre.replace(' completo', '')}: {control.detalle}."))
         elif control.nombre == "Signos según la convención":
             banderas.append(Bandera(SIGNO_ATIPICO, control.detalle))
-        elif control.nombre.startswith("Resultado del ejercicio"):
+        elif control.nombre.startswith("Resultado del ejercicio") and not control.sin_datos:
+            # Sin datos para conciliar no es una diferencia: mismo criterio que banderas_balance.
             banderas.append(Bandera(SIN_CONCILIAR, control.detalle))
     return banderas
 
 
 def resumen(banderas: list[Bandera]) -> str:
-    """"DEFINITIVO" o los codigos sin repetir, en orden: "INCOMPLETO · APROXIMADO"."""
+    """"DEFINITIVO" o los codigos sin repetir, en orden: "INCOMPLETO · DESCUADRADO"."""
     codigos = list(dict.fromkeys(b.codigo for b in banderas))
     return " · ".join(codigos) if codigos else DEFINITIVO

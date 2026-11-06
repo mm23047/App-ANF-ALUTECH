@@ -2,3 +2,6 @@
 # La aplicación no tiene autenticación: solo debe ser accesible desde este equipo.
 [server]
 address = "localhost"
+
+[client]
+toolbarMode = "minimal"

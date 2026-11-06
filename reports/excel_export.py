@@ -2,7 +2,7 @@
 
 Todos los libros incluyen nombre de la empresa, periodo fiscal, titulo
 del reporte, fecha de generacion y el estado del reporte (DEFINITIVO o
-sus banderas: INCOMPLETO, DESCUADRADO, APROXIMADO, NO INTERPRETABLE...).
+sus banderas: INCOMPLETO, DESCUADRADO, NO INTERPRETABLE...).
 
 Columnas de los estados (hallazgos A-06 y B-03):
   C  Importe: SIEMPRE el valor calculado por Python (calculations/). Se lee
@@ -37,7 +37,8 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.page import PageMargins
 
 from calculations.banderas import Bandera, banderas_balance, banderas_dupont, banderas_resultados, resumen
-from calculations.vertical_analysis import ETIQUETA_EFECTO
+from calculations.validation import lineas_reportables, nota_cuentas_omitidas
+from calculations.vertical_analysis import ETIQUETA_EFECTO, RESTA
 from components.celdas_excel import escribir
 from components.celdas_excel import formula as escribir_formula
 from components.money import q2
@@ -103,11 +104,12 @@ def _escribir_grupo(ws, fila: int, grupo) -> tuple[int, int | None]:
     fila_subtotal es None si el grupo no tiene cuentas (no entra en formulas)."""
     escribir(ws, fila, 1, grupo.nombre).font = Font(bold=True, color=AZUL_OSCURO)
     fila += 1
-    if not grupo.lineas:
+    lineas = lineas_reportables(grupo)
+    if not lineas:
         escribir(ws, fila, 2, SIN_DATOS).font = Font(italic=True, color="808080")
         return fila + 2, None
     inicio = fila
-    for linea in grupo.lineas:
+    for linea in lineas:
         escribir(ws, fila, 1, linea.cuenta.codigo)
         escribir(ws, fila, 2, linea.cuenta.nombre)
         _importe(ws, fila, 3, linea.valor)
@@ -227,6 +229,12 @@ def export_balance_excel(company, period, bs, banderas: list[Bandera] | None = N
     f_tpp = _total(ws, fila, "TOTAL PASIVO + PATRIMONIO", bs.total_pasivo_patrimonio, [("+", f_tp), ("+", f_tpat)])
     fila += 2
     _total(ws, fila, "Diferencia: Activo − (Pasivo + Patrimonio) (debe ser 0)", bs.diferencia, [("+", f_ta), ("-", f_tpp)])
+    omitidas = nota_cuentas_omitidas([bs.activo_corriente, bs.activo_no_corriente, bs.pasivo_corriente, bs.pasivo_no_corriente,
+                                      *bs.patrimonio_grupos])
+    if omitidas:
+        fila += 2
+        escribir(ws, fila, 1, omitidas).font = Font(italic=True, size=9)
+        ajustes.append((fila, 1, 5))
 
     _finalizar_hoja(ws, ANCHOS_ESTADOS, ajustes, fila_titulos)
     return _guardar(wb)
@@ -310,14 +318,32 @@ def export_vertical_excel(company, period, titulo: str, df, base, nombre_base: s
         celda_pct.number_format = "0.00"
         escribir(ws, fila, 5, ETIQUETA_EFECTO.get(efecto, ""))
         if valor is not None and base != 0:
-            escribir_formula(ws, fila, 6, f"=C{fila}/$C${fila_base}*100").number_format = "0.00"
+            signo = "-" if efecto == RESTA else ""  # el importe es positivo; el porcentaje de lo que resta, negativo
+            escribir_formula(ws, fila, 6, f"={signo}C{fila}/$C${fila_base}*100").number_format = "0.00"
         fila += 1
 
     _finalizar_hoja(ws, {**ANCHOS_ESTADOS, "F": 18}, ajustes, fila_titulos)
     return _guardar(wb)
 
 
+def _filas_dupont_excel(ws, fila: int, titulo: str, filas) -> int:
+    from calculations.dupont import IMPORTE, PORCENTAJE
+
+    escribir(ws, fila, 1, titulo).font = Font(bold=True)
+    fila += 1
+    for f in filas:
+        unidad = {IMPORTE: "", PORCENTAJE: " (%)"}.get(f.tipo, " (veces)")
+        escribir(ws, fila, 1, f"{f.etiqueta}{unidad}")
+        valor = float(f.valor) if isinstance(f.valor, Decimal) else (f.valor if f.valor is not None else "No disponible")
+        celda = escribir(ws, fila, 2, valor)
+        celda.number_format = FORMATO_IMPORTE if f.tipo == IMPORTE else f"0.{'0' * f.decimales}"
+        fila += 1
+    return fila
+
+
 def export_dupont_excel(company, period, resultado) -> bytes:
+    from calculations.dupont import BASE_SALDOS, filas_enfoque_controladora, filas_enfoque_total
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Análisis DuPont"
@@ -325,42 +351,28 @@ def export_dupont_excel(company, period, resultado) -> bytes:
     ajustes = []
     fila = _escribir_banderas(ws, fila, banderas_dupont(resultado), ajustes, ultima_columna=3)
 
-    def roe(valor):
-        return valor if resultado.interpretable else "NO INTERPRETABLE"
-
-    filas_datos = [
-        ("Utilidad neta", resultado.utilidad_neta, FORMATO_IMPORTE),
-        ("Ingresos netos", resultado.ingresos_netos, FORMATO_IMPORTE),
-        ("Activo total inicial", resultado.activo_inicial, FORMATO_IMPORTE),
-        ("Activo total final", resultado.activo_final, FORMATO_IMPORTE),
-        ("Activo total promedio", resultado.activo_promedio, FORMATO_IMPORTE),
-        ("Patrimonio inicial", resultado.patrimonio_inicial, FORMATO_IMPORTE),
-        ("Patrimonio final", resultado.patrimonio_final, FORMATO_IMPORTE),
-        ("Patrimonio promedio", resultado.patrimonio_promedio, FORMATO_IMPORTE),
-        ("Margen neto (%)", resultado.margen_neto * 100 if resultado.margen_neto is not None else None, "0.0000"),
-        ("Rotación de activos (veces)", resultado.rotacion_activos, "0.0000"),
-        ("Multiplicador del capital (veces)", resultado.multiplicador_capital, "0.0000"),
-        ("ROE DuPont (%)", roe(resultado.roe_dupont_pct), "0.00"),
-        ("ROE directo (%)", roe(resultado.roe_directo_pct), "0.00"),
-    ]
-    for etiqueta, valor, formato in filas_datos:
-        escribir(ws, fila, 1, etiqueta)
-        celda = escribir(ws, fila, 2, float(valor) if isinstance(valor, Decimal) else (valor if valor is not None else "No disponible"))
-        celda.number_format = formato
-        fila += 1
-
-    fila += 1
-    escribir(ws, fila, 1, "Fuente de saldos iniciales:").font = Font(italic=True)
-    escribir(ws, fila, 2, resultado.fuente_saldos_iniciales or "")
-    ajustes.append((fila, 2, 3))  # la fuente puede ser larga: ocupa B:C en varias lineas
+    escribir(ws, fila, 1, "Base de saldos:").font = Font(italic=True)
+    escribir(ws, fila, 2, BASE_SALDOS)
+    ajustes.append((fila, 2, 3))  # texto largo: ocupa B:C en varias lineas
     fila += 2
+
+    fila = _filas_dupont_excel(ws, fila, "Enfoque total", filas_enfoque_total(resultado)) + 1
+    filas_controladora = filas_enfoque_controladora(resultado)
+    if filas_controladora:
+        fila = _filas_dupont_excel(ws, fila, "Enfoque de la controladora", filas_controladora)
+        escribir(ws, fila, 1, "Ganancia atribuible:").font = Font(italic=True)
+        escribir(ws, fila, 2, resultado.controladora.fuente)
+        ajustes.append((fila, 2, 3))
+        fila += 2
+
     fila = _encabezado_tabla(ws, fila, ("Control", "Resultado", "Detalle"))
     for control in resultado.controles:
         escribir(ws, fila, 1, control.nombre)
-        escribir(ws, fila, 2, "Correcto" if control.correcto else "Revisar").font = Font(color=VERDE if control.correcto else ROJO)
+        color = None if control.sin_datos else (VERDE if control.correcto else ROJO)
+        escribir(ws, fila, 2, control.resultado).font = Font(color=color)
         escribir(ws, fila, 3, control.detalle)
         ajustes.append((fila, 3, 3))
         fila += 1
 
-    _finalizar_hoja(ws, {"A": 52, "B": 22, "C": 60}, ajustes, None, ancho_variable=None)
+    _finalizar_hoja(ws, {"A": 52, "B": 26, "C": 60}, ajustes, None, ancho_variable=None)
     return _guardar(wb)

@@ -86,3 +86,22 @@ def cuentas_sin_dato(cuentas_activas, entries, categorias) -> list:
     no todas las cuentas del catalogo deben tener movimientos)."""
     capturadas = {cuenta.id for cuenta, _ in entries}
     return [c for c in cuentas_activas if c.categoria_principal in categorias and c.id not in capturadas]
+
+
+def lineas_reportables(grupo) -> list:
+    """Lineas de un grupo que se presentan en los reportes. Si el grupo ya tiene cuentas mapeadas a un grupo de
+    analisis, se omiten sus importes 0.00 de cuentas sin mapear: son del catalogo estandar, no figuran en los estados
+    originales y no aportan a ningun total. Siguen guardados y visibles en Modificacion de datos. Un cero en un
+    catalogo sin mapear es un dato capturado y se presenta."""
+    mapeada = lambda linea: getattr(linea.cuenta, "grupo_analisis", None)
+    if not any(mapeada(l) for l in grupo.lineas):
+        return list(grupo.lineas)
+    return [l for l in grupo.lineas if l.valor != 0 or mapeada(l)]
+
+
+def nota_cuentas_omitidas(grupos) -> str | None:
+    omitidas = sum(len(g.lineas) - len(lineas_reportables(g)) for g in grupos)
+    if not omitidas:
+        return None
+    return (f"No se muestran {omitidas} cuenta(s) del catálogo estándar con importe 0.00 y sin grupo de análisis: no figuran en "
+            "los estados originales ni alteran los totales. Siguen guardadas y se consultan en «Modificación de datos».")

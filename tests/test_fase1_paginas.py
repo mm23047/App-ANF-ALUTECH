@@ -79,7 +79,7 @@ def test_pagina_se_renderiza_sin_errores(resultado_humo, etiqueta):
       "TOTAL PATRIMONIO": ("USD 600.00", "60.00%"), "TOTAL PASIVO + PATRIMONIO": ("USD 1,000.00", "100.00%")}),
     # Ingresos 1000 (base); ISR 900; sin costo de ventas.
     ("Reportes › Análisis Vertical del Estado de Resultados",
-     {"4001": ("USD 1,000.00", "100.00%"), "8001": ("USD 900.00", "90.00%")},
+     {"4001": ("USD 1,000.00", "100.00%"), "8001": ("USD 900.00", "-90.00%")},
      {"INGRESOS NETOS": ("USD 1,000.00", "100.00%"), "COSTO DE VENTAS": ("Sin datos", "No disponible"),
       "UTILIDAD BRUTA": ("USD 1,000.00", "100.00%"), "UTILIDAD NETA": ("USD 100.00", "10.00%")}),
 ])
@@ -87,23 +87,28 @@ def test_paginas_verticales_muestran_importes_y_porcentajes(resultado_humo, etiq
     """Hallazgos M-11 y M-03: con importes distintos de cero la pagina se
     renderiza y muestra cuentas, subtotales y utilidades calculados con Decimal."""
     tablas = resultado_humo[0][etiqueta]["tablas"]
-    assert len(tablas) == 1
+    assert len(tablas) == 2  # por ejercicio y comparativo de los ejercicios
     assert {f["Código"]: (f["Valor"], f["Participación %"]) for f in tablas[0] if f["Código"]} == cuentas
     por_concepto = {f["Concepto"]: (f["Valor"], f["Participación %"]) for f in tablas[0] if not f["Código"]}
     assert subtotales.items() <= por_concepto.items()
 
 
 # ------------------------------------------------------------ menu simplificado
-MENU_ESPERADO = ["Ingreso de datos", "Modificación de datos", "Balance General", "Estado de Resultados",
+MENU_ESPERADO = ["Ingreso de datos", "Modificación de datos", "Indicadores financieros", "Balance General", "Estado de Resultados",
                  "Análisis Vertical del Balance General", "Análisis Vertical del Estado de Resultados",
+                 "Análisis Horizontal del Balance General", "Análisis Horizontal del Estado de Resultados",
                  "Rentabilidad mediante fórmula DuPont"]
 DESTINO = {"Ingreso de datos": ("entry_data", "Ingreso de datos — Balance General"),
            "Modificación de datos": ("edit_data", "Modificación de datos"),
+           "Indicadores financieros": ("report_indicadores", "Indicadores financieros"),
            "Balance General": ("report_balance", "Reporte — Balance General"),
            "Estado de Resultados": ("report_income", "Reporte — Estado de Resultados"),
            "Análisis Vertical del Balance General": ("report_vertical_balance", "Reporte — Análisis Vertical del Balance General"),
            "Análisis Vertical del Estado de Resultados": ("report_vertical_income",
                                                          "Reporte — Análisis Vertical del Estado de Resultados"),
+           "Análisis Horizontal del Balance General": ("report_horizontal_balance", "Reporte — Análisis Horizontal del Balance General"),
+           "Análisis Horizontal del Estado de Resultados": ("report_horizontal_income",
+                                                            "Reporte — Análisis Horizontal del Estado de Resultados"),
            "Rentabilidad mediante fórmula DuPont": ("report_dupont", "Reporte — Análisis de Rentabilidad (Modelo DuPont)")}
 
 
@@ -129,7 +134,7 @@ def test_paginas_ocultas_siguen_en_el_catalogo_y_enrutadas():
 
     app = (Path(__file__).resolve().parent.parent / "app.py").read_text(encoding="utf-8")
     ocultas = {c for _, c in PAGINAS_OCULTAS}
-    assert len(ocultas) == 18 and len(PAGINAS) == len(ocultas) + len(MENU_PRINCIPAL) + len(MENU_REPORTES)
+    assert len(ocultas) == 17 and len(PAGINAS) == len(ocultas) + len(MENU_PRINCIPAL) + len(MENU_REPORTES)
     for clave in ocultas - {"report_horizontal", "report_vertical_comp", "report_indicadores", "report_wacc",
                             "report_fuentes_usos", "report_integral", "validacion_anf"}:
         assert f'"{clave}"' in app, clave  # enrutada en app.py (las de analisis, via PAGINAS_ANALISIS)

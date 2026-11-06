@@ -8,6 +8,7 @@ from calculations.balance_sheet import compute_balance_sheet
 from calculations.banderas import banderas_balance
 from calculations.controls import conciliar_resultado
 from calculations.income_statement import compute_income_statement
+from calculations.validation import nota_cuentas_omitidas
 from components.avisos import mostrar_avisos_signo, mostrar_completitud, mostrar_conciliacion, mostrar_estado
 from components.money import format_money
 from components.navigation import select_fiscal_period
@@ -42,6 +43,10 @@ def render(session: Session, company: Company) -> None:
         )
     mostrar_completitud(bs, "Balance General")
     mostrar_avisos_signo(bs)
+    omitidas = nota_cuentas_omitidas([bs.activo_corriente, bs.activo_no_corriente, bs.pasivo_corriente, bs.pasivo_no_corriente,
+                                      *bs.patrimonio_grupos])
+    if omitidas:
+        st.caption(omitidas)
 
     st.markdown("### Activo")
     mostrar_grupo(bs.activo_corriente, company.moneda)

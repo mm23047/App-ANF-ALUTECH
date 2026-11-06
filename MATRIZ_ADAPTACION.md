@@ -63,7 +63,7 @@ Verificadas en el código y con la suite de pruebas después de la adaptación.
 | Dashboard | `modules/dashboard.py` | Conservado y ampliado (capital de trabajo, liquidez, rentabilidad 2021–2025) |
 | Reportes de Balance y Resultados | `reports/balance_report.py`, `income_report.py` | Conservados |
 | Análisis vertical del BG y del ER (por ejercicio) | `reports/vertical_report.py` | Conservados; se agrega el vertical comparativo |
-| Análisis DuPont (saldos promedio) | `reports/dupont_report.py` | Conservado; el DuPont al cierre del trabajo se agrega en Indicadores |
+| Análisis DuPont | `reports/dupont_report.py` | Conservado como reporte independiente; desde el 2026-11-05 usa saldos al cierre, igual que el trabajo |
 | Exportación PDF y Excel | `reports/pdf_export.py`, `excel_export.py` | Conservadas; nuevas exportaciones en `reports/exportar_secciones.py` |
 | Copias de seguridad y restauración | `modules/backup.py`, `database/backup_utils.py` | Conservadas |
 | Análisis horizontal | — | **No existía** en la aplicación: se implementó |

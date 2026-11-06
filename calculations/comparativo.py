@@ -108,6 +108,10 @@ for _r in RUBROS.values():
 for _g in GRUPOS.values():
     CONCEPTOS[f"grupo:{_g.codigo}"] = Concepto(
         f"grupo:{_g.codigo}", _g.nombre, (lambda codigo: lambda d: d.g(codigo) if d.tiene_datos else None)(_g.codigo))
+# Este grupo reune cuentas de ingreso y de gasto: sumar sus importes capturados (positivos)
+# presentaria un gasto como un aumento del ingreso. Se compara el neto con su signo.
+CONCEPTOS["grupo:OTROS_NO_OPERATIVOS"] = Concepto(
+    "grupo:OTROS_NO_OPERATIVOS", GRUPOS["OTROS_NO_OPERATIVOS"].nombre, _con_signo("OTROS_NO_OPERATIVOS"))
 
 # Seleccion del trabajo ANF (Tablas 3 a 5): rubros clave y totales.
 CLAVES_HORIZONTAL_ANF = (
@@ -116,6 +120,19 @@ CLAVES_HORIZONTAL_ANF = (
     "ingresos", "costo_ventas", "utilidad_bruta", "gastos_operativos_anf", "utilidad_operativa",
     "gastos_financieros_netos", "utilidad_neta",
 )
+# Filas de las Tablas 3, 4 y 5 del trabajo, en su orden. La Tabla 3 usa la linea de cuentas por
+# cobrar comerciales; la Tabla 4, comerciales y otras (nota de la Tabla 4).
+CLAVES_TABLA_3 = ("rubro:EFECTIVO", "rubro:CXC_COMERCIALES_PRESENTADA", "rubro:INVENTARIOS", "activo_corriente",
+                  "pasivo_corriente", "total_activo", "total_pasivo", "total_patrimonio")
+CLAVES_TABLA_4 = ("rubro:EFECTIVO", "rubro:CXC_COMERCIALES_Y_OTRAS", "rubro:INVENTARIOS", "activo_corriente",
+                  "pasivo_corriente", "total_activo", "total_pasivo", "total_patrimonio")
+CLAVES_TABLA_5 = ("ingresos", "costo_ventas", "utilidad_bruta", "gastos_operativos_anf", "utilidad_operativa",
+                  "gastos_financieros_netos", "utilidad_neta")
+CLAVES_RUBROS_BG = ("rubro:EFECTIVO", "rubro:CXC_COMERCIALES_PRESENTADA", "rubro:CXC_COMERCIALES_Y_OTRAS", "rubro:INVENTARIOS",
+                    "activo_corriente", "activo_no_corriente", "total_activo", "pasivo_corriente", "pasivo_no_corriente",
+                    "total_pasivo", "total_patrimonio")
+CLAVES_RUBROS_ER = ("ingresos", "costo_ventas", "utilidad_bruta", "gastos_operativos_anf", "utilidad_operativa",
+                    "gastos_financieros_netos", "utilidad_antes_impuestos", "impuesto_renta", "utilidad_neta")
 CLAVES_VERTICAL_ER = (
     "s_ingresos", "s_costo_ventas", "s_utilidad_bruta", "s_gastos_administracion", "s_gastos_venta", "s_deterioro_cxc",
     "s_gastos_personal", "s_depreciacion_amortizacion", "s_otros_ingresos_gastos", "s_utilidad_operativa",
@@ -125,6 +142,13 @@ CLAVES_VERTICAL_BG = (
     "activo_corriente", "rubro:INVENTARIOS", "activo_no_corriente", "total_activo", "pasivo_corriente",
     "pasivo_no_corriente", "total_pasivo", "total_patrimonio",
 )
+# Denominaciones de las tablas 7.1 y 7.2 del trabajo, donde difieren de la etiqueta general.
+ETIQUETAS_VERTICAL = {
+    "activo_corriente": "Activos corrientes", "activo_no_corriente": "Activos no corrientes", "total_activo": "Total activos",
+    "pasivo_corriente": "Pasivos corrientes", "pasivo_no_corriente": "Pasivos no corrientes", "total_pasivo": "Total pasivos",
+    "total_patrimonio": "Patrimonio", "s_depreciacion_amortizacion": "Depreciación y amortización",
+    "s_impuesto_renta": "Impuestos sobre la renta",
+}
 
 
 def valor(concepto: str, d: DatosEjercicio) -> Decimal | None:
@@ -176,11 +200,21 @@ def horizontal_conceptos(lista: list[DatosEjercicio], claves=CLAVES_HORIZONTAL_A
     return [_fila(c, CONCEPTOS[c].etiqueta, CONCEPTOS[c].tipo, lista, CONCEPTOS[c].obtener, CONCEPTOS[c].nota) for c in claves]
 
 
-def horizontal_grupos(lista: list[DatosEjercicio]) -> list[FilaHorizontal]:
+def horizontal_grupos(lista: list[DatosEjercicio], estado: str | None = None) -> list[FilaHorizontal]:
     """Todos los grupos de analisis con datos en algun ejercicio, por clase,
-    con los subtotales del Balance y los resultados del Estado de Resultados."""
+    con los subtotales del Balance y los resultados del Estado de Resultados.
+    estado: "BG" o "ER" para limitar a uno de los dos estados."""
     lista = [d for d in lista if d.tiene_datos]
     presentes = {g for d in lista for g in d.grupos}
+    filas = []
+    if estado != "ER":
+        filas += _grupos_balance(lista, presentes)
+    if estado != "BG":
+        filas += _grupos_resultados(lista, presentes)
+    return filas
+
+
+def _grupos_balance(lista: list[DatosEjercicio], presentes: set[str]) -> list[FilaHorizontal]:
     filas = []
     subtotales = {"AC": "activo_corriente", "ANC": "activo_no_corriente", "PC": "pasivo_corriente",
                   "PNC": "pasivo_no_corriente", "PAT": "total_patrimonio"}
@@ -194,6 +228,11 @@ def horizontal_grupos(lista: list[DatosEjercicio]) -> list[FilaHorizontal]:
             filas.append(_fila("total_activo", "Total activo", TOTAL, lista, CONCEPTOS["total_activo"].obtener))
         if clase == "PNC":
             filas.append(_fila("total_pasivo", "Total pasivo", TOTAL, lista, CONCEPTOS["total_pasivo"].obtener))
+    return filas
+
+
+def _grupos_resultados(lista: list[DatosEjercicio], presentes: set[str]) -> list[FilaHorizontal]:
+    filas = []
     for g in GRUPOS.values():
         if g.clase == "ER" and g.codigo in presentes:
             filas.append(_fila(f"grupo:{g.codigo}", g.nombre, CUENTA, lista, CONCEPTOS[f"grupo:{g.codigo}"].obtener))
@@ -236,6 +275,103 @@ def horizontal_cuentas(lista: list[DatosEjercicio]) -> list[FilaHorizontal]:
     return [_fila(c.codigo, f"{c.codigo} — {c.nombre}", CUENTA, lista, importe(c.id)) for c, _ in ordenadas]
 
 
+# ------------------------------------------------- comparacion de dos ejercicios
+AUMENTO, DISMINUCION, SIN_VARIACION, APARECE, DESAPARECE = "Aumento", "Disminución", "Sin variación", "Aparece", "Desaparece"
+
+
+@dataclass
+class FilaDosEjercicios:
+    clave: str
+    etiqueta: str
+    tipo: str
+    actual: Decimal | None
+    anterior: Decimal | None
+    var_abs: Decimal | None
+    var_pct: Decimal | None
+    tendencia: str
+    nota: str = ""
+
+
+def tendencia(actual: Decimal | None, anterior: Decimal | None) -> str:
+    """Sentido del cambio del saldo. Una cuenta sin dato en un ejercicio aparece o desaparece: no se iguala a cero."""
+    if actual is None and anterior is None:
+        return ""
+    if anterior is None:
+        return APARECE
+    if actual is None:
+        return DESAPARECE
+    if actual > anterior:
+        return AUMENTO
+    return DISMINUCION if actual < anterior else SIN_VARIACION
+
+
+def _clase_cuenta(cuenta) -> str | None:
+    """Clase del Balance segun la clasificacion contable de la cuenta (None si es de resultados)."""
+    categoria = cuenta.categoria_principal.value
+    subcategoria = cuenta.subcategoria.value if cuenta.subcategoria else ""
+    if categoria == "ACTIVO":
+        return "AC" if subcategoria == "CORRIENTE" else "ANC"
+    if categoria == "PASIVO":
+        return "PC" if subcategoria == "CORRIENTE" else "PNC"
+    return "PAT" if categoria == "PATRIMONIO" else None
+
+
+def _cuentas_de_estado(lista: list[DatosEjercicio], estado: str) -> list[FilaHorizontal]:
+    """Cuentas con importe en algun ejercicio, con los subtotales del estado en su lugar."""
+    lista = [d for d in lista if d.tiene_datos]
+    clases = {}
+    for d in lista:
+        for lineas in d.lineas_por_grupo.values():
+            clases.update({cuenta.codigo: _clase_cuenta(cuenta) for cuenta, _ in lineas})
+        clases.update({cuenta.codigo: _clase_cuenta(cuenta) for cuenta, _, _ in d.sin_grupo})
+    cuentas = [f for f in horizontal_cuentas(lista) if any(v is not None for v in f.valores.values())]
+    filas = []
+    if estado == "ER":
+        filas = [f for f in cuentas if clases.get(f.clave) is None]
+        return filas + [_fila(c, CONCEPTOS[c].etiqueta, TOTAL, lista, CONCEPTOS[c].obtener)
+                        for c in ("utilidad_bruta", "utilidad_operativa", "utilidad_antes_impuestos", "utilidad_neta")]
+    subtotales = {"AC": ("activo_corriente",), "ANC": ("activo_no_corriente", "total_activo"), "PC": ("pasivo_corriente",),
+                  "PNC": ("pasivo_no_corriente", "total_pasivo"), "PAT": ("total_patrimonio", "total_pasivo_patrimonio")}
+    for clase in CLASE_BALANCE:
+        filas += [f for f in cuentas if clases.get(f.clave) == clase]
+        filas += [_fila(c, CONCEPTOS[c].etiqueta, CONCEPTOS[c].tipo, lista, CONCEPTOS[c].obtener) for c in subtotales[clase]]
+    return filas
+
+
+def horizontal_de_estado(lista: list[DatosEjercicio], estado: str, nivel: str) -> list[FilaHorizontal]:
+    """Filas del analisis horizontal de un estado ("BG" o "ER") a nivel "rubros", "grupos" o "cuentas"."""
+    if nivel == "rubros":
+        return horizontal_conceptos(lista, CLAVES_RUBROS_BG if estado == "BG" else CLAVES_RUBROS_ER)
+    if nivel == "grupos":
+        return horizontal_grupos(lista, estado)
+    return _cuentas_de_estado(lista, estado)
+
+
+def _nota_dos_ejercicios(actual, anterior, nota: str, anio_anterior: int, anio_actual: int) -> str:
+    if anterior is None and actual is not None:
+        return f"No se presenta en {anio_anterior}: sin base de comparación."
+    if actual is None and anterior is not None:
+        return f"No se presenta en {anio_actual}: sin dato para comparar."
+    if anterior and actual and (anterior > CERO) != (actual > CERO):
+        return "Cambia de signo: interpretar el porcentaje con cautela (trabajo, 6.3)."
+    return nota
+
+
+def dos_ejercicios(filas: list[FilaHorizontal], anio_actual: int, anio_anterior: int) -> list[FilaDosEjercicios]:
+    """Saldo actual, saldo anterior, variaciones y sentido del cambio entre dos ejercicios. Se omiten las
+    filas sin importe en ambos, que no tienen nada que comparar."""
+    resultado = []
+    for fila in filas:
+        actual, anterior = fila.valores.get(anio_actual), fila.valores.get(anio_anterior)
+        if not actual and not anterior:
+            continue
+        absoluta, relativa, nota = variacion(actual, anterior)
+        resultado.append(FilaDosEjercicios(fila.clave, fila.etiqueta, fila.tipo, actual, anterior, absoluta, relativa,
+                                           tendencia(actual, anterior),
+                                           _nota_dos_ejercicios(actual, anterior, nota, anio_anterior, anio_actual)))
+    return resultado
+
+
 # --------------------------------------------------------- vertical comparativo
 @dataclass
 class FilaVerticalComparativa:
@@ -262,7 +398,7 @@ def vertical_comparativo(lista: list[DatosEjercicio], estado: str) -> list[FilaV
         concepto = CONCEPTOS[clave]
         valores = {d.anio: concepto.obtener(d) for d in lista}
         filas.append(FilaVerticalComparativa(
-            clave, concepto.etiqueta, concepto.tipo, valores,
+            clave, ETIQUETAS_VERTICAL.get(clave, concepto.etiqueta), concepto.tipo, valores,
             {d.anio: porcentaje(valores[d.anio], CONCEPTOS[base].obtener(d)) for d in lista}, concepto.nota))
     return filas
 

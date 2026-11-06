@@ -10,27 +10,34 @@ columna (o de su fila); el redondeo solo ocurre al presentar.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy.orm import Session
 
 from calculations import indicadores as ind
 from calculations.comparacion_anf import Comparacion
 from calculations.comparativo import (
+    CLAVES_TABLA_3,
+    CLAVES_TABLA_4,
+    CLAVES_TABLA_5,
     CONCEPTOS,
+    dos_ejercicios,
     horizontal_conceptos,
     horizontal_cuentas,
+    horizontal_de_estado,
     horizontal_grupos,
     variacion,
     vertical_comparativo,
 )
 from calculations.controles_carga import controles_fuentes, controles_totales
+from calculations.dupont import factores_controladora, factores_total
 from calculations.fuentes_usos import ResultadoFuentesUsos
 from calculations.rubros import GRUPOS, NOMBRE_CLASE, DatosEjercicio
 from calculations.wacc import ResultadoWACC, cargar_supuestos
-from components.money import format_money, format_percent
+from components.money import format_money, format_percent, redondear
 
 TEXTO, USD, PCT, VECES, DIAS, POR_FILA = "texto", "USD", "%", "veces", "días", "por_fila"
+VAR_USD, VAR_PCT = "var_usd", "var_pct"  # variaciones: con signo explicito, como las Tablas 3 a 7 del trabajo
 
 
 @dataclass
@@ -49,21 +56,30 @@ class Seccion:
     filas_destacadas: set[int] = field(default_factory=set)
 
 
+def es_entero(valor: Decimal) -> bool:
+    return valor == valor.to_integral_value()
+
+
 def formatear(valor, tipo: str) -> str:
     if valor is None:
         return "—"
     if isinstance(valor, str):
         return valor
-    if tipo == USD:
-        return format_money(valor)
+    if tipo == USD:  # sin centavos cuando no los hay, como las tablas del trabajo
+        return f"{valor:,.0f}" if es_entero(valor) else format_money(valor)
+    if tipo == VAR_USD:
+        return f"{valor:+,.0f}" if es_entero(valor) else f"{valor:+,.2f}"
+    if tipo == VAR_PCT:
+        redondeado = valor.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return f"{redondeado:+.2f}%"
     if tipo == PCT:
         return format_percent(valor)
     if tipo == DIAS:
-        return f"{valor:,.2f}"
+        return f"{redondear(valor, 2):,.2f}"
     if tipo == VECES:
-        return f"{valor:,.2f}"
+        return f"{redondear(valor, 2):,.2f}"
     if isinstance(valor, Decimal):
-        return f"{valor:,.2f}"
+        return f"{redondear(valor, 2):,.2f}"
     return str(valor)
 
 
@@ -123,6 +139,10 @@ def _cuenta_de(lista, codigo):
     return None
 
 
+def _rango(anios: list[int]) -> str:
+    return f"{anios[0]}–{anios[-1]}" if anios else ""
+
+
 # ------------------------------------------------------------- horizontal
 def horizontal(lista: list[DatosEjercicio], nivel: str = "rubros") -> Seccion:
     anios = _anios(lista)
@@ -151,15 +171,118 @@ def horizontal(lista: list[DatosEjercicio], nivel: str = "rubros") -> Seccion:
     return seccion
 
 
+_NOTA_FORMULAS = ("Variación absoluta = Vt − Vt−1; variación relativa = (Vt − Vt−1) / Vt−1 × 100. Si la base es cero o negativa "
+                  "no se calcula el porcentaje («—»).")
+_NOTA_2023_2024 = ("2021–2023: estados combinados; 2024–2025: estados consolidados. El cambio modifica la presentación de varias "
+                   "partidas: las variaciones 2023–2024 deben interpretarse con cautela (trabajo, 6.2).")
+
+
+def _tabla_trabajo(lista: list[DatosEjercicio], anios: list[int], claves, titulo: str, notas: list[str]) -> Seccion:
+    """Tabla con la estructura de las Tablas 3 y 4 del trabajo: cada ejercicio seguido de sus variaciones."""
+    filas = horizontal_conceptos(lista, claves)
+    columnas = [Columna("Cuenta financiera")]
+    for n, anio in enumerate(anios):
+        columnas.append(Columna(str(anio), USD))
+        if n:
+            periodo = f"{str(anios[n - 1])[-2:]}–{str(anio)[-2:]}"
+            columnas += [Columna(f"Var. abs. {periodo}", VAR_USD), Columna(f"Var. rel. {periodo}", VAR_PCT)]
+    seccion = Seccion(titulo, columnas, notas=notas)
+    for fila in filas:
+        if fila.tipo != "cuenta":
+            seccion.filas_destacadas.add(len(seccion.filas))
+        celdas = [fila.etiqueta]
+        for n, anio in enumerate(anios):
+            celdas.append(fila.valores.get(anio))
+            if n:
+                celdas += [fila.var_abs.get(anio), fila.var_pct.get(anio)]
+        seccion.filas.append(celdas)
+    return seccion
+
+
+def horizontal_balance_tablas(lista: list[DatosEjercicio]) -> list[Seccion]:
+    """Tablas 3 y 4 del trabajo. La primera usa la linea de cuentas por cobrar comerciales y la segunda, comerciales
+    y otras; por eso el importe del ejercicio comun difiere entre ambas (nota de la Tabla 4)."""
+    anios = [d.anio for d in lista if d.bs.tiene_datos]
+    if not anios:
+        return []
+    secciones = [_tabla_trabajo(
+        lista, anios[:3], CLAVES_TABLA_3,
+        f"Tabla 3. Análisis horizontal del estado de situación financiera ({anios[0]}–{anios[:3][-1]}) [USD]",
+        [_NOTA_FORMULAS, "Cuentas por cobrar: únicamente la línea «Cuentas por cobrar comerciales» en los estados combinados."])]
+    if len(anios) > 3:
+        secciones.append(_tabla_trabajo(
+            lista, anios[2:], CLAVES_TABLA_4,
+            f"Tabla 4. Análisis horizontal del estado de situación financiera ({anios[2]}–{anios[-1]}) [USD]",
+            [_NOTA_FORMULAS, "Cuentas por cobrar: comerciales y otras cuentas por cobrar, porque los estados consolidados presentan "
+                             "ambas en una sola línea. Por esa razón el importe del primer ejercicio difiere del de la Tabla 3.",
+             _NOTA_2023_2024]))
+    return secciones
+
+
+def horizontal_resultados_tabla(lista: list[DatosEjercicio]) -> Seccion:
+    """Tabla 5 del trabajo, con la variacion absoluta ademas de la relativa."""
+    filas = horizontal_conceptos(lista, CLAVES_TABLA_5)
+    anios = [d.anio for d in lista if d.inc.tiene_datos]
+    pares = list(zip(anios, anios[1:]))
+    seccion = Seccion(
+        f"Tabla 5. Análisis horizontal del estado de resultados ({anios[0]}–{anios[-1]}) [USD]" if anios else "Tabla 5",
+        [Columna("Rubro del estado de resultados")] + [Columna(str(a), USD) for a in anios]
+        + [Columna(f"Var. abs. {str(a)[-2:]}–{str(b)[-2:]}", VAR_USD) for a, b in pares]
+        + [Columna(f"Var. rel. {str(a)[-2:]}–{str(b)[-2:]}", VAR_PCT) for a, b in pares],
+        notas=[_NOTA_FORMULAS,
+               "Costos y gastos en positivo, como en el trabajo: un aumento significa mayor costo o gasto.",
+               "Gastos operativos: administración, venta o distribución y, en 2024–2025, personal y depreciación y amortización. "
+               "No incluyen el deterioro de cuentas por cobrar ni los otros ingresos netos de 2021–2023, que sí forman parte de la "
+               "utilidad operativa.",
+               "Utilidad operativa: los estados de 2022 y 2023 no imprimen este subtotal; se obtiene de sus partidas impresas.",
+               "Gastos financieros netos: en 2021–2023 los estados presentan directamente el neto; en 2024–2025, gastos financieros "
+               "menos ingresos financieros.", _NOTA_2023_2024],
+    )
+    for fila in filas:
+        if fila.tipo != "cuenta":
+            seccion.filas_destacadas.add(len(seccion.filas))
+        seccion.filas.append([fila.etiqueta] + [fila.valores.get(a) for a in anios] + [fila.var_abs.get(b) for _, b in pares]
+                             + [fila.var_pct.get(b) for _, b in pares])
+    return seccion
+
+
+def horizontal_dos_ejercicios(lista: list[DatosEjercicio], anio: int, anterior: int, estado: str, nivel: str) -> Seccion:
+    """Saldo actual, saldo anterior, variaciones y sentido del cambio de un estado entre dos ejercicios."""
+    nombre = "Balance General" if estado == "BG" else "Estado de Resultados"
+    detalle = {"rubros": "rubros y totales", "grupos": "grupos de análisis", "cuentas": "cuentas"}[nivel]
+    seccion = Seccion(
+        f"{nombre}: {anio} vs {anterior} — {detalle} [USD]",
+        [Columna("Partida"), Columna(f"Saldo actual ({anio})", USD), Columna(f"Saldo anterior ({anterior})", USD),
+         Columna("Variación absoluta", VAR_USD), Columna("Variación relativa", VAR_PCT), Columna("Sentido"), Columna("Observación")],
+        notas=[_NOTA_FORMULAS] + ([_NOTA_2023_2024] if {anio, anterior} == {2023, 2024} else []),
+    )
+    if estado == "ER":
+        seccion.notas.append("Costos y gastos en positivo, como en el trabajo: un aumento significa mayor costo o gasto.")
+    for fila in dos_ejercicios(horizontal_de_estado(lista, estado, nivel), anio, anterior):
+        if fila.tipo != "cuenta":
+            seccion.filas_destacadas.add(len(seccion.filas))
+        seccion.filas.append([fila.etiqueta, fila.actual, fila.anterior, fila.var_abs, fila.var_pct, fila.tendencia, fila.nota])
+    return seccion
+
+
+def base_financiera(lista: list[DatosEjercicio], claves, titulo: str = "Base financiera utilizada") -> Seccion:
+    """Importes de los que parten los indicadores (saldos al cierre), como la base de la seccion 8.4 del trabajo."""
+    anios = _anios(lista)
+    seccion = Seccion(titulo, [Columna("Concepto")] + [Columna(str(a), USD) for a in anios])
+    for clave in claves:
+        seccion.filas.append([CONCEPTOS[clave].etiqueta] + [CONCEPTOS[clave].obtener(d) for d in lista if d.tiene_datos])
+    return seccion
+
+
 def vertical(lista: list[DatosEjercicio], estado: str) -> Seccion:
     filas = vertical_comparativo(lista, estado)
     anios = sorted({a for f in filas for a in f.valores})
     if estado == "ER":
-        titulo = "Análisis vertical del estado de resultados (% de los ingresos ordinarios)"
+        titulo = f"Análisis vertical del estado de resultados {_rango(anios)} (% de los ingresos ordinarios)"
         nota = ("Base: ingresos ordinarios de cada ejercicio. Costos y gastos con signo negativo, como en el trabajo "
                 "(sección 7.1).")
     else:
-        titulo = "Análisis vertical del balance general (% del activo total)"
+        titulo = f"Análisis vertical del balance general {_rango(anios)} (% del activo total)"
         nota = "Base: activo total de cada ejercicio (sección 7.2)."
     seccion = Seccion(titulo, [Columna("Partida")] + [Columna(str(a), PCT) for a in anios] + [Columna(f"Importe {a}", USD) for a in anios],
                       notas=[nota])
@@ -199,14 +322,38 @@ def indicadores(lista: list[DatosEjercicio], categoria: str) -> Seccion:
     return seccion
 
 
+def bases_cxc(lista: list[DatosEjercicio]) -> Seccion:
+    """Las dos carteras, en todos los ejercicios y sin mezclarlas: no son el mismo indicador."""
+    anios = _anios(lista)
+    seccion = Seccion(
+        "Cuentas por cobrar: dos bases que no son equivalentes",
+        [Columna("Concepto")] + [Columna(str(a), POR_FILA) for a in anios] + [Columna("Unidad")],
+        columna_unidad=len(anios) + 1,
+        notas=["Línea comercial presentada: fórmula explícita de la sección 9.3 y base del PPC, del ciclo operativo y del CCE de "
+               "esta aplicación. Desde que los estados presentan una sola línea, esa línea ya incluye otras cuentas por cobrar.",
+               "Comerciales y otras: la misma regla en todos los ejercicios. La sección 8.2 B publica este valor solo en el "
+               "primer ejercicio en que une ambas líneas; en los anteriores usa la línea comercial, por lo que su serie no sigue "
+               "una regla única.",
+               "Las dos bases no deben compararse como si fueran el mismo indicador."],
+    )
+    for titulo, rubro, rotacion, ppc in (
+            ("Línea comercial presentada (9.3)", "rubro:CXC_COMERCIALES_PRESENTADA", "rotacion_cxc", "ppc"),
+            ("Comerciales y otras", "rubro:CXC_COMERCIALES_Y_OTRAS", "rotacion_cxc_total", "ppc_total")):
+        for etiqueta, obtener, unidad in ((f"{titulo}: saldo al cierre", CONCEPTOS[rubro].obtener, ind.USD),
+                                          (f"{titulo}: rotación", (lambda c: lambda d: ind.calcular(d, c).valor)(rotacion), ind.VECES),
+                                          (f"{titulo}: período de cobro", (lambda c: lambda d: ind.calcular(d, c).valor)(ppc), ind.DIAS_U)):
+            seccion.filas.append([etiqueta] + [obtener(d) for d in lista if d.tiene_datos] + [unidad])
+    return seccion
+
+
 def capital_trabajo(lista: list[DatosEjercicio]) -> Seccion:
     """Evolucion del capital de trabajo (estructura de la Tabla 6 del trabajo)."""
     anios = _anios(lista)
     por = {d.anio: d for d in lista if d.tiene_datos}
     seccion = Seccion(
-        "Capital de trabajo neto y razones de liquidez",
-        [Columna("Ejercicio"), Columna("Activo corriente", USD), Columna("Pasivo corriente", USD), Columna("CTN", USD),
-         Columna("Var. absoluta CTN", USD), Columna("Var. relativa CTN", PCT), Columna("Razón corriente", VECES),
+        "Tabla 6. Capital de trabajo neto y razones de liquidez",
+        [Columna("Ejercicio"), Columna("Activo corriente", USD), Columna("Pasivo corriente", USD), Columna("CTN", VAR_USD),
+         Columna("Var. absoluta CTN", VAR_USD), Columna("Var. relativa CTN", VAR_PCT), Columna("Razón corriente", VECES),
          Columna("Prueba ácida", VECES), Columna("Razón de tesorería", PCT)],
         notas=["CTN = Activo corriente − Pasivo corriente; RC = AC / PC; PA = (AC − Inventarios) / PC; "
                "Tesorería = (Efectivo + inversiones corrientes) / PC × 100."],
@@ -215,13 +362,38 @@ def capital_trabajo(lista: list[DatosEjercicio]) -> Seccion:
         d = por[anio]
         ctn = ind.calcular(d, "ctn").valor
         anterior = por.get(anio - 1)
-        absoluta, relativa, nota = variacion(ctn, ind.calcular(anterior, "ctn").valor) if anterior else (None, None, "")
+        absoluta, relativa, nota = variacion(ctn, ind.calcular(anterior, "ctn").valor) if anterior else ("Base", "Base", "")
         seccion.filas.append([str(anio), d.bs.activo_corriente.subtotal, d.bs.pasivo_corriente.subtotal, ctn, absoluta, relativa,
                               ind.calcular(d, "razon_corriente").valor, ind.calcular(d, "prueba_acida").valor,
                               ind.calcular(d, "razon_tesoreria").valor])
         if nota and anterior:
             seccion.notas.append(f"{anio}: {nota}")
     return seccion
+
+
+def capital_trabajo_interanual(lista: list[DatosEjercicio]) -> Seccion:
+    """Resumen de variaciones por periodo (estructura de la Tabla 7 del trabajo)."""
+    con_balance = [d for d in lista if d.bs.tiene_datos]
+    seccion = Seccion(
+        "Tabla 7. Resumen de variaciones del capital de trabajo neto [USD]",
+        [Columna("Período comparativo"), Columna("Activo corriente inicial", USD), Columna("Activo corriente final", USD),
+         Columna("Pasivo corriente inicial", USD), Columna("Pasivo corriente final", USD), Columna("CTN inicial", VAR_USD),
+         Columna("CTN final", VAR_USD), Columna("Variación absoluta CTN", VAR_USD), Columna("Variación relativa CTN", VAR_PCT)],
+    )
+    for a, b in zip(con_balance, con_balance[1:]):
+        if b.anio != a.anio + 1:
+            continue
+        inicial, final = ind.calcular(a, "ctn").valor, ind.calcular(b, "ctn").valor
+        absoluta, relativa, nota = variacion(final, inicial)
+        seccion.filas.append([f"{a.anio} vs {b.anio}", a.bs.activo_corriente.subtotal, b.bs.activo_corriente.subtotal,
+                              a.bs.pasivo_corriente.subtotal, b.bs.pasivo_corriente.subtotal, inicial, final, absoluta, relativa])
+        if nota:
+            seccion.notas.append(f"{a.anio} vs {b.anio}: {nota}")
+    return seccion
+
+
+def _x100(fraccion):
+    return fraccion * 100 if fraccion is not None else None
 
 
 def dupont(lista: list[DatosEjercicio]) -> list[Seccion]:
@@ -232,17 +404,23 @@ def dupont(lista: list[DatosEjercicio]) -> list[Seccion]:
         [Columna("Concepto")] + [Columna(str(a), POR_FILA) for a in anios] + [Columna("Unidad")],
         columna_unidad=len(anios) + 1,
         notas=["RSA = Margen neto × Rotación de activos; RSP = RSA × MAF; MAF = Activo total / Patrimonio total. "
-               "Saldos al cierre (criterio del trabajo). El reporte «Análisis DuPont» existente usa saldos promedio y por "
-               "eso sus resultados difieren."],
+               "Saldos al cierre (criterio del trabajo), igual que el reporte «Rentabilidad mediante fórmula DuPont»."],
     )
     filas_total = [("Ingresos ordinarios", lambda d: d.inc.ingresos_netos.subtotal, ind.USD),
                    ("Utilidad neta del ejercicio", lambda d: d.inc.utilidad_neta, ind.USD),
                    ("Activo total", lambda d: d.bs.total_activo, ind.USD),
                    ("Patrimonio total", lambda d: d.bs.total_patrimonio, ind.USD)]
-    for clave in ("margen_neto", "rotacion_activos", "roa_dupont", "maf", "roe_dupont", "roa", "roe"):
+    for clave, obtener in (("margen_neto", lambda d: _x100(factores_total(d).margen_neto)),
+                           ("rotacion_activos", lambda d: factores_total(d).rotacion_activos),
+                           ("roa_dupont", lambda d: _x100(factores_total(d).rsa)),
+                           ("maf", lambda d: factores_total(d).maf_interpretable),
+                           ("roe_dupont", lambda d: _x100(factores_total(d).rsp_interpretable))):
         i = ind.POR_CLAVE[clave]
-        filas_total.append((i.nombre + (" — verificación directa" if clave in ("roa", "roe") else ""),
-                            (lambda c: lambda d: ind.calcular(d, c).valor)(clave), i.unidad))
+        filas_total.append((i.nombre, obtener, i.unidad))
+    # Comprobacion con las formulas directas de la seccion 8.4 (indicadores ROA y ROE).
+    for clave in ("roa", "roe"):
+        i = ind.POR_CLAVE[clave]
+        filas_total.append((f"{i.nombre} — verificación directa", (lambda c: lambda d: ind.calcular(d, c).valor)(clave), i.unidad))
     for etiqueta, obtener, unidad in filas_total:
         total.filas.append([etiqueta] + [obtener(por[a]) for a in anios] + [unidad])
 
@@ -253,9 +431,13 @@ def dupont(lista: list[DatosEjercicio]) -> list[Seccion]:
     )
     filas_ctrl = [("Utilidad atribuible a la controladora", lambda d: d.utilidad_controladora()[0], ind.USD),
                   ("Patrimonio atribuible a la controladora", lambda d: d.patrimonio_controladora, ind.USD)]
-    for clave in ("margen_neto_controladora", "rotacion_activos", "roa_controladora", "maf_controladora", "roe_controladora"):
+    for clave, obtener in (("margen_neto_controladora", lambda d: _x100(factores_controladora(d)[0].margen_neto)),
+                           ("rotacion_activos", lambda d: factores_controladora(d)[0].rotacion_activos),
+                           ("roa_controladora", lambda d: _x100(factores_controladora(d)[0].rsa)),
+                           ("maf_controladora", lambda d: factores_controladora(d)[0].maf_interpretable),
+                           ("roe_controladora", lambda d: _x100(factores_controladora(d)[0].rsp_interpretable))):
         i = ind.POR_CLAVE[clave]
-        filas_ctrl.append((i.nombre, (lambda c: lambda d: ind.calcular(d, c).valor)(clave), i.unidad))
+        filas_ctrl.append((i.nombre, obtener, i.unidad))
     for etiqueta, obtener, unidad in filas_ctrl:
         ctrl.filas.append([etiqueta] + [obtener(por[a]) for a in anios] + [unidad])
     for a in anios:
