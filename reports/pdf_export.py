@@ -19,11 +19,12 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import CondPageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from calculations.banderas import Bandera, banderas_balance, banderas_dupont, banderas_resultados, resumen
+from calculations.validation import lineas_reportables, nota_cuentas_omitidas
 from calculations.vertical_analysis import ETIQUETA_EFECTO
-from components.money import format_money, format_percent, format_ratio
+from components.money import format_money, format_percent
 
 AZUL_OSCURO = colors.HexColor("#0B2447")
 GRIS_CLARO = colors.HexColor("#F2F2F2")
@@ -86,10 +87,11 @@ def _documento(buffer):
 
 
 def _tabla_grupo(grupo, moneda: str) -> list:
-    if not grupo.lineas:
+    lineas = lineas_reportables(grupo)
+    if not lineas:
         return [Paragraph(escape(grupo.nombre), _seccion_style), _texto("Sin datos capturados."), Spacer(1, 0.3 * cm)]
     filas = [["Código", "Cuenta", "Importe"]]
-    for linea in grupo.lineas:
+    for linea in lineas:
         filas.append([linea.cuenta.codigo, _texto(linea.cuenta.nombre), format_money(linea.valor, moneda)])
     filas.append(["", _texto(f"Subtotal {grupo.nombre}", _celda_negrita), format_money(grupo.subtotal, moneda)])
 
@@ -149,6 +151,10 @@ def export_balance_pdf(company, period, bs, banderas: list[Bandera] | None = Non
                 _alerta_style,
             )
         )
+    omitidas = nota_cuentas_omitidas([bs.activo_corriente, bs.activo_no_corriente, bs.pasivo_corriente, bs.pasivo_no_corriente,
+                                      *bs.patrimonio_grupos])
+    if omitidas:
+        story.append(Paragraph(escape(omitidas), _sub_style))
 
     doc.build(story, onFirstPage=_pie_pagina, onLaterPages=_pie_pagina)
     return buffer.getvalue()
@@ -195,8 +201,8 @@ def export_vertical_pdf(company, period, titulo: str, lineas, base, nombre_base:
     story += _banderas(banderas or [])
     story.append(Paragraph(f"Base (100%): {escape(nombre_base)} = {escape(format_money(base, company.moneda))}", _seccion_style))
     if any(l.efecto for l in lineas):
-        story.append(Paragraph("Los costos, gastos e impuestos tienen porcentaje positivo y restan "
-                               "(columna Efecto).", _sub_style))
+        story.append(Paragraph("Los costos, gastos e impuestos restan (columna Efecto): su importe se muestra como se "
+                               "captura y su porcentaje en negativo, como en la tabla 7.1 del trabajo.", _sub_style))
     story.append(Spacer(1, 0.3 * cm))
 
     filas = [["Código", "Concepto", "Importe", "%", "Efecto"]]
@@ -222,57 +228,64 @@ def export_vertical_pdf(company, period, titulo: str, lineas, base, nombre_base:
     return buffer.getvalue()
 
 
+def _tabla_dupont(filas, moneda: str) -> Table:
+    from calculations.dupont import formatear_fila
+
+    tabla = Table([["Componente", "Valor"]] + [[_texto(f.etiqueta), formatear_fila(f, moneda)] for f in filas],
+                  colWidths=[9 * cm, 6.5 * cm], repeatRows=1)
+    tabla.setStyle(TableStyle(ESTILO_TABLA + [("ALIGN", (1, 0), (1, -1), "RIGHT")]))
+    return tabla
+
+
 def export_dupont_pdf(company, period, resultado) -> bytes:
-    from calculations.dupont import generar_interpretacion
+    from calculations.dupont import (
+        BASE_SALDOS,
+        filas_enfoque_controladora,
+        filas_enfoque_total,
+        generar_interpretacion,
+        interpretacion_controladora,
+    )
 
     buffer = io.BytesIO()
     doc = _documento(buffer)
     story = _encabezado(company, period.anio, "Análisis de Rentabilidad — Modelo DuPont")
     story += _banderas(banderas_dupont(resultado))
-
-    def roe(valor):
-        return format_percent(valor) if resultado.interpretable else "NO INTERPRETABLE"
-
-    filas = [
-        ["Componente", "Valor"],
-        ["Utilidad neta", format_money(resultado.utilidad_neta, company.moneda)],
-        ["Ingresos netos", format_money(resultado.ingresos_netos, company.moneda)],
-        ["Activo total inicial", format_money(resultado.activo_inicial, company.moneda)],
-        ["Activo total final", format_money(resultado.activo_final, company.moneda)],
-        ["Activo total promedio", format_money(resultado.activo_promedio, company.moneda)],
-        ["Patrimonio inicial", format_money(resultado.patrimonio_inicial, company.moneda)],
-        ["Patrimonio final", format_money(resultado.patrimonio_final, company.moneda)],
-        ["Patrimonio promedio", format_money(resultado.patrimonio_promedio, company.moneda)],
-        # 4 decimales: el producto de los factores reproduce el ROE mostrado (B-01).
-        ["Margen neto", format_percent(resultado.margen_neto * 100 if resultado.margen_neto is not None else None, 4)],
-        ["Rotación de activos", format_ratio(resultado.rotacion_activos, 4)],
-        ["Multiplicador del capital", format_ratio(resultado.multiplicador_capital, 4)],
-        ["ROE (DuPont)", roe(resultado.roe_dupont_pct)],
-        ["ROE directo", roe(resultado.roe_directo_pct)],
-    ]
-    tabla = Table(filas, colWidths=[9 * cm, 6.5 * cm], repeatRows=1)
-    tabla.setStyle(TableStyle(ESTILO_TABLA + [("ALIGN", (1, 0), (1, -1), "RIGHT")]))
-    story.append(tabla)
-    story.append(Spacer(1, 0.4 * cm))
-    story.append(Paragraph(f"Fuente de saldos iniciales: {escape(resultado.fuente_saldos_iniciales or '')}.", _sub_style))
-    story.append(Paragraph("Criterio: ROE calculado con el patrimonio total del Balance.", _sub_style))
+    story.append(Paragraph(escape(BASE_SALDOS), _sub_style))
     story.append(Spacer(1, 0.3 * cm))
 
+    story.append(Paragraph("Enfoque total", _seccion_style))
+    story.append(_tabla_dupont(filas_enfoque_total(resultado), company.moneda))
+    story.append(Spacer(1, 0.4 * cm))
+    filas_controladora = filas_enfoque_controladora(resultado)
+    if filas_controladora:
+        story.append(Paragraph("Enfoque de la controladora", _seccion_style))
+        story.append(Paragraph("Ganancia y patrimonio atribuibles a los propietarios de la controladora; activos totales de "
+                               f"la empresa. Ganancia atribuible: {escape(resultado.controladora.fuente)}.", _sub_style))
+        story.append(Spacer(1, 0.2 * cm))
+        story.append(_tabla_dupont(filas_controladora, company.moneda))
+        story.append(Spacer(1, 0.4 * cm))
+
     if resultado.controles:
+        story.append(CondPageBreak(4 * cm))  # el titulo no queda solo al pie de la pagina
         story.append(Paragraph("Controles de los datos", _seccion_style))
         controles = [["Control", "Resultado", "Detalle"]] + [
-            [_texto(c.nombre), "Correcto" if c.correcto else "Revisar", _texto(c.detalle)] for c in resultado.controles
+            [_texto(c.nombre), _texto(c.resultado), _texto(c.detalle)] for c in resultado.controles
         ]
-        tabla_controles = Table(controles, colWidths=[5.5 * cm, 2 * cm, 8 * cm], repeatRows=1)
+        tabla_controles = Table(controles, colWidths=[5.5 * cm, 2.4 * cm, 7.6 * cm], repeatRows=1)
         estilos = list(ESTILO_TABLA)
         for i, c in enumerate(resultado.controles, start=1):
-            estilos.append(("TEXTCOLOR", (1, i), (1, i), VERDE if c.correcto else ROJO))
+            if not c.sin_datos:
+                estilos.append(("TEXTCOLOR", (1, i), (1, i), VERDE if c.correcto else ROJO))
         tabla_controles.setStyle(TableStyle(estilos))
         story.append(tabla_controles)
         story.append(Spacer(1, 0.3 * cm))
 
     story.append(Paragraph("Interpretación financiera automática", _seccion_style))
     story.append(Paragraph(escape(generar_interpretacion(resultado)), _styles["Normal"]))
+    controladora = interpretacion_controladora(resultado)
+    if controladora:
+        story.append(Spacer(1, 0.2 * cm))
+        story.append(Paragraph(escape(controladora), _styles["Normal"]))
 
     doc.build(story, onFirstPage=_pie_pagina, onLaterPages=_pie_pagina)
     return buffer.getvalue()

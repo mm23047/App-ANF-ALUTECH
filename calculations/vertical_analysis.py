@@ -1,5 +1,5 @@
-"""Analisis vertical del Balance General y del Estado de Resultados
-(secciones 9.3 y 9.4). Porcentaje = valor / base * 100.
+"""Analisis vertical del Balance General y del Estado de Resultados (trabajo
+ANF, secciones 7.2 y 7.1). Porcentaje = valor / base * 100.
 
 Si la base es cero (o no hay datos), no se inventa un porcentaje: se
 devuelve None y el reporte debe mostrar "No disponible".
@@ -8,8 +8,9 @@ Ademas de las cuentas (`filas`), el resultado incluye los subtotales,
 totales y utilidades (`subtotales`) y la presentacion completa en orden
 (`lineas`), hallazgo M-03. Un grupo sin cuentas capturadas tiene valor
 None ("Sin datos"), no 0. En el Estado de Resultados, `efecto` indica si
-la linea resta o suma: los costos y gastos se capturan en positivo y se
-restan, por lo que su porcentaje es positivo aunque disminuya la utilidad.
+la linea resta o suma. Los costos y gastos se capturan en positivo y restan:
+el importe se conserva y su porcentaje se presenta negativo, como en la
+tabla 7.1 del trabajo. El signo se aplica una sola vez, en _porcentaje_con_efecto.
 """
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from calculations.balance_sheet import compute_balance_sheet
 from calculations.income_statement import compute_income_statement
+from calculations.validation import lineas_reportables
 from components.money import q2
 from database.models import Account
 
@@ -54,12 +56,22 @@ def _porcentaje(valor: Decimal, base: Decimal) -> Decimal | None:
     return q2((valor / base) * CIEN)
 
 
+def _porcentaje_con_efecto(valor: Decimal, base: Decimal, efecto: str) -> Decimal | None:
+    """Porcentaje a presentar: las lineas que restan se muestran en negativo (un
+    importe atipico capturado en negativo queda en positivo). Nunca da -0.00."""
+    porcentaje = _porcentaje(valor, base)
+    if porcentaje is None or efecto != RESTA:
+        return porcentaje
+    return CERO if porcentaje == CERO else -porcentaje
+
+
 def _linea(tipo: str, etiqueta: str, valor: Decimal | None, base: Decimal, codigo: str = "", efecto: str = "") -> LineaVertical:
-    return LineaVertical(tipo, etiqueta, valor, None if valor is None else _porcentaje(valor, base), codigo, efecto)
+    porcentaje = None if valor is None else _porcentaje_con_efecto(valor, base, efecto)
+    return LineaVertical(tipo, etiqueta, valor, porcentaje, codigo, efecto)
 
 
 def _cuentas(grupos, base: Decimal, efecto: str = "") -> list[LineaVertical]:
-    return [_linea("cuenta", l.cuenta.nombre, l.valor, base, l.cuenta.codigo, efecto) for g in grupos for l in g.lineas]
+    return [_linea("cuenta", l.cuenta.nombre, l.valor, base, l.cuenta.codigo, efecto) for g in grupos for l in lineas_reportables(g)]
 
 
 def _si_hay(grupos, valor: Decimal) -> Decimal | None:
@@ -80,10 +92,10 @@ def compute_vertical_balance(session: Session, fiscal_period_id: int) -> Vertica
     base = bs.total_activo
     filas: list[FilaVertical] = []
     for grupo in (bs.activo_corriente, bs.activo_no_corriente, bs.pasivo_corriente, bs.pasivo_no_corriente):
-        for linea in grupo.lineas:
+        for linea in lineas_reportables(grupo):
             filas.append(FilaVertical(linea.cuenta, linea.valor, _porcentaje(linea.valor, base)))
     for grupo in bs.patrimonio_grupos:
-        for linea in grupo.lineas:
+        for linea in lineas_reportables(grupo):
             filas.append(FilaVertical(linea.cuenta, linea.valor, _porcentaje(linea.valor, base)))
 
     ac, anc, pc, pnc = bs.activo_corriente, bs.activo_no_corriente, bs.pasivo_corriente, bs.pasivo_no_corriente
@@ -124,21 +136,21 @@ def compute_vertical_income(session: Session, fiscal_period_id: int) -> Vertical
     base = inc.ingresos_netos.subtotal
     filas: list[FilaVertical] = []
     grupos = (
-        inc.ingresos_netos,
-        inc.costo_ventas,
-        inc.gastos_administracion,
-        inc.gastos_ventas,
-        inc.otros_ingresos_operativos,
-        inc.otros_gastos_operativos,
-        inc.ingresos_financieros,
-        inc.gastos_financieros,
-        inc.otros_ingresos_no_operativos,
-        inc.otros_gastos_no_operativos,
-        inc.impuesto_renta,
+        (inc.ingresos_netos, SUMA),
+        (inc.costo_ventas, RESTA),
+        (inc.gastos_administracion, RESTA),
+        (inc.gastos_ventas, RESTA),
+        (inc.otros_ingresos_operativos, SUMA),
+        (inc.otros_gastos_operativos, RESTA),
+        (inc.ingresos_financieros, SUMA),
+        (inc.gastos_financieros, RESTA),
+        (inc.otros_ingresos_no_operativos, SUMA),
+        (inc.otros_gastos_no_operativos, RESTA),
+        (inc.impuesto_renta, RESTA),
     )
-    for grupo in grupos:
+    for grupo, efecto in grupos:
         for linea in grupo.lineas:
-            filas.append(FilaVertical(linea.cuenta, linea.valor, _porcentaje(linea.valor, base)))
+            filas.append(FilaVertical(linea.cuenta, linea.valor, _porcentaje_con_efecto(linea.valor, base, efecto)))
 
     operativos = [inc.gastos_administracion, inc.gastos_ventas, inc.otros_ingresos_operativos, inc.otros_gastos_operativos]
     financieros = [inc.ingresos_financieros, inc.gastos_financieros]

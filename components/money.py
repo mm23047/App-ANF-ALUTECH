@@ -182,6 +182,11 @@ def format_money(valor: Decimal | None, moneda: str = "") -> str:
     return f"{moneda} {texto}".strip()
 
 
+def redondear(valor: Decimal, decimales: int) -> Decimal:
+    """Unico redondeo de la aplicacion: mitad hacia arriba, una sola vez sobre el valor dado."""
+    return _redondear(valor, decimales)
+
+
 def _redondear(valor: Decimal, decimales: int) -> Decimal:
     return valor.quantize(Decimal(1).scaleb(-decimales), rounding=ROUND_HALF_UP)
 

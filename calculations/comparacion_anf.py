@@ -17,6 +17,9 @@ Criterio de clasificacion (para cada valor de referencia):
     causa investigada se documenta en fuentes/anf/observaciones_validacion.json.
   - No verificable: la aplicacion no puede calcular el valor con los datos
     disponibles.
+  - Resultado derivado: el trabajo no publica la cifra de forma independiente,
+    sino una equivalencia con otro indicador (p. ej. 8.3 C). Coincide por
+    construccion, asi que no se cuenta como coincidencia con una cifra publicada.
   - No aplica: el trabajo declara el indicador no calculable y la aplicacion
     llega a la misma conclusion.
 No se ajusta ningun dato ni formula para provocar una coincidencia.
@@ -46,7 +49,8 @@ REDONDEO = "Coincidencia por redondeo"
 DIFERENCIA = "Diferencia"
 NO_VERIFICABLE = "No verificable"
 NO_APLICA = "No aplica"
-ESTADOS = (COINCIDE, REDONDEO, DIFERENCIA, NO_VERIFICABLE, NO_APLICA)
+DERIVADO = "Resultado derivado"
+ESTADOS = (COINCIDE, REDONDEO, DERIVADO, DIFERENCIA, NO_VERIFICABLE, NO_APLICA)
 
 
 @dataclass(frozen=True)
@@ -105,6 +109,13 @@ def cargar_observaciones(ruta: str = str(OBSERVACIONES)) -> tuple[dict, ...]:
         return ()
     with open(ruta, encoding="utf-8") as f:
         return tuple(json.load(f)["observaciones"])
+
+
+@lru_cache(maxsize=4)
+def referencias_derivadas(ruta: str = str(REFERENCIAS)) -> frozenset[str]:
+    """Referencias sin cifra publicada independiente: su valor sale de una equivalencia que enuncia el trabajo."""
+    with open(ruta, encoding="utf-8") as f:
+        return frozenset(json.load(f).get("referencias_derivadas", []))
 
 
 def fuera_de_alcance(ruta: str = str(REFERENCIAS)) -> list[str]:
@@ -192,7 +203,7 @@ def clasificar(valor_app: Decimal | None, valor_anf: Decimal | None, decimales: 
 
 
 CATEGORIAS_CAUSA = ("Error en el trabajo académico", "Error de extracción", "Error de clasificación",
-                    "Diferencia de fórmula", "Diferencia de redondeo", "Supuesto no verificable")
+                    "Diferencia de fórmula", "Diferencia de redondeo", "Supuesto no verificable", "Resultado derivado")
 
 
 def _observacion(ref: Referencia, anio: int, estado: str) -> tuple[str, str, str]:
@@ -218,6 +229,8 @@ def comparar(lista: list[DatosEjercicio]) -> list[Comparacion]:
             app = contexto.valor(ref.metrica, anio) if anio in contexto.por_anio else None
             valor_app = app / ref.escala if app is not None else None
             estado, criterio = clasificar(valor_app, valor_anf, ref.decimales)
+            if estado == COINCIDE and ref.id in referencias_derivadas():
+                estado, criterio = DERIVADO, "Sin cifra publicada independiente: el trabajo enuncia una equivalencia con otro indicador."
             causa, tipo, categoria = _observacion(ref, anio, estado)
             resultados.append(Comparacion(ref, anio, valor_app, valor_anf, estado, criterio, causa, tipo, categoria))
     return resultados

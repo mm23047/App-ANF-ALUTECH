@@ -59,6 +59,8 @@ if not st.session_state.get("db_inicializada"):
 # Paginas del analisis 2021-2025 (reports/analisis_alutech.py): clave -> funcion.
 PAGINAS_ANALISIS = {
     "report_horizontal": "render_horizontal",
+    "report_horizontal_balance": "render_horizontal_balance",
+    "report_horizontal_income": "render_horizontal_resultados",
     "report_vertical_comp": "render_vertical_comparativo",
     "report_indicadores": "render_indicadores",
     "report_wacc": "render_wacc",

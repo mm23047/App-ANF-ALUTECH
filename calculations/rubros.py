@@ -152,7 +152,8 @@ _RUBROS = [
           "'Deudores comerciales y otras cuentas por cobrar'. La base no es homogénea entre ambos períodos."),
     Rubro("CXC_COMERCIALES_Y_OTRAS", "Cuentas por cobrar comerciales y otras (corrientes)",
           ("CXC_COMERCIALES", "OTRAS_CXC_CP", "DEUDORES_COMERCIALES_OTRAS"),
-          "Base homogénea 2021–2025: comerciales + otras cuentas por cobrar corrientes."),
+          "Alternativa analítica: comerciales + otras cuentas por cobrar corrientes. Su comparabilidad depende de confirmar "
+          "que la línea unificada de 2024–2025 contiene exactamente esas cuentas, sin conceptos adicionales."),
     Rubro("CXC_RELACIONADAS_CP", "Cuentas por cobrar a partes relacionadas (corrientes)", ("CXC_RELACIONADAS_CP",)),
     Rubro("CXC_RELACIONADAS_LP", "Cuentas por cobrar a partes relacionadas (no corrientes)", ("CXC_RELACIONADAS_LP",)),
     Rubro("INVENTARIOS", "Inventarios", ("INVENTARIOS",)),
@@ -176,6 +177,34 @@ _RUBROS = [
           "2021–2023 se presentan dentro de la utilidad de operación; 2024–2025, después del resultado financiero."),
 ]
 RUBROS: dict[str, Rubro] = {r.codigo: r for r in _RUBROS}
+
+
+@dataclass(frozen=True)
+class FamiliaPresentacion:
+    """Grupos que, por su denominacion, pueden presentar el mismo contenido de otra forma entre
+    ejercicios. Es un parametro metodologico: la relacion no esta demostrada, porque la composicion
+    de las lineas no siempre se puede comprobar con los documentos."""
+
+    codigo: str
+    grupos: tuple[str, ...]
+
+
+_FAMILIAS = [
+    FamiliaPresentacion("CXC_CORRIENTES", ("CXC_COMERCIALES", "OTRAS_CXC_CP", "DEUDORES_COMERCIALES_OTRAS")),
+    FamiliaPresentacion("CXC_LARGO_PLAZO", ("CXC_RELACIONADAS_LP", "OTRAS_CXC_LP", "CXC_LP")),
+    FamiliaPresentacion("INVERSIONES_NO_CORRIENTES", ("DEPOSITOS_PLAZO_LP", "INVERSIONES_ACCIONES", "INVERSIONES_LP")),
+    FamiliaPresentacion("INTANGIBLES", ("INTANGIBLES", "PLUSVALIA")),
+    FamiliaPresentacion("OTROS_ACTIVOS_NC", ("OTROS_ACTIVOS_NC", "OTROS_ACTIVOS_FINANCIEROS_NC")),
+    FamiliaPresentacion("TITULOS_CORRIENTES", ("BONOS_CP", "CERTIFICADOS_INVERSION_CP", "TITULARIZACION_CP", "TITULOS_VALORES_CP")),
+    FamiliaPresentacion("TITULOS_NO_CORRIENTES", ("BONOS_LP", "CERTIFICADOS_INVERSION_LP", "TITULARIZACION_LP", "TITULOS_VALORES_LP")),
+    FamiliaPresentacion("CXP_CORRIENTES", ("CXP_COMERCIALES", "OTRAS_CXP_CP", "ACREEDORES_COMERCIALES_OTRAS")),
+    FamiliaPresentacion("RESERVAS", ("OTRAS_RESERVAS", "RESERVAS_CAPITAL", "EFECTO_CONVERSION")),
+    FamiliaPresentacion("RESULTADOS_PATRIMONIO", ("RESULTADOS_ACUMULADOS", "RESULTADO_PERIODO")),
+    FamiliaPresentacion("GASTOS_OPERACION", ("GASTOS_ADMINISTRACION", "GASTOS_VENTA", "GASTOS_PERSONAL", "DEPRECIACION_AMORTIZACION")),
+    FamiliaPresentacion("RESULTADO_FINANCIERO", ("GASTOS_FINANCIEROS", "GASTOS_FINANCIEROS_NETOS", "INGRESOS_FINANCIEROS")),
+    FamiliaPresentacion("OTROS_INGRESOS", ("OTROS_INGRESOS_OPERATIVOS", "OTROS_NO_OPERATIVOS")),
+]
+FAMILIA_DE_GRUPO: dict[str, FamiliaPresentacion] = {g: f for f in _FAMILIAS for g in f.grupos}
 
 
 def es_grupo_valido(codigo: str | None) -> bool:

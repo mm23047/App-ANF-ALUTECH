@@ -1,0 +1,140 @@
+"""Prueba de humo: cada pagina del app.py real se renderiza sin excepciones
+y sin modificar la BD (render_scope nunca confirma; hallazgo M-06).
+
+AppTest se ejecuta en un subproceso (tests/humo_paginas.py): en el mismo
+proceso, las pruebas que usan st.form sin servidor dejan estado global de
+Streamlit y AppTest deja de navegar, con lo que la prueba aprobaria sin
+haber renderizado la pagina.
+"""
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from components.navigation import PAGINAS
+from database import connection
+from database.backup_utils import sha256_archivo
+from database.connection import init_db, session_scope
+from database.enums import TipoEstadoFinanciero as Tipo
+from database.repositories import (
+    close_fiscal_period,
+    get_account_by_codigo,
+    get_or_create_fiscal_period,
+    save_company,
+    upsert_entry,
+)
+from database.seed import seed_default_accounts
+
+HUMO = Path(__file__).resolve().parent / "humo_paginas.py"
+
+
+@pytest.fixture(scope="module")
+def resultado_humo(tmp_path_factory):
+    ruta = tmp_path_factory.mktemp("humo") / "financiera.db"
+    init_db(db_path=ruta)
+    with session_scope() as s:
+        seed_default_accounts(s)
+        save_company(s, nombre_legal="Empresa Humo", nombre_comercial="EH", actividad_economica="x", pais="SV",
+                     moneda="USD", anio_inicial_analisis=2021)
+        for anio, cerrar in ((2021, True), (2022, False)):
+            p, _ = get_or_create_fiscal_period(s, anio)
+            for codigo, valor, tipo in (("1001", "1000", Tipo.BALANCE), ("2001", "400", Tipo.BALANCE),
+                                        ("3001", "600", Tipo.BALANCE), ("4001", "1000", Tipo.RESULTADOS),
+                                        ("8001", "900", Tipo.RESULTADOS)):
+                upsert_entry(s, fiscal_period_id=p.id, account_id=get_account_by_codigo(s, codigo).id, valor=valor, tipo=tipo)
+            if cerrar:
+                close_fiscal_period(s, p.id)
+    connection.dispose_engine()
+    hash_antes = sha256_archivo(ruta)
+    proceso = subprocess.run([sys.executable, str(HUMO), str(ruta)], capture_output=True, text=True,
+                             encoding="utf-8", timeout=600)
+    assert proceso.returncode == 0, proceso.stderr[-3000:]
+    resultados = json.loads(proceso.stdout.strip().splitlines()[-1])
+    return resultados, hash_antes == sha256_archivo(ruta)
+
+
+def test_recorrer_las_paginas_no_modifica_la_bd(resultado_humo):
+    _, bd_sin_cambios = resultado_humo
+    assert bd_sin_cambios
+
+
+@pytest.mark.parametrize("etiqueta", [etiqueta for etiqueta, _ in PAGINAS])
+def test_pagina_se_renderiza_sin_errores(resultado_humo, etiqueta):
+    resultado = resultado_humo[0][etiqueta]
+    # La navegacion debe haber llegado a la pagina pedida.
+    assert resultado["pagina"] == etiqueta
+    if etiqueta != "Dashboard":
+        assert resultado["encabezados"] != ["Dashboard"]
+    assert not resultado["excepciones"], resultado["excepciones"]
+
+
+@pytest.mark.parametrize("etiqueta, cuentas, subtotales", [
+    # Ejercicio 2022 (el ultimo, seleccionado por defecto): activo 1000, pasivo 400, patrimonio 600.
+    ("Reportes › Análisis Vertical del Balance General",
+     {"1001": ("USD 1,000.00", "100.00%"), "2001": ("USD 400.00", "40.00%"), "3001": ("USD 600.00", "60.00%")},
+     {"ACTIVO CORRIENTE": ("USD 1,000.00", "100.00%"), "ACTIVO NO CORRIENTE": ("Sin datos", "No disponible"),
+      "TOTAL ACTIVO": ("USD 1,000.00", "100.00%"), "TOTAL PASIVO": ("USD 400.00", "40.00%"),
+      "TOTAL PATRIMONIO": ("USD 600.00", "60.00%"), "TOTAL PASIVO + PATRIMONIO": ("USD 1,000.00", "100.00%")}),
+    # Ingresos 1000 (base); ISR 900; sin costo de ventas.
+    ("Reportes › Análisis Vertical del Estado de Resultados",
+     {"4001": ("USD 1,000.00", "100.00%"), "8001": ("USD 900.00", "-90.00%")},
+     {"INGRESOS NETOS": ("USD 1,000.00", "100.00%"), "COSTO DE VENTAS": ("Sin datos", "No disponible"),
+      "UTILIDAD BRUTA": ("USD 1,000.00", "100.00%"), "UTILIDAD NETA": ("USD 100.00", "10.00%")}),
+])
+def test_paginas_verticales_muestran_importes_y_porcentajes(resultado_humo, etiqueta, cuentas, subtotales):
+    """Hallazgos M-11 y M-03: con importes distintos de cero la pagina se
+    renderiza y muestra cuentas, subtotales y utilidades calculados con Decimal."""
+    tablas = resultado_humo[0][etiqueta]["tablas"]
+    assert len(tablas) == 2  # por ejercicio y comparativo de los ejercicios
+    assert {f["Código"]: (f["Valor"], f["Participación %"]) for f in tablas[0] if f["Código"]} == cuentas
+    por_concepto = {f["Concepto"]: (f["Valor"], f["Participación %"]) for f in tablas[0] if not f["Código"]}
+    assert subtotales.items() <= por_concepto.items()
+
+
+# ------------------------------------------------------------ menu simplificado
+MENU_ESPERADO = ["Ingreso de datos", "Modificación de datos", "Indicadores financieros", "Balance General", "Estado de Resultados",
+                 "Análisis Vertical del Balance General", "Análisis Vertical del Estado de Resultados",
+                 "Análisis Horizontal del Balance General", "Análisis Horizontal del Estado de Resultados",
+                 "Rentabilidad mediante fórmula DuPont"]
+DESTINO = {"Ingreso de datos": ("entry_data", "Ingreso de datos — Balance General"),
+           "Modificación de datos": ("edit_data", "Modificación de datos"),
+           "Indicadores financieros": ("report_indicadores", "Indicadores financieros"),
+           "Balance General": ("report_balance", "Reporte — Balance General"),
+           "Estado de Resultados": ("report_income", "Reporte — Estado de Resultados"),
+           "Análisis Vertical del Balance General": ("report_vertical_balance", "Reporte — Análisis Vertical del Balance General"),
+           "Análisis Vertical del Estado de Resultados": ("report_vertical_income",
+                                                         "Reporte — Análisis Vertical del Estado de Resultados"),
+           "Análisis Horizontal del Balance General": ("report_horizontal_balance", "Reporte — Análisis Horizontal del Balance General"),
+           "Análisis Horizontal del Estado de Resultados": ("report_horizontal_income",
+                                                            "Reporte — Análisis Horizontal del Estado de Resultados"),
+           "Rentabilidad mediante fórmula DuPont": ("report_dupont", "Reporte — Análisis de Rentabilidad (Modelo DuPont)")}
+
+
+def test_menu_solo_muestra_las_opciones_pedidas(resultado_humo):
+    menu = resultado_humo[0]["_menu"]
+    assert menu["opciones"] == MENU_ESPERADO
+    assert menu["expansores"] == ["Generación de reportes"]
+    assert menu["inicial"] == "entry_data"
+
+
+@pytest.mark.parametrize("opcion", MENU_ESPERADO)
+def test_cada_opcion_del_menu_abre_su_pagina_y_queda_resaltada(resultado_humo, opcion):
+    clic = resultado_humo[0]["_menu"]["clics"][opcion]
+    clave, encabezado = DESTINO[opcion]
+    assert clic["pagina"] == clave
+    assert clic["encabezados"][0] == encabezado
+    assert clic["activos"] == [opcion]  # solo la pagina abierta se resalta
+    assert not clic["excepciones"]
+
+
+def test_paginas_ocultas_siguen_en_el_catalogo_y_enrutadas():
+    from components.navigation import MENU_PRINCIPAL, MENU_REPORTES, PAGINAS_OCULTAS
+
+    app = (Path(__file__).resolve().parent.parent / "app.py").read_text(encoding="utf-8")
+    ocultas = {c for _, c in PAGINAS_OCULTAS}
+    assert len(ocultas) == 17 and len(PAGINAS) == len(ocultas) + len(MENU_PRINCIPAL) + len(MENU_REPORTES)
+    for clave in ocultas - {"report_horizontal", "report_vertical_comp", "report_indicadores", "report_wacc",
+                            "report_fuentes_usos", "report_integral", "validacion_anf"}:
+        assert f'"{clave}"' in app, clave  # enrutada en app.py (las de analisis, via PAGINAS_ANALISIS)

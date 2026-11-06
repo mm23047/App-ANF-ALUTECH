@@ -1,7 +1,7 @@
 """Dashboard principal (seccion 10).
 
 Los indicadores muestran su estado (calculations/banderas.py, hallazgo
-M-08): el ROE se presenta como definitivo, APROXIMADO (con la causa) o NO
+M-08): el ROE se presenta como definitivo, con sus banderas o NO
 INTERPRETABLE, y los importes de un estado incompleto se etiquetan como
 tales en lugar de presentarse como definitivos.
 """
@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 
 from calculations.balance_sheet import compute_balance_sheet
 from calculations.banderas import (
-    APROXIMADO,
     DEFINITIVO,
     banderas_balance,
     banderas_dupont,
@@ -43,8 +42,6 @@ def _estado_roe(dp) -> tuple[str, str, str | None]:
         return "ROE (DuPont)", "No disponible", dp.motivo_no_disponible
     banderas = banderas_dupont(dp)
     estado = resumen(banderas)
-    if any(b.codigo == APROXIMADO for b in banderas):
-        return f"ROE (DuPont) — {estado}", format_percent(dp.roe_dupont_pct), dp.fuente_saldos_iniciales
     if banderas:
         return f"ROE (DuPont) — {estado}", format_percent(dp.roe_dupont_pct), " ".join(b.texto for b in banderas)
     return "ROE (DuPont) — definitivo", format_percent(dp.roe_dupont_pct), None

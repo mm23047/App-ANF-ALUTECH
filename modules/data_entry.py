@@ -324,25 +324,12 @@ def render_income(session: Session, company: Company) -> None:
 def render_initial_balances(session: Session, company: Company) -> None:
     st.header("Ingreso de datos — Saldos iniciales")
     st.caption(
-        "Estos saldos solo se usan para calcular los promedios del modelo DuPont (sección 9.5) cuando el "
-        "Balance del ejercicio inmediatamente anterior no existe o no es utilizable (incompleto, con activo "
-        "total menor o igual a cero o descuadrado). Capture al menos una cuenta de Activo y una de Patrimonio: "
-        "unos saldos parciales no se usan y el DuPont se marca como aproximado."
+        "Estos saldos se conservan como registro de apertura del ejercicio. El modelo DuPont no los usa: se calcula "
+        "con los saldos al cierre, como el trabajo (secciones 8.4, 9.5 y 9.6)."
     )
     period = select_fiscal_period(session, key="periodo_saldos_iniciales", allow_create=False)
     if period is None:
         return
-
-    from calculations.dupont import evaluar_balance_anterior
-
-    bs_anterior, causa = evaluar_balance_anterior(session, period)
-    if bs_anterior is not None:
-        st.warning(
-            f"El saldo inicial de {period.anio} se toma automáticamente del Balance final de {period.anio - 1}; "
-            "los valores capturados aquí no se usarán."
-        )
-    else:
-        st.info(f"Se usarán los saldos capturados aquí (si están completos) porque {causa}.")
 
     if _aviso_ejercicio_cerrado(period):
         return

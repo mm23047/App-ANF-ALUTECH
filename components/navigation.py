@@ -28,6 +28,8 @@ PAGINAS: list[tuple[str, str]] = [
     ("Reportes › Estado de Resultados", "report_income"),
     ("Reportes › Análisis Vertical del Balance General", "report_vertical_balance"),
     ("Reportes › Análisis Vertical del Estado de Resultados", "report_vertical_income"),
+    ("Reportes › Análisis Horizontal del Balance General", "report_horizontal_balance"),
+    ("Reportes › Análisis Horizontal del Estado de Resultados", "report_horizontal_income"),
     ("Reportes › Análisis DuPont", "report_dupont"),
     ("Reportes › Análisis Horizontal 2021–2025", "report_horizontal"),
     ("Reportes › Análisis Vertical comparativo 2021–2025", "report_vertical_comp"),
@@ -47,12 +49,15 @@ _ETIQUETAS = {clave: etiqueta for etiqueta, clave in PAGINAS}
 MENU_PRINCIPAL: list[tuple[str, str, str]] = [
     ("entry_data", "Ingreso de datos", ":material/edit_note:"),
     ("edit_data", "Modificación de datos", ":material/edit_document:"),
+    ("report_indicadores", "Indicadores financieros", ":material/query_stats:"),
 ]
 MENU_REPORTES: list[tuple[str, str, str]] = [
     ("report_balance", "Balance General", ":material/account_balance:"),
     ("report_income", "Estado de Resultados", ":material/receipt_long:"),
     ("report_vertical_balance", "Análisis Vertical del Balance General", ":material/stacked_bar_chart:"),
     ("report_vertical_income", "Análisis Vertical del Estado de Resultados", ":material/percent:"),
+    ("report_horizontal_balance", "Análisis Horizontal del Balance General", ":material/compare_arrows:"),
+    ("report_horizontal_income", "Análisis Horizontal del Estado de Resultados", ":material/swap_horiz:"),
     ("report_dupont", "Rentabilidad mediante fórmula DuPont", ":material/trending_up:"),
 ]
 TITULO_REPORTES = "Generación de reportes"
