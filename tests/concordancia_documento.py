@@ -39,8 +39,8 @@ def tabla(lineas: list[str], marcador: str, desde: int = 0) -> list[list[str]]:
 
 
 def limpiar_celda(celda: str) -> str:
-    """Texto de la celda sin marcas de Markdown y con guion simple."""
-    return celda.replace("*", "").replace("\\", "").replace("−", "-").strip()
+    """Texto de la celda sin marcas de Markdown, sin la llamada de nota † y con guion simple."""
+    return celda.replace("*", "").replace("\\", "").replace("†", "").replace("−", "-").strip()
 
 
 def numero(celda: str, europeo: bool = False) -> tuple[Decimal, int] | None:

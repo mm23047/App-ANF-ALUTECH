@@ -61,11 +61,12 @@ def _pares_estado(lista, estado: str) -> list[tuple[int, int]]:
     return [(a, b) for a, b in zip(anios, anios[1:]) if b == a + 1]
 
 
-def _comparar_dos(lista, estado: str, clave: str) -> None:
+def _comparar_dos(lista, estado: str, clave: str) -> str:
+    """Muestra la comparacion y devuelve el nivel elegido, que tambien usan las descargas."""
     pares = _pares_estado(lista, estado)
     if not pares:
         st.info("Se necesitan dos ejercicios consecutivos con datos.")
-        return
+        return "rubros"
     opciones = {f"{b} vs {a}": (a, b) for a, b in pares}
     columna_par, columna_nivel = st.columns([1, 2])
     with columna_par:
@@ -74,10 +75,12 @@ def _comparar_dos(lista, estado: str, clave: str) -> None:
         nivel = st.radio("Nivel de detalle", list(NIVELES_HORIZONTAL), horizontal=True, key=f"{clave}_nivel")
     anterior, actual = opciones[eleccion]
     mostrar_seccion(sec.horizontal_dos_ejercicios(lista, actual, anterior, estado, NIVELES_HORIZONTAL[nivel]))
+    st.caption(f"Las descargas incluyen todos los pares de ejercicios con el nivel seleccionado: {nivel.lower()}.")
+    return NIVELES_HORIZONTAL[nivel]
 
 
-def _hojas_dos_ejercicios(lista, estado: str) -> list[tuple[str, list[sec.Seccion]]]:
-    return [(f"{b} vs {a}", [sec.horizontal_dos_ejercicios(lista, b, a, estado, "grupos")]) for a, b in _pares_estado(lista, estado)]
+def _hojas_dos_ejercicios(lista, estado: str, nivel: str) -> list[tuple[str, list[sec.Seccion]]]:
+    return [(f"{b} vs {a}", [sec.horizontal_dos_ejercicios(lista, b, a, estado, nivel)]) for a, b in _pares_estado(lista, estado)]
 
 
 def render_horizontal_balance(session: Session, company: Company) -> None:
@@ -98,10 +101,10 @@ def render_horizontal_balance(session: Session, company: Company) -> None:
         for seccion in capital:
             mostrar_seccion(seccion)
     with dos:
-        _comparar_dos(lista, "BG", "horizontal_balance")
+        nivel = _comparar_dos(lista, "BG", "horizontal_balance")
     descargas(company, f"Análisis horizontal del Balance General {lista[0].anio}–{lista[-1].anio}",
-              [("Tablas 3 y 4", tablas), ("Capital de trabajo", capital)] + _hojas_dos_ejercicios(lista, "BG"),
-              "analisis_horizontal_balance", clave="horizontal_balance")
+              [("Tablas 3 y 4", tablas), ("Capital de trabajo", capital)] + _hojas_dos_ejercicios(lista, "BG", nivel),
+              f"analisis_horizontal_balance_{nivel}", clave="horizontal_balance")
 
 
 def render_horizontal_resultados(session: Session, company: Company) -> None:
@@ -117,9 +120,9 @@ def render_horizontal_resultados(session: Session, company: Company) -> None:
     with trabajo:
         mostrar_seccion(tabla)
     with dos:
-        _comparar_dos(lista, "ER", "horizontal_resultados")
+        nivel = _comparar_dos(lista, "ER", "horizontal_resultados")
     descargas(company, f"Análisis horizontal del Estado de Resultados {lista[0].anio}–{lista[-1].anio}",
-              [("Tabla 5", [tabla])] + _hojas_dos_ejercicios(lista, "ER"), "analisis_horizontal_resultados",
+              [("Tabla 5", [tabla])] + _hojas_dos_ejercicios(lista, "ER", nivel), f"analisis_horizontal_resultados_{nivel}",
               clave="horizontal_resultados")
 
 

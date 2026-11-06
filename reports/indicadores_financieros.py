@@ -98,7 +98,7 @@ GRUPOS: tuple[Grupo, ...] = (
             Fila("rotacion_cxc_total", "Rotación de cuentas por cobrar comerciales y otras", "", "8.2 B (variante)"),
             Fila("ppc_total", "Período de cobro (comerciales y otras)", "", "8.2 B (variante)"),
         ),
-        "Variante con base homogénea: comerciales + otras cuentas por cobrar",
+        "Alternativa analítica: comerciales + otras cuentas por cobrar (comparabilidad no confirmada)",
         categoria=ind.ACTIVIDAD,
         bases=("costo_ventas", "rubro:INVENTARIOS", "ingresos", "rubro:CXC_COMERCIALES_PRESENTADA", "rubro:CXC_COMERCIALES_Y_OTRAS",
                "rubro:CXP_COMERCIALES_PRESENTADA", "total_activo"),

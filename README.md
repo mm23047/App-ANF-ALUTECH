@@ -262,8 +262,11 @@ porcentaje negativo. Su importe se muestra como se captura, en positivo, y la co
 
 **Análisis Horizontal del Balance General y del Estado de Resultados:** las primeras pestañas reproducen las Tablas 3 a 7 del
 trabajo. En *Comparar dos ejercicios* elija el par y el nivel de detalle: rubros y totales, grupos de análisis o cuentas con su
-denominación original. Una cuenta que no se presenta en un ejercicio figura como *Aparece* o *Desaparece*, sin porcentaje; si
-la base es cero o negativa tampoco se calcula el porcentaje. La opción oculta *Análisis Horizontal 2021–2025* se conserva.
+denominación original. Una partida que no se presenta en un ejercicio figura como *Aparece* o *Desaparece*, sin variación, y no
+se iguala a cero; si puede estar agrupada en otra línea figura como *Presentación agrupada*, y si cambió su contenido, como
+*No comparable*. Las sumas con composición no comprobada calculan la variación con la advertencia «Agrupación analítica;
+comparabilidad no confirmada». Si la base es cero o negativa tampoco se calcula el porcentaje. Las descargas usan el nivel
+elegido. La opción oculta *Análisis Horizontal 2021–2025* se conserva.
 
 **WACC:** vea el resumen de todos los años, los supuestos usados y el detalle del ejercicio que elija.
 
@@ -439,7 +442,7 @@ tests/            Pruebas automatizadas
 .venv\Scripts\python.exe -m pytest tests -q
 ```
 
-Resultado más reciente: **695 pruebas aprobadas de 695** (2026-11-05, Python 3.12.10, en una copia del proyecto). Las pruebas
+Resultado más reciente: **740 pruebas aprobadas de 740** (2026-11-05, Python 3.12.10, en una copia del proyecto). Las pruebas
 usan bases temporales, y `tests/conftest.py` hace fallar la ejecución si cambia `data/financiera.db`.
 
 ### Documentación adicional

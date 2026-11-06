@@ -243,3 +243,17 @@ Las mismas cifras de AC y PC se corrigieron en cada aparición de las Tablas 4, 
 | `reports/secciones.py`, `reports/indicadores_financieros.py` | Tabla de las dos bases de cuentas por cobrar, en pantalla, PDF y Excel |
 | `calculations/comparacion_anf.py`, `fuentes/anf/*.json` | Estado «Resultado derivado» para 8.3 C y observaciones OBS-07, 08, 09 y 14. Validación: 711, 4, 5, 6 y 15. Ningún valor de referencia cambió |
 | `tests/` | Nuevo `test_fase10_metodologia.py`; expectativas ajustadas, ninguna prueba eliminada. Suite: 695 de 695 |
+
+## 15. Correcciones del análisis horizontal (2026-11-05)
+
+**Informe:** `INFORME_IMPLEMENTACION_ANALISIS_HORIZONTAL.md`. Autorizadas R-1, R-3, R-4, R-5, R-11 a R-14 y las decisiones D-1 a D-4. Sin commit. Sin cambios en la base de datos, en `documentos/` ni en `fuentes/`. R-15 quedó revisada y sin insertar; R-2, R-6, R-7, R-8, R-9, R-10 y R-16 esperan autorización.
+
+**Respaldo:** `C:\Users\estua\Documents\ANF\respaldos_appfinanciera\horizontal_20261105\`.
+
+| Archivo | Cambio |
+|---|---|
+| `calculations/comparativo.py`, `calculations/rubros.py` | Un grupo sin cuentas queda sin dato; estados de comparabilidad deducidos de los datos, sin excepciones por año; observación del capital social |
+| `reports/secciones.py`, `reports/analisis_alutech.py` | Marcas † y notas por fila; cambio de signo en las Tablas 6 y 7; descargas con el nivel elegido |
+| `calculations/indicadores.py`, `reports/indicadores_financieros.py` | «Alternativa analítica» en lugar de «homogénea» (solo texto) |
+| `Trabajo de investigación ANF.md`, `.pdf` | 6.3, notas de las Tablas 4 a 7, Tabla 5 (continuación); PDF: páginas 21 a 29 recompuestas e índice corregido; 84 páginas |
+| `tests/` | Nuevos `test_fase11_horizontal.py` y `humo_exportes_nivel.py`; `concordancia_documento.py` ignora la llamada †. Ninguna prueba eliminada. Suite: 740 de 740 |

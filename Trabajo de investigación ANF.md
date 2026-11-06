@@ -484,7 +484,7 @@ $Δ%\ =\frac{(Vₜ\ -\ Vₜ₋₁)\ }{Vₜ₋₁}\ \times 100$
 * ΔV: diferencia monetaria entre ambos períodos.  
 * Δ%: variación porcentual con respecto al saldo del período anterior.
 
-La variación absoluta expresa cuánto aumentó o disminuyó una partida en términos monetarios, mientras que la variación relativa indica el cambio porcentual con respecto al saldo del período anterior. Cuando el valor del período anterior es igual a cero, la variación relativa no puede calcularse mediante esta fórmula. Si el saldo base es negativo, el resultado porcentual debe interpretarse con cautela, considerando la naturaleza de la partida y el sentido económico de la variación.
+La variación absoluta expresa cuánto aumentó o disminuyó una partida en términos monetarios, mientras que la variación relativa indica el cambio porcentual con respecto al saldo del período anterior. Cuando el valor del período anterior es igual a cero, la variación relativa no puede calcularse mediante esta fórmula. Si el saldo base es negativo, no se calcula la variación relativa, porque el signo del cociente no representaría el sentido del cambio; en ese caso se utiliza la variación absoluta. Cuando una partida pasa de un saldo positivo a uno negativo, el porcentaje puede calcularse, pero debe leerse junto con la variación absoluta y el cambio de signo.
 
 #### **6.4 Análisis horizontal del estado de situación financiera y del estado de resultados** {#6.4-análisis-horizontal-del-estado-de-resultados}
 
@@ -510,7 +510,7 @@ Nota: en esta tabla, las cuentas por cobrar corresponden únicamente a la línea
 | Cuenta financiera | 2023 (\$) | 2024 (\$) | Var. abs. 23–24 (\$) | Var. rel. 23–24 (%) | 2025 (\$) | Var. abs. 24–25 (\$) | Var. rel. 24–25 (%) |
 | :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- |
 | Efectivo y equivalentes | 12,130,206 | 15,782,257 | \+3,652,051 | \+30.11% | 12,551,085 | −3,231,172 | −20.47% |
-| Cuentas por cobrar comerciales y otras cuentas por cobrar | 96,097,483 | 97,204,415 | \+1,106,932 | \+1.15% | 70,169,882 | −27,034,533 | −27.81% |
+| Cuentas por cobrar comerciales y otras cuentas por cobrar † | 96,097,483 | 97,204,415 | \+1,106,932 | \+1.15% | 70,169,882 | −27,034,533 | −27.81% |
 | Inventarios (neto) | 141,491,319 | 116,761,311 | −24,730,008 | −17.48% | 69,818,060 | −46,943,251 | −40.20% |
 | Total activo corriente | 429,794,544 | 432,771,678 | \+2,977,134 | \+0.69% | 247,705,981 | −185,065,697 | −42.76% |
 | Total pasivo corriente | 333,120,685 | 362,966,215 | \+29,845,530 | \+8.96% | 371,274,007 | \+8,307,792 | \+2.29% |
@@ -519,6 +519,10 @@ Nota: en esta tabla, las cuentas por cobrar corresponden únicamente a la línea
 | Total patrimonio | 227,673,394 | 226,061,788 | −1,611,606 | −0.71% | 231,160,198 | \+5,098,410 | \+2.26% |
 
 Nota: el importe de cuentas por cobrar de 2023 suma las cuentas por cobrar comerciales (41,272,525) y las otras cuentas por cobrar (54,824,958), porque los estados de 2024 y 2025 presentan ambas en una sola línea («Deudores comerciales y Otras Cuentas por Cobrar»). Por esa razón difiere del importe de 2023 de la Tabla 3.
+
+† Agrupación analítica; comparabilidad no confirmada. La comparación 2023–2024 depende de confirmar que la línea unificada de 2024 y 2025 contiene exactamente las cuentas por cobrar comerciales y las otras cuentas por cobrar, sin conceptos adicionales; los estados de esos años no detallan su composición.
+
+Observación sobre el capital social: el estado de 2024 imprime un capital social de USD 119,391,833, USD 2,000 más que los de 2022, 2023 y 2025 (USD 119,389,833). Se conserva el importe del estado original, que cuadra con su total de patrimonio; la diferencia requiere confirmación documental.
 
 Se analizan los rubros clave del desempeño económico y operativo de Alutech, S.A. de C.V. y subsidiarias (División Acero) durante el período 2021-2025.
 
@@ -534,11 +538,23 @@ Se analizan los rubros clave del desempeño económico y operativo de Alutech, S
 | Gastos financieros netos | 21,777,725 | 17,181,342 | 22,016,927 | 28,064,310 | 37,399,011 | −21.11% | \+28.14% | \+27.47% | \+33.26% |
 | Utilidad neta del año | 68,602,739 | 10,059,310 | 13,330,680 | 3,060,981 | 11,898,987 | −85.34% | \+32.52% | −77.04% | \+288.73% |
 
+**Tabla 5 (continuación). Variación absoluta del Estado de Resultados (2021 \- 2025\) \[USD \$\]**
+
+| Rubro del estado de resultados | Var. abs. 21–22 (\$) | Var. abs. 22–23 (\$) | Var. abs. 23–24 (\$) | Var. abs. 24–25 (\$) |
+| :---- | :---- | :---- | :---- | :---- |
+| Ingresos ordinarios | −24,311,733 | −21,030,422 | \+383,647 | −39,302,152 |
+| Costo de ventas | \+43,078,543 | −36,785,525 | \+3,913,793 | −46,029,251 |
+| Utilidad bruta | −67,390,276 | \+15,755,103 | −3,530,146 | \+6,727,099 |
+| Gastos operativos\* | \+4,877,760 | \+5,545,180 | \+2,750,989 | −12,744,627 |
+| Utilidad operativa | −72,377,926 | \+13,488,044 | −9,495,103 | \+19,471,726 |
+| Gastos financieros netos | −4,596,383 | \+4,835,585 | \+6,047,383 | \+9,334,701 |
+| Utilidad neta del año | −58,543,429 | \+3,271,370 | −10,269,699 | \+8,838,006 |
+
 Notas de la Tabla 5:
 
 \* Gastos operativos: gastos de administración y de venta o distribución y, en 2024–2025, gastos de personal y de depreciación y amortización. No incluyen el deterioro de cuentas por cobrar ni los otros ingresos netos de 2021–2023, que sí forman parte de la utilidad operativa.
 
-Utilidad operativa: los estados de 2022 y 2023 no imprimen este subtotal; se obtiene de sus partidas impresas (2022: 89,322,338 − 18,344,656 − 39,712,552 − 397,016 + 332,863 = 31,200,977).
+Utilidad operativa: los estados de 2022 y 2023 no imprimen este subtotal; se obtiene de sus partidas impresas (2022: 89,322,338 − 18,344,656 − 39,712,552 − 397,016 + 332,863 = 31,200,977). En 2021–2023 incluye los otros ingresos netos y el deterioro de cuentas por cobrar, mientras que en 2024–2025 los otros ingresos (gastos) se presentan después del resultado de operación. Por ello, la variación de 2023–2024 (−21.25%) no es plenamente comparable.
 
 Gastos financieros netos: en 2021–2023 los estados presentan directamente el importe neto; en 2024–2025 corresponden a gastos financieros menos ingresos financieros (2024: 43,089,283 − 15,024,973; 2025: 51,914,906 − 14,515,895).
 
@@ -554,7 +570,9 @@ El capital de trabajo neto ($CTN$) de Alutech experimentó transformaciones seve
 | **2022** | 448,672,401 | 231,944,180 | **\+216,728,221** | \+38,819,904 | \+21.82% | 1.93x | 1.33x |
 | **2023** | 429,794,544 | 333,120,685 | **\+96,673,859** | \-120,054,362 | \-55.39% | 1.29x | 0.87x |
 | **2024** | 432,771,678 | 362,966,215 | **\+69,805,463** | \-26,868,396 | \-27.79% | 1.19x | 0.87x |
-| **2025** | 247,705,981 | 371,274,007 | **\-123,568,026** | \-193,373,489 | \-277.02% | 0.67x | 0.48x |
+| **2025** † | 247,705,981 | 371,274,007 | **\-123,568,026** | \-193,373,489 | \-277.02% | 0.67x | 0.48x |
+
+† En 2025 el capital de trabajo neto cambia de signo (de +69,805,463 a −123,568,026). La variación relativa de −277.02% refleja ese cruce y no debe interpretarse por sí sola: debe considerarse junto con la variación absoluta y el cambio de signo.
 
 **Análisis por subperíodos**
 
@@ -576,7 +594,9 @@ A continuación se resumen las comparaciones interanuales del capital de trabajo
 | **2021 vs 2022** | 383,881,547 | 448,672,401 | 205,973,230 | 231,944,180 | \+177,908,317 | \+216,728,221 | \+38,819,904 | \+21.82% |
 | **2022 vs 2023** | 448,672,401 | 429,794,544 | 231,944,180 | 333,120,685 | \+216,728,221 | \+96,673,859 | \-120,054,362 | \-55.39% |
 | **2023 vs 2024** | 429,794,544 | 432,771,678 | 333,120,685 | 362,966,215 | \+96,673,859 | \+69,805,463 | \-26,868,396 | \-27.79% |
-| **2024 vs 2025** | 432,771,678 | 247,705,981 | 362,966,215 | 371,274,007 | \+69,805,463 | \-123,568,026 | \-193,373,489 | \-277.02% |
+| **2024 vs 2025** † | 432,771,678 | 247,705,981 | 362,966,215 | 371,274,007 | \+69,805,463 | \-123,568,026 | \-193,373,489 | \-277.02% |
+
+† El capital de trabajo neto cambia de signo en este período: el porcentaje debe leerse junto con la variación absoluta.
 
 #### **6.7 Interpretación de resultados** {#6.7-interpretación-de-resultados}
 

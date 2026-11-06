@@ -150,7 +150,7 @@ def horizontal(lista: list[DatosEjercicio], nivel: str = "rubros") -> Seccion:
     pares = list(zip(anios, anios[1:]))
     seccion = Seccion(
         {"rubros": "Análisis horizontal — rubros y totales (criterio de las Tablas 3 a 5 del trabajo)",
-         "grupos": "Análisis horizontal — por grupo de análisis (cuentas comparables entre ejercicios)",
+         "grupos": "Análisis horizontal — por grupo de análisis",
          "cuentas": "Análisis horizontal — por cuenta (denominación original)"}[nivel],
         [Columna("Concepto")] + [Columna(str(a), USD) for a in anios]
         + [c for a, b in pares for c in (Columna(f"Var. abs. {a}–{b}", USD), Columna(f"Var. % {a}–{b}", PCT))],
@@ -175,6 +175,27 @@ _NOTA_FORMULAS = ("Variación absoluta = Vt − Vt−1; variación relativa = (V
                   "no se calcula el porcentaje («—»).")
 _NOTA_2023_2024 = ("2021–2023: estados combinados; 2024–2025: estados consolidados. El cambio modifica la presentación de varias "
                    "partidas: las variaciones 2023–2024 deben interpretarse con cautela (trabajo, 6.2).")
+_NOTA_SENTIDOS = ("«Presentación agrupada»: la partida no se presenta por separado en uno de los ejercicios y puede estar comprendida "
+                  "en otra línea. «No comparable»: la presentación cambia y la variación no se calcula. «Aparece» o «Desaparece»: "
+                  "sin importe en uno de los ejercicios. Un saldo cero solo se muestra si el estado lo informa.")
+MARCA_FILA = " †"
+
+
+def _etiqueta_con_advertencia(fila, anios: list[int], seccion: Seccion) -> str:
+    """Marca en la propia fila las comparaciones no confirmadas de los ejercicios de la tabla y explica la marca al pie."""
+    avisos = [(anio, fila.comparabilidad[anio]) for anio in anios if anio in fila.comparabilidad and anio - 1 in anios]
+    for anio, estado in avisos:
+        texto = " ".join(t for t in (estado.nota, fila.nota) if t)
+        seccion.notas.append(f"† {fila.etiqueta} ({anio - 1}–{anio}): {texto}")
+    return fila.etiqueta + MARCA_FILA if avisos else fila.etiqueta
+
+
+def _nota_cambio_signo(etiqueta: str, anio: int, actual: Decimal | None, anterior: Decimal | None) -> str:
+    """Advertencia cuando una partida pasa de positiva a negativa o a la inversa ("" si no ocurre)."""
+    if not actual or not anterior or (actual > 0) == (anterior > 0):
+        return ""
+    return (f"† {anio}: {etiqueta} cambia de signo ({anterior:+,.0f} a {actual:+,.0f}). La variación relativa no debe interpretarse "
+            "por sí sola: considere la variación absoluta y el cambio de signo.")
 
 
 def _tabla_trabajo(lista: list[DatosEjercicio], anios: list[int], claves, titulo: str, notas: list[str]) -> Seccion:
@@ -190,7 +211,7 @@ def _tabla_trabajo(lista: list[DatosEjercicio], anios: list[int], claves, titulo
     for fila in filas:
         if fila.tipo != "cuenta":
             seccion.filas_destacadas.add(len(seccion.filas))
-        celdas = [fila.etiqueta]
+        celdas = [_etiqueta_con_advertencia(fila, anios, seccion)]
         for n, anio in enumerate(anios):
             celdas.append(fila.valores.get(anio))
             if n:
@@ -213,8 +234,9 @@ def horizontal_balance_tablas(lista: list[DatosEjercicio]) -> list[Seccion]:
         secciones.append(_tabla_trabajo(
             lista, anios[2:], CLAVES_TABLA_4,
             f"Tabla 4. Análisis horizontal del estado de situación financiera ({anios[2]}–{anios[-1]}) [USD]",
-            [_NOTA_FORMULAS, "Cuentas por cobrar: comerciales y otras cuentas por cobrar, porque los estados consolidados presentan "
-                             "ambas en una sola línea. Por esa razón el importe del primer ejercicio difiere del de la Tabla 3.",
+            [_NOTA_FORMULAS, "Cuentas por cobrar: alternativa analítica con comerciales y otras cuentas por cobrar, porque los estados "
+                             "consolidados presentan una sola línea cuya composición no se detalla. Por esa razón el importe del primer "
+                             "ejercicio difiere del de la Tabla 3.",
              _NOTA_2023_2024]))
     return secciones
 
@@ -241,8 +263,8 @@ def horizontal_resultados_tabla(lista: list[DatosEjercicio]) -> Seccion:
     for fila in filas:
         if fila.tipo != "cuenta":
             seccion.filas_destacadas.add(len(seccion.filas))
-        seccion.filas.append([fila.etiqueta] + [fila.valores.get(a) for a in anios] + [fila.var_abs.get(b) for _, b in pares]
-                             + [fila.var_pct.get(b) for _, b in pares])
+        seccion.filas.append([_etiqueta_con_advertencia(fila, anios, seccion)] + [fila.valores.get(a) for a in anios]
+                             + [fila.var_abs.get(b) for _, b in pares] + [fila.var_pct.get(b) for _, b in pares])
     return seccion
 
 
@@ -254,7 +276,7 @@ def horizontal_dos_ejercicios(lista: list[DatosEjercicio], anio: int, anterior: 
         f"{nombre}: {anio} vs {anterior} — {detalle} [USD]",
         [Columna("Partida"), Columna(f"Saldo actual ({anio})", USD), Columna(f"Saldo anterior ({anterior})", USD),
          Columna("Variación absoluta", VAR_USD), Columna("Variación relativa", VAR_PCT), Columna("Sentido"), Columna("Observación")],
-        notas=[_NOTA_FORMULAS] + ([_NOTA_2023_2024] if {anio, anterior} == {2023, 2024} else []),
+        notas=[_NOTA_FORMULAS, _NOTA_SENTIDOS] + ([_NOTA_2023_2024] if {anio, anterior} == {2023, 2024} else []),
     )
     if estado == "ER":
         seccion.notas.append("Costos y gastos en positivo, como en el trabajo: un aumento significa mayor costo o gasto.")
@@ -362,11 +384,15 @@ def capital_trabajo(lista: list[DatosEjercicio]) -> Seccion:
         d = por[anio]
         ctn = ind.calcular(d, "ctn").valor
         anterior = por.get(anio - 1)
-        absoluta, relativa, nota = variacion(ctn, ind.calcular(anterior, "ctn").valor) if anterior else ("Base", "Base", "")
-        seccion.filas.append([str(anio), d.bs.activo_corriente.subtotal, d.bs.pasivo_corriente.subtotal, ctn, absoluta, relativa,
-                              ind.calcular(d, "razon_corriente").valor, ind.calcular(d, "prueba_acida").valor,
+        ctn_anterior = ind.calcular(anterior, "ctn").valor if anterior else None
+        absoluta, relativa, nota = variacion(ctn, ctn_anterior) if anterior else ("Base", "Base", "")
+        signo = _nota_cambio_signo("el capital de trabajo neto", anio, ctn, ctn_anterior)
+        seccion.filas.append([str(anio) + (MARCA_FILA if signo else ""), d.bs.activo_corriente.subtotal, d.bs.pasivo_corriente.subtotal,
+                              ctn, absoluta, relativa, ind.calcular(d, "razon_corriente").valor, ind.calcular(d, "prueba_acida").valor,
                               ind.calcular(d, "razon_tesoreria").valor])
-        if nota and anterior:
+        if signo:
+            seccion.notas.append(signo)
+        elif nota and anterior:
             seccion.notas.append(f"{anio}: {nota}")
     return seccion
 
@@ -385,9 +411,13 @@ def capital_trabajo_interanual(lista: list[DatosEjercicio]) -> Seccion:
             continue
         inicial, final = ind.calcular(a, "ctn").valor, ind.calcular(b, "ctn").valor
         absoluta, relativa, nota = variacion(final, inicial)
-        seccion.filas.append([f"{a.anio} vs {b.anio}", a.bs.activo_corriente.subtotal, b.bs.activo_corriente.subtotal,
-                              a.bs.pasivo_corriente.subtotal, b.bs.pasivo_corriente.subtotal, inicial, final, absoluta, relativa])
-        if nota:
+        signo = _nota_cambio_signo("el capital de trabajo neto", b.anio, final, inicial)
+        seccion.filas.append([f"{a.anio} vs {b.anio}" + (MARCA_FILA if signo else ""), a.bs.activo_corriente.subtotal,
+                              b.bs.activo_corriente.subtotal, a.bs.pasivo_corriente.subtotal, b.bs.pasivo_corriente.subtotal,
+                              inicial, final, absoluta, relativa])
+        if signo:
+            seccion.notas.append(signo)
+        elif nota:
             seccion.notas.append(f"{a.anio} vs {b.anio}: {nota}")
     return seccion
 
