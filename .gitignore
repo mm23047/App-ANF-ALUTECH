@@ -1,16 +1,39 @@
 .venv/
+venv/
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.env
+.streamlit/secrets.toml
+
+# Base de datos de trabajo de cada equipo y sus respaldos.
+# La base de partida que se publica es data/inicial/financiera.db (ver README).
 data/*.db
 data/*.sqlite
+data/*.copiando
 data/backups/
-.pytest_cache/
-*.egg-info/
-.streamlit/secrets.toml
 
 # Restos de ejecuciones locales de Streamlit
 streamlit_run*.log
 streamlit_run*.pid
 
-# Material didáctico de terceros (no es código; se conserva en disco)
-documentos/
+# Material de terceros que no se redistribuye. Solo se publican los estados financieros citados por la trazabilidad.
+documentos/*
+!documentos/12_EEFF_diciembre_2024.pdf
+!documentos/12_EEFF_diciembre_2025.pdf
+!documentos/Certificacin_EFC_Alutech_Divisin_Acero_2021VF_Mod010925.pdf
+!documentos/Certificacin_EFC_Alutech_Divisin_Acero_2022_VFMod_010925.pdf
+!documentos/Certificacin_EFC_Alutech_Divisin_Acero_2023_VFMod010925.pdf
+
+# Informes internos de las auditorias: se conservan en disco, pero no hacen falta para instalar ni usar la aplicacion.
+/AUDITORIA_*.md
+/INFORME_*.md
+/INVENTARIO_DEL_PROYECTO.md
+/INVESTIGACION_DOCUMENTAL_ANF.md
+/MATRIZ_*.md
+/PLAN_DE_CORRECCION.md
+/REGISTRO_DE_CAMBIOS.md
