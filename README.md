@@ -74,7 +74,8 @@ Compruébelo:
 py -3.12 --version
 ```
 
-**2. Instale Git** desde <https://git-scm.com/download/win> y **clone el repositorio:**
+**2. Instale Git** desde <https://git-scm.com/download/win> y **clone el repositorio** en una carpeta de ruta corta, como
+`C:\Proyectos` o `Documentos`, fuera de carpetas sincronizadas:
 
 ```powershell
 git clone https://github.com/mm23047/App-ANF-ALUTECH.git
@@ -503,6 +504,7 @@ Para comprobar una instalación a simple vista, compare con los valores de la se
 | `py` o `python` no se reconoce (Windows) | Reinstale Python 3.12 marcando *Add python.exe to PATH* y abra otra terminal |
 | `python3 -m venv` falla: falta `ensurepip` (Debian/Linux) | Instale el paquete: `sudo apt install python3-venv` |
 | `ModuleNotFoundError` al iniciar | Faltan dependencias o no usa el entorno. Repita `pip install -r requirements.txt` con el Python de `.venv` |
+| Al instalar: `OSError: [Errno 2] No such file or directory` y una ruta muy larga dentro de `.venv` (Windows) | La ruta del proyecto es demasiado larga. Clónelo en una carpeta corta, como `C:\Proyectos`, y vuelva a crear el entorno |
 | `No matching distribution found` al instalar | Su versión de Python no tiene esas versiones de los paquetes. Use una versión de Python de la tabla de requisitos |
 | PowerShell bloquea `Activate.ps1` | No hace falta activar: use `.venv\Scripts\python.exe`. Si quiere activar, ejecute antes `Set-ExecutionPolicy -Scope Process RemoteSigned` |
 | `streamlit` no se reconoce como comando | Use `python -m streamlit run app.py` con el Python del entorno |
