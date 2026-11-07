@@ -137,7 +137,8 @@ def _publicada(doc: str, tabla_app: list[str]) -> None:
 def test_tablas_3_y_4_se_presentan_como_en_el_documento(lista):
     lineas = lineas_documento()
     tablas = sec.horizontal_balance_tablas(lista)
-    assert [t.titulo.split(".")[0] for t in tablas] == ["Tabla 3", "Tabla 4"]
+    assert [t.titulo for t in tablas] == ["Análisis horizontal del estado de situación financiera (2021–2023) [USD]",
+                                          "Análisis horizontal del estado de situación financiera (2023–2025) [USD]"]
     for seccion, marca in zip(tablas, ("Tabla 3\\.", "Tabla 4\\.")):
         filas_doc = tabla(lineas, marca)[1:]
         pantalla = a_dataframe(seccion).values.tolist()
@@ -415,7 +416,7 @@ def test_ninguna_pantalla_tiene_excepciones(pantallas):
 def test_pantalla_horizontal_del_balance(pantallas):
     p = pantallas["balance"]
     assert p["encabezados"] == ["Reporte — Análisis Horizontal del Balance General"]
-    assert p["pestanas"] == ["Tablas 3 y 4 del trabajo", "Capital de trabajo (Tablas 6 y 7)", "Comparar dos ejercicios"]
+    assert p["pestanas"] == ["Análisis de la situación financiera", "Capital de trabajo", "Comparar dos ejercicios"]
     assert p["tablas"][0][0]["Var. rel. 21–22"] == "+85.92%" and p["tablas"][1][1]["Var. abs. 24–25"] == "-27,034,533"
     assert p["tablas"][2][4]["Var. relativa CTN"] == "-277.02%"
     assert set(p["descargas"]) == {"Descargar PDF", "Descargar Excel"}
@@ -442,7 +443,7 @@ def test_pantalla_horizontal_de_resultados(pantallas):
 ])
 def test_pantallas_verticales_incluyen_el_comparativo(pantallas, pagina, tabla_doc, fila, anio, esperado):
     p = pantallas[pagina]
-    assert any(tabla_doc in t for t in p["pestanas"])
+    assert p["pestanas"] == ["Por ejercicio", "Comparativo de los ejercicios"]
     comparativo = {f["Partida"]: f for f in p["tablas"][-1]}
     assert comparativo[fila][anio] == esperado
 

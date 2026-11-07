@@ -10,7 +10,7 @@ from __future__ import annotations
 import streamlit as st
 from sqlalchemy.orm import Session
 
-from calculations.rubros import GRUPOS, NOMBRE_CLASE
+from calculations.rubros import GRUPOS, NOMBRE_CLASE, grupo_incongruente
 from components.transacciones import ejecutar_escritura
 from database.enums import CategoriaPrincipal as Cat
 from database.enums import EfectoCuenta as Efecto
@@ -51,6 +51,12 @@ NOMBRES_SUBCATEGORIA = {
     Sub.VENTAS: "Ventas",
     Sub.OTROS_OPERATIVOS: "Otros operativos",
 }
+
+
+AVISO_SIN_GRUPO = ("La cuenta quedará sin grupo de análisis: entrará en los totales de su categoría, pero no en los rubros, salvo un "
+                   "inventario identificado inequívocamente por su nombre. Los indicadores que usan rubros serán provisionales, la "
+                   "prueba ácida no se calculará si la cuenta podría ser inventario y, si es un pasivo, tampoco el WACC. Elija un "
+                   "grupo para que quede completamente configurada.")
 
 
 def _requiere_efecto(categoria: Cat, subcategoria: Sub | None) -> bool:
@@ -138,8 +144,13 @@ def render(session: Session) -> None:
         )
         orden = st.number_input("Orden de presentación", min_value=0, value=0, step=10, key="nueva_orden")
         grupo = _grupo_input("nueva")
+        incongruente = grupo_incongruente(categoria, subcategoria, grupo)
+        if incongruente:
+            st.error(incongruente)
+        elif grupo is None:
+            st.warning(AVISO_SIN_GRUPO)
 
-        if st.button("Crear cuenta"):
+        if st.button("Crear cuenta", disabled=bool(incongruente)):
             if not codigo.strip() or not nombre.strip():
                 st.error("El código y el nombre de la cuenta son obligatorios.")
             else:
@@ -195,10 +206,14 @@ def render(session: Session) -> None:
                     "Orden de presentación", min_value=0, value=cuenta.orden_presentacion, step=10, key=f"edit_orden_{cuenta.id}"
                 )
                 grupo_edit = _grupo_input(f"edit_{cuenta.id}", cuenta.grupo_analisis)
+                incongruente = grupo_incongruente(clasificacion.get("categoria_principal", cuenta.categoria_principal),
+                                                  clasificacion.get("subcategoria", cuenta.subcategoria), grupo_edit)
+                if incongruente:
+                    st.error(incongruente)
 
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("Guardar cambios", key=f"save_{cuenta.id}"):
+                    if st.button("Guardar cambios", key=f"save_{cuenta.id}", disabled=bool(incongruente)):
                         if not nombre_edit.strip():
                             st.error("El nombre de la cuenta es obligatorio.")
                         else:

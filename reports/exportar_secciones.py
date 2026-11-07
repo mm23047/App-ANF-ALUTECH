@@ -64,8 +64,10 @@ def _escribir_seccion(ws, fila: int, seccion: Seccion) -> int:
                 celda = escribir(ws, fila, col, float(valor))
                 celda.number_format = (FORMATOS_ENTEROS.get(tipo) if es_entero(valor) else None) or FORMATOS.get(tipo, "#,##0.00")
             else:
-                celda = escribir(ws, fila, col, "" if valor is None else str(valor))
-                celda.alignment = Alignment(wrap_text=True, vertical="top")
+                # Mismo texto que en pantalla. En una columna de cifras, a la derecha como las cifras.
+                celda = escribir(ws, fila, col, formatear(valor, tipo) if valor is None else str(valor))
+                derecha = "right" if seccion.columnas[col - 1].tipo != TEXTO else None
+                celda.alignment = Alignment(horizontal=derecha, wrap_text=True, vertical="top")
             if i in seccion.filas_destacadas:
                 celda.font = Font(bold=True)
                 celda.fill = PatternFill("solid", fgColor=GRIS)

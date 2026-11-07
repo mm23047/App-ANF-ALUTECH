@@ -447,6 +447,8 @@ def test_los_indicadores_y_analisis_se_actualizan_al_cambiar_el_mapeo(tmp_path):
         d = {x.anio: x for x in datos_todos(s)}[2025]
         despues = ind.calcular(d, "prueba_acida").valor
         assert d.bs.total_activo == total_antes
-        assert despues == D(247705981) / D(371274007) != antes  # sin inventarios en el rubro
+        # La denominacion identifica la cuenta como inventario: sigue excluida del activo liquido (Decision 1, escenario A).
+        # Antes se exigia AC / PC, es decir, contar el inventario como activo liquido.
+        assert despues == antes == (D(247705981) - D(69818060)) / D(371274007)
         assert any(c.codigo == "CN1105" for c, _, _ in d.sin_grupo)  # y se advierte
     connection.dispose_engine()

@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from calculations.rubros import CLASE_BALANCE, GRUPOS, DatosEjercicio
+from calculations.rubros import CLASE_BALANCE, GRUPOS, DatosEjercicio, grupo_de_cuenta
 
 CERO = Decimal("0")
 
@@ -84,7 +84,7 @@ def _saldos(d: DatosEjercicio) -> dict[str, tuple[str, str, Decimal, list[str]]]
     for grupo in grupos:
         for linea in grupo.lineas:
             cuenta = linea.cuenta
-            info = GRUPOS.get(cuenta.grupo_analisis or "")
+            info = grupo_de_cuenta(cuenta)
             if info is not None:
                 clave, concepto, clase = info.codigo, info.nombre, info.clase
             else:

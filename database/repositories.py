@@ -598,6 +598,80 @@ def registrar_dato_complementario(
     return "CREAR"
 
 
+# Atribucion de la utilidad neta en el orden en que se consulta: el trabajo (9.6) usa el estado de cambios en el patrimonio.
+# (clave de la utilidad atribuible, claves de la participacion no controladora, origen)
+ATRIBUCION = (
+    ("utilidad_controladora_ecp", ("utilidad_no_controladora_ecp", "utilidad_no_controladora_er"), "Estado de cambios en el patrimonio"),
+    ("utilidad_controladora_er", ("utilidad_no_controladora_er", "utilidad_no_controladora_ecp"), "Estado de resultados"),
+    ("utilidad_controladora_doc", ("utilidad_no_controladora_doc",), "Atribución documentada"),
+)
+
+
+def par_atribucion(datos: dict) -> tuple | None:
+    """(dato de utilidad atribuible, dato de participacion o None, origen) de {clave: dato}. None si no hay atribucion."""
+    for clave, participaciones, origen in ATRIBUCION:
+        if clave in datos:
+            return datos[clave], next((datos[p] for p in participaciones if p in datos), None), origen
+    return None
+
+
+def actualizar_dato_complementario(session: Session, *, fiscal_period_id: int, clave: str, valor) -> bool:
+    """Modifica el importe vigente de un dato complementario, con registro en el historial. La cifra impresa
+    (importe_documento) no cambia: la diferencia queda a la vista en la trazabilidad."""
+    valor = parse_importe(valor)
+    _verificar_ejercicio_abierto(session, fiscal_period_id)
+    dato = session.execute(
+        select(DatoComplementario).where(DatoComplementario.fiscal_period_id == fiscal_period_id, DatoComplementario.clave == clave)
+    ).scalars().first()
+    if dato is None:
+        raise ValueError(f"El dato '{clave}' no está registrado en este ejercicio.")
+    if dato.valor == valor:
+        return False
+    log_change(session, "dato_complementario", dato.id, clave, str(dato.valor), str(valor), "EDITAR", fiscal_period_id=fiscal_period_id)
+    dato.valor = valor
+    return True
+
+
+def actualizar_atribucion(
+    session: Session, *, fiscal_period_id: int, utilidad_neta: Decimal, utilidad_controladora=None, participacion=None
+) -> None:
+    """Modifica la utilidad atribuible o la participacion no controladora (una de las dos) y ajusta la otra para
+    que ambas sumen la utilidad neta vigente del ejercicio."""
+    if (utilidad_controladora is None) == (participacion is None):
+        raise ValueError("Indique la utilidad atribuible o la participación no controladora, una de las dos.")
+    datos = {d.clave: d for d in list_datos_complementarios(session, fiscal_period_id)}
+    par = par_atribucion(datos)
+    if par is None or par[1] is None:
+        raise ValueError("Este ejercicio no tiene una atribución de la utilidad registrada desde el documento.")
+    if utilidad_controladora is None:
+        participacion = parse_importe(participacion)
+        utilidad_controladora = utilidad_neta - participacion
+    else:
+        utilidad_controladora = parse_importe(utilidad_controladora)
+        participacion = utilidad_neta - utilidad_controladora
+    actualizar_dato_complementario(session, fiscal_period_id=fiscal_period_id, clave=par[0].clave, valor=utilidad_controladora)
+    actualizar_dato_complementario(session, fiscal_period_id=fiscal_period_id, clave=par[1].clave, valor=participacion)
+
+
+def registrar_atribucion_documentada(
+    session: Session, *, fiscal_period_id: int, utilidad_neta: Decimal, utilidad_controladora, participacion, documento: str, pagina: int | None
+) -> None:
+    """Registra la atribucion de un ejercicio que no la tenia, desde un documento. Sustituye al supuesto solo si concilia
+    con la utilidad neta vigente."""
+    if par_atribucion({d.clave: d for d in list_datos_complementarios(session, fiscal_period_id)}) is not None:
+        raise ValueError("Este ejercicio ya tiene una atribución registrada.")
+    if not documento.strip():
+        raise ValueError("Indique el documento del que proviene la atribución.")
+    utilidad_controladora, participacion = parse_importe(utilidad_controladora), parse_importe(participacion)
+    if utilidad_controladora + participacion != utilidad_neta:
+        raise ValueError(f"La atribución no concilia: {utilidad_controladora} + {participacion} difiere de la utilidad neta {utilidad_neta}.")
+    for clave, valor, nombre in (("utilidad_controladora_doc", utilidad_controladora, "Atribuible a los propietarios de la controladora"),
+                                 ("utilidad_no_controladora_doc", participacion, "Atribuible a participaciones no controladoras")):
+        registrar_dato_complementario(session, fiscal_period_id=fiscal_period_id, clave=clave, tipo="COMPLEMENTARIO", valor=valor,
+                                      documento=documento.strip(), pagina=pagina, estado_financiero="Atribución documentada",
+                                      nombre_original=nombre, importe_documento=f"{valor:,.2f}")
+
+
 # ---------------------------------------------------------------------------
 # Change history (secciones 8 y 17)
 # ---------------------------------------------------------------------------

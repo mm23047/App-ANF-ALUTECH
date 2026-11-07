@@ -23,6 +23,7 @@ from calculations.banderas import (
 from calculations.controls import conciliar_resultado
 from calculations.dupont import compute_dupont
 from calculations.income_statement import compute_income_statement
+from components.avisos import mostrar_sin_grupo
 from components.money import format_money, format_percent
 from components.texto import md
 from database.enums import EstadoRegistro, TipoEstadoFinanciero
@@ -58,6 +59,7 @@ def _analisis_multianual(session: Session, company: Company) -> None:
     if not lista:
         return
     ultimo = lista[-1]
+    mostrar_sin_grupo(lista, st.info)  # no cambia el estado de los importes del Dashboard
     st.markdown(f"### Capital de trabajo, liquidez y rentabilidad — {ultimo.anio}")
     valor = lambda clave: ind.formatear(ind.POR_CLAVE[clave].unidad, ind.calcular(ultimo, clave).valor)
     c1, c2, c3, c4 = st.columns(4)

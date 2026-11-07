@@ -53,3 +53,15 @@ def mostrar_conciliacion(conciliacion: Conciliacion, moneda: str) -> None:
         f"Utilidad neta (Estado de Resultados): {md(format_money(conciliacion.utilidad_neta, moneda))} · "
         f"Diferencia: {md(format_money(conciliacion.diferencia, moneda))}"
     )
+
+
+def mostrar_sin_grupo(lista, mostrar=st.warning) -> None:
+    """Aviso de las paginas de analisis: hay importes en cuentas sin grupo de analisis valido."""
+    cuentas = sorted({f"{c.codigo} — {c.nombre}" for d in lista for c, _, _ in d.sin_grupo})
+    if cuentas:
+        mostrar(
+            f"{len(cuentas)} cuenta(s) con importe sin grupo de análisis: {md('; '.join(cuentas))}. Participan en los totales. Solo entran "
+            "en un rubro si su denominación identifica inequívocamente un inventario; si no, los indicadores que usan rubros son "
+            "provisionales, la prueba ácida no se calcula si la cuenta podría ser inventario y el WACC no se calcula si es un pasivo. "
+            "Asigne el grupo en «Catálogo de cuentas»."
+        )

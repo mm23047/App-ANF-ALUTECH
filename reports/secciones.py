@@ -21,6 +21,9 @@ from calculations.comparativo import (
     CLAVES_TABLA_4,
     CLAVES_TABLA_5,
     CONCEPTOS,
+    NO_CALCULABLE,
+    SIN_DATO,
+    causa_sin_variacion,
     dos_ejercicios,
     horizontal_conceptos,
     horizontal_cuentas,
@@ -32,7 +35,7 @@ from calculations.comparativo import (
 from calculations.controles_carga import controles_fuentes, controles_totales
 from calculations.dupont import factores_controladora, factores_total
 from calculations.fuentes_usos import ResultadoFuentesUsos
-from calculations.rubros import GRUPOS, NOMBRE_CLASE, DatosEjercicio
+from calculations.rubros import INVENTARIO, NO_INVENTARIO, GRUPOS, NOMBRE_CLASE, DatosEjercicio, clase_contable, dato_modificado, grupo_de_cuenta, naturaleza_activo_corriente
 from calculations.wacc import ResultadoWACC, cargar_supuestos
 from components.money import format_money, format_percent, redondear
 
@@ -68,8 +71,12 @@ def formatear(valor, tipo: str) -> str:
     if tipo == USD:  # sin centavos cuando no los hay, como las tablas del trabajo
         return f"{valor:,.0f}" if es_entero(valor) else format_money(valor)
     if tipo == VAR_USD:
+        if valor == 0:  # sin cambio: el signo sugeriria un aumento que no existe
+            return "0"
         return f"{valor:+,.0f}" if es_entero(valor) else f"{valor:+,.2f}"
     if tipo == VAR_PCT:
+        if valor == 0:
+            return "0.00%"
         redondeado = valor.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         return f"{redondeado:+.2f}%"
     if tipo == PCT:
@@ -114,7 +121,7 @@ def estados_originales(lista: list[DatosEjercicio], estado: str) -> Seccion:
         es_balance = cuenta.categoria_principal.value in ("ACTIVO", "PASIVO", "PATRIMONIO")
         if es_balance != (estado == "BALANCE"):
             continue
-        grupo = GRUPOS.get(cuenta.grupo_analisis or "")
+        grupo = grupo_de_cuenta(cuenta)
         seccion.filas.append([cuenta.codigo, cuenta.nombre, grupo.nombre if grupo else "(sin grupo)"]
                              + [fila.valores.get(a) for a in anios])
     claves = (("activo_corriente", "activo_no_corriente", "total_activo", "pasivo_corriente", "pasivo_no_corriente",
@@ -139,29 +146,66 @@ def _cuenta_de(lista, codigo):
     return None
 
 
+def nota_sin_clasificar(lista: list[DatosEjercicio]) -> list[str]:
+    """Advertencia para las notas de los reportes (y sus descargas) si hay cuentas con importe sin grupo valido."""
+    cuentas = {c.codigo: c.nombre for d in lista for c, _, _ in d.sin_grupo}
+    if not cuentas:
+        return []
+    nombres = ", ".join(f"{k} — {v}" for k, v in cuentas.items())
+    return [f"Cuentas sin grupo de análisis: {nombres}. Participan en los totales de su categoría. Solo entran en un rubro si su "
+            "denominación identifica inequívocamente un inventario; si no, los indicadores que usan rubros son provisionales, la "
+            "prueba ácida no se calcula si la cuenta podría ser inventario y el WACC no se calcula si es un pasivo."]
+
+
+def clasificacion(lista: list[DatosEjercicio]) -> Seccion | None:
+    """Cuentas con importe sin grupo de analisis valido (None si no hay ninguna)."""
+    seccion = Seccion("Cuentas sin clasificar", [Columna("Ejercicio"), Columna("Código"), Columna("Cuenta"), Columna("Clase"), Columna("Importe", USD),
+                                                 Columna("Tratamiento")],
+                      notas=["No se asigna un grupo automáticamente: asígnelo en «Catálogo de cuentas». Los indicadores que usan rubros "
+                             "son provisionales mientras tanto."])
+    for d in lista:
+        for cuenta, valor, _ in d.sin_grupo:
+            clase = clase_contable(cuenta.categoria_principal, cuenta.subcategoria)
+            tratamiento = {INVENTARIO: "Inventario reconocido por su denominación; falta el grupo",
+                           NO_INVENTARIO: "No inventario reconocido por su denominación; falta el grupo",
+                           }.get(naturaleza_activo_corriente(cuenta, valor), "Falta el grupo de análisis")
+            seccion.filas.append([str(d.anio), cuenta.codigo, cuenta.nombre, NOMBRE_CLASE[clase], valor, tratamiento])
+    return seccion if seccion.filas else None
+
+
 def _rango(anios: list[int]) -> str:
     return f"{anios[0]}–{anios[-1]}" if anios else ""
 
 
 # ------------------------------------------------------------- horizontal
+def _saldo(valor: Decimal | None):
+    """Saldo de una partida, o el motivo por el que no lo hay."""
+    return SIN_DATO if valor is None else valor
+
+
+def _variacion(valores: dict, fila, anio: int):
+    """Variacion de una fila, o el motivo por el que no se muestra."""
+    valor = valores.get(anio)
+    return fila.causas.get(anio, SIN_DATO) if valor is None else valor
+
+
 def horizontal(lista: list[DatosEjercicio], nivel: str = "rubros") -> Seccion:
     anios = _anios(lista)
     filas = {"rubros": horizontal_conceptos, "grupos": horizontal_grupos, "cuentas": horizontal_cuentas}[nivel](lista)
     pares = list(zip(anios, anios[1:]))
     seccion = Seccion(
-        {"rubros": "Análisis horizontal — rubros y totales (criterio de las Tablas 3 a 5 del trabajo)",
+        {"rubros": "Análisis horizontal — rubros y totales",
          "grupos": "Análisis horizontal — por grupo de análisis",
          "cuentas": "Análisis horizontal — por cuenta (denominación original)"}[nivel],
         [Columna("Concepto")] + [Columna(str(a), USD) for a in anios]
         + [c for a, b in pares for c in (Columna(f"Var. abs. {a}–{b}", USD), Columna(f"Var. % {a}–{b}", PCT))],
-        notas=["Variación absoluta = Vt − Vt−1; variación relativa = (Vt − Vt−1) / Vt−1 × 100. Si la base es cero o "
-               "negativa no se calcula el porcentaje («—») y se indica la causa."],
+        notas=[_NOTA_FORMULAS, _NOTA_CELDAS] + nota_sin_clasificar(lista),
     )
     for fila in filas:
         if fila.tipo != "cuenta":
             seccion.filas_destacadas.add(len(seccion.filas))
-        seccion.filas.append([fila.etiqueta] + [fila.valores.get(a) for a in anios]
-                             + [v for _, b in pares for v in (fila.var_abs.get(b), fila.var_pct.get(b))])
+        seccion.filas.append([fila.etiqueta] + [_saldo(fila.valores.get(a)) for a in anios]
+                             + [v for _, b in pares for v in (_variacion(fila.var_abs, fila, b), _variacion(fila.var_pct, fila, b))])
         for anio, nota in fila.notas.items():
             if nota and not nota.startswith("Sin dato"):
                 seccion.notas.append(f"{fila.etiqueta} ({anio}): {nota}")
@@ -172,7 +216,9 @@ def horizontal(lista: list[DatosEjercicio], nivel: str = "rubros") -> Seccion:
 
 
 _NOTA_FORMULAS = ("Variación absoluta = Vt − Vt−1; variación relativa = (Vt − Vt−1) / Vt−1 × 100. Si la base es cero o negativa "
-                  "no se calcula el porcentaje («—»).")
+                  "no se calcula el porcentaje («No calculable»).")
+_NOTA_CELDAS = ("«Sin dato»: falta el importe de uno de los ejercicios. «No calculable»: la base es cero o negativa; se conserva la variación "
+                "absoluta. «No comparable»: la presentación de la partida cambia entre ambos ejercicios.")
 _NOTA_2023_2024 = ("2021–2023: estados combinados; 2024–2025: estados consolidados. El cambio modifica la presentación de varias "
                    "partidas: las variaciones 2023–2024 deben interpretarse con cautela (trabajo, 6.2).")
 _NOTA_SENTIDOS = ("«Presentación agrupada»: la partida no se presenta por separado en uno de los ejercicios y puede estar comprendida "
@@ -207,15 +253,15 @@ def _tabla_trabajo(lista: list[DatosEjercicio], anios: list[int], claves, titulo
         if n:
             periodo = f"{str(anios[n - 1])[-2:]}–{str(anio)[-2:]}"
             columnas += [Columna(f"Var. abs. {periodo}", VAR_USD), Columna(f"Var. rel. {periodo}", VAR_PCT)]
-    seccion = Seccion(titulo, columnas, notas=notas)
+    seccion = Seccion(titulo, columnas, notas=notas + nota_sin_clasificar(lista))
     for fila in filas:
         if fila.tipo != "cuenta":
             seccion.filas_destacadas.add(len(seccion.filas))
         celdas = [_etiqueta_con_advertencia(fila, anios, seccion)]
         for n, anio in enumerate(anios):
-            celdas.append(fila.valores.get(anio))
+            celdas.append(_saldo(fila.valores.get(anio)))
             if n:
-                celdas += [fila.var_abs.get(anio), fila.var_pct.get(anio)]
+                celdas += [_variacion(fila.var_abs, fila, anio), _variacion(fila.var_pct, fila, anio)]
         seccion.filas.append(celdas)
     return seccion
 
@@ -228,15 +274,15 @@ def horizontal_balance_tablas(lista: list[DatosEjercicio]) -> list[Seccion]:
         return []
     secciones = [_tabla_trabajo(
         lista, anios[:3], CLAVES_TABLA_3,
-        f"Tabla 3. Análisis horizontal del estado de situación financiera ({anios[0]}–{anios[:3][-1]}) [USD]",
+        f"Análisis horizontal del estado de situación financiera ({anios[0]}–{anios[:3][-1]}) [USD]",
         [_NOTA_FORMULAS, "Cuentas por cobrar: únicamente la línea «Cuentas por cobrar comerciales» en los estados combinados."])]
     if len(anios) > 3:
         secciones.append(_tabla_trabajo(
             lista, anios[2:], CLAVES_TABLA_4,
-            f"Tabla 4. Análisis horizontal del estado de situación financiera ({anios[2]}–{anios[-1]}) [USD]",
+            f"Análisis horizontal del estado de situación financiera ({anios[2]}–{anios[-1]}) [USD]",
             [_NOTA_FORMULAS, "Cuentas por cobrar: alternativa analítica con comerciales y otras cuentas por cobrar, porque los estados "
                              "consolidados presentan una sola línea cuya composición no se detalla. Por esa razón el importe del primer "
-                             "ejercicio difiere del de la Tabla 3.",
+                             f"ejercicio difiere del que muestra el análisis {anios[0]}–{anios[:3][-1]}, que usa solo la línea comercial.",
              _NOTA_2023_2024]))
     return secciones
 
@@ -247,7 +293,7 @@ def horizontal_resultados_tabla(lista: list[DatosEjercicio]) -> Seccion:
     anios = [d.anio for d in lista if d.inc.tiene_datos]
     pares = list(zip(anios, anios[1:]))
     seccion = Seccion(
-        f"Tabla 5. Análisis horizontal del estado de resultados ({anios[0]}–{anios[-1]}) [USD]" if anios else "Tabla 5",
+        f"Análisis horizontal del estado de resultados ({anios[0]}–{anios[-1]}) [USD]" if anios else "Análisis horizontal del estado de resultados",
         [Columna("Rubro del estado de resultados")] + [Columna(str(a), USD) for a in anios]
         + [Columna(f"Var. abs. {str(a)[-2:]}–{str(b)[-2:]}", VAR_USD) for a, b in pares]
         + [Columna(f"Var. rel. {str(a)[-2:]}–{str(b)[-2:]}", VAR_PCT) for a, b in pares],
@@ -258,13 +304,13 @@ def horizontal_resultados_tabla(lista: list[DatosEjercicio]) -> Seccion:
                "utilidad operativa.",
                "Utilidad operativa: los estados de 2022 y 2023 no imprimen este subtotal; se obtiene de sus partidas impresas.",
                "Gastos financieros netos: en 2021–2023 los estados presentan directamente el neto; en 2024–2025, gastos financieros "
-               "menos ingresos financieros.", _NOTA_2023_2024],
+               "menos ingresos financieros.", _NOTA_2023_2024] + nota_sin_clasificar(lista),
     )
     for fila in filas:
         if fila.tipo != "cuenta":
             seccion.filas_destacadas.add(len(seccion.filas))
-        seccion.filas.append([_etiqueta_con_advertencia(fila, anios, seccion)] + [fila.valores.get(a) for a in anios]
-                             + [fila.var_abs.get(b) for _, b in pares] + [fila.var_pct.get(b) for _, b in pares])
+        seccion.filas.append([_etiqueta_con_advertencia(fila, anios, seccion)] + [_saldo(fila.valores.get(a)) for a in anios]
+                             + [_variacion(fila.var_abs, fila, b) for _, b in pares] + [_variacion(fila.var_pct, fila, b) for _, b in pares])
     return seccion
 
 
@@ -276,23 +322,46 @@ def horizontal_dos_ejercicios(lista: list[DatosEjercicio], anio: int, anterior: 
         f"{nombre}: {anio} vs {anterior} — {detalle} [USD]",
         [Columna("Partida"), Columna(f"Saldo actual ({anio})", USD), Columna(f"Saldo anterior ({anterior})", USD),
          Columna("Variación absoluta", VAR_USD), Columna("Variación relativa", VAR_PCT), Columna("Sentido"), Columna("Observación")],
-        notas=[_NOTA_FORMULAS, _NOTA_SENTIDOS] + ([_NOTA_2023_2024] if {anio, anterior} == {2023, 2024} else []),
+        notas=[_NOTA_FORMULAS, _NOTA_CELDAS, _NOTA_SENTIDOS] + ([_NOTA_2023_2024] if {anio, anterior} == {2023, 2024} else [])
+        + nota_sin_clasificar(lista),
     )
     if estado == "ER":
         seccion.notas.append("Costos y gastos en positivo, como en el trabajo: un aumento significa mayor costo o gasto.")
     for fila in dos_ejercicios(horizontal_de_estado(lista, estado, nivel), anio, anterior):
         if fila.tipo != "cuenta":
             seccion.filas_destacadas.add(len(seccion.filas))
-        seccion.filas.append([fila.etiqueta, fila.actual, fila.anterior, fila.var_abs, fila.var_pct, fila.tendencia, fila.nota])
+        seccion.filas.append([fila.etiqueta, _saldo(fila.actual), _saldo(fila.anterior),
+                              fila.causa if fila.var_abs is None else fila.var_abs,
+                              fila.causa if fila.var_pct is None else fila.var_pct, fila.tendencia, fila.nota])
     return seccion
+
+
+def integridad(lista: list[DatosEjercicio], estado: str | None = None) -> Seccion | None:
+    """Ejercicios con el balance descuadrado o con un estado incompleto (None si no hay ninguno). Solo informa: ningun
+    importe se corrige. estado: "BG" o "ER" para limitar a uno de los dos estados."""
+    seccion = Seccion("Avisos de integridad de los datos", [Columna("Ejercicio"), Columna("Estado financiero"), Columna("Problema"),
+                                                            Columna("Diferencia", VAR_USD)],
+                      notas=["Los importes se muestran como están registrados: la aplicación no los corrige. Las variaciones de estos "
+                             "ejercicios deben revisarse antes de interpretarse."])
+    for d in lista:
+        if estado != "ER" and d.bs.tiene_datos:
+            if not d.bs.cuadra:
+                seccion.filas.append([str(d.anio), "Balance General",
+                                      f"Descuadrado: activo {format_money(d.bs.total_activo)}; pasivo y patrimonio "
+                                      f"{format_money(d.bs.total_pasivo_patrimonio)}.", d.bs.diferencia])
+            if not d.bs.completo:
+                seccion.filas.append([str(d.anio), "Balance General", "Incompleto: falta " + ", ".join(d.bs.categorias_faltantes) + ".", None])
+        if estado != "BG" and d.inc.tiene_datos and not d.inc.completo:
+            seccion.filas.append([str(d.anio), "Estado de Resultados", "Incompleto: falta " + ", ".join(d.inc.categorias_faltantes) + ".", None])
+    return seccion if seccion.filas else None
 
 
 def base_financiera(lista: list[DatosEjercicio], claves, titulo: str = "Base financiera utilizada") -> Seccion:
     """Importes de los que parten los indicadores (saldos al cierre), como la base de la seccion 8.4 del trabajo."""
     anios = _anios(lista)
-    seccion = Seccion(titulo, [Columna("Concepto")] + [Columna(str(a), USD) for a in anios])
+    seccion = Seccion(titulo, [Columna("Concepto")] + [Columna(str(a), USD) for a in anios], notas=nota_sin_clasificar(lista))
     for clave in claves:
-        seccion.filas.append([CONCEPTOS[clave].etiqueta] + [CONCEPTOS[clave].obtener(d) for d in lista if d.tiene_datos])
+        seccion.filas.append([CONCEPTOS[clave].etiqueta] + [_saldo(CONCEPTOS[clave].obtener(d)) for d in lista if d.tiene_datos])
     return seccion
 
 
@@ -307,17 +376,24 @@ def vertical(lista: list[DatosEjercicio], estado: str) -> Seccion:
         titulo = f"Análisis vertical del balance general {_rango(anios)} (% del activo total)"
         nota = "Base: activo total de cada ejercicio (sección 7.2)."
     seccion = Seccion(titulo, [Columna("Partida")] + [Columna(str(a), PCT) for a in anios] + [Columna(f"Importe {a}", USD) for a in anios],
-                      notas=[nota])
+                      notas=[nota] + nota_sin_clasificar(lista))
     for f in filas:
         if f.tipo != "cuenta":
             seccion.filas_destacadas.add(len(seccion.filas))
-        seccion.filas.append([f.etiqueta] + [f.porcentajes.get(a) for a in anios] + [f.valores.get(a) for a in anios])
+        seccion.filas.append([f.etiqueta] + [_saldo(f.porcentajes.get(a)) for a in anios] + [_saldo(f.valores.get(a)) for a in anios])
         if f.nota:
             seccion.notas.append(f"{f.etiqueta}: {f.nota}")
     return seccion
 
 
 # ------------------------------------------------------------ indicadores
+def _celda_de_indicador(clave: str, resultado):
+    """Valor de la tabla de indicadores. La prueba acida no calculable lo dice en la celda, como la pantalla y la Tabla 6."""
+    if resultado is None:
+        return None
+    return NO_CALCULABLE if clave == "prueba_acida" and resultado.valor is None else resultado.valor
+
+
 def indicadores(lista: list[DatosEjercicio], categoria: str) -> Seccion:
     anios = _anios(lista)
     seccion = Seccion(
@@ -331,7 +407,7 @@ def indicadores(lista: list[DatosEjercicio], categoria: str) -> Seccion:
         ultimo = resultados.get(anios[-1]) if anios else None
         seccion.filas.append(
             [indicador.nombre, indicador.formula, indicador.insumos, indicador.unidad]
-            + [resultados[a].valor if a in resultados else None for a in anios]
+            + [_celda_de_indicador(indicador.clave, resultados.get(a)) for a in anios]
             + [ind.interpretacion(ultimo) if ultimo else "", indicador.seccion_anf]
         )
         motivos = {r.motivo for r in resultados.values() if r.motivo}
@@ -364,8 +440,23 @@ def bases_cxc(lista: list[DatosEjercicio]) -> Seccion:
         for etiqueta, obtener, unidad in ((f"{titulo}: saldo al cierre", CONCEPTOS[rubro].obtener, ind.USD),
                                           (f"{titulo}: rotación", (lambda c: lambda d: ind.calcular(d, c).valor)(rotacion), ind.VECES),
                                           (f"{titulo}: período de cobro", (lambda c: lambda d: ind.calcular(d, c).valor)(ppc), ind.DIAS_U)):
-            seccion.filas.append([etiqueta] + [obtener(d) for d in lista if d.tiene_datos] + [unidad])
+            seccion.filas.append([etiqueta] + [_saldo(obtener(d)) for d in lista if d.tiene_datos] + [unidad])
     return seccion
+
+
+def _indicador_o_causa(d: DatosEjercicio, clave: str, seccion: Seccion):
+    """Valor del indicador, o «No calculable» con su motivo en las notas."""
+    resultado = ind.calcular(d, clave)
+    if resultado.valor is None:
+        nota = f"{d.anio}, {resultado.indicador.nombre}: {resultado.motivo}"
+        if nota not in seccion.notas:
+            seccion.notas.append(nota)
+        return NO_CALCULABLE
+    if clave == "prueba_acida" and ind.tiene_aviso_de_clasificacion(resultado):  # el valor queda condicionado: no se presenta sin su aviso
+        nota = f"{d.anio}, {resultado.indicador.nombre}: {resultado.nota}"
+        if nota not in seccion.notas:
+            seccion.notas.append(nota)
+    return resultado.valor
 
 
 def capital_trabajo(lista: list[DatosEjercicio]) -> Seccion:
@@ -373,12 +464,12 @@ def capital_trabajo(lista: list[DatosEjercicio]) -> Seccion:
     anios = _anios(lista)
     por = {d.anio: d for d in lista if d.tiene_datos}
     seccion = Seccion(
-        "Tabla 6. Capital de trabajo neto y razones de liquidez",
+        "Capital de trabajo neto y razones de liquidez",
         [Columna("Ejercicio"), Columna("Activo corriente", USD), Columna("Pasivo corriente", USD), Columna("CTN", VAR_USD),
          Columna("Var. absoluta CTN", VAR_USD), Columna("Var. relativa CTN", VAR_PCT), Columna("Razón corriente", VECES),
          Columna("Prueba ácida", VECES), Columna("Razón de tesorería", PCT)],
         notas=["CTN = Activo corriente − Pasivo corriente; RC = AC / PC; PA = (AC − Inventarios) / PC; "
-               "Tesorería = (Efectivo + inversiones corrientes) / PC × 100."],
+               "Tesorería = (Efectivo + inversiones corrientes) / PC × 100."] + nota_sin_clasificar(lista),
     )
     for anio in anios:
         d = por[anio]
@@ -386,10 +477,14 @@ def capital_trabajo(lista: list[DatosEjercicio]) -> Seccion:
         anterior = por.get(anio - 1)
         ctn_anterior = ind.calcular(anterior, "ctn").valor if anterior else None
         absoluta, relativa, nota = variacion(ctn, ctn_anterior) if anterior else ("Base", "Base", "")
+        if anterior and relativa is None:
+            relativa = causa_sin_variacion(ctn, ctn_anterior)
+        if anterior and absoluta is None:
+            absoluta = causa_sin_variacion(ctn, ctn_anterior)
         signo = _nota_cambio_signo("el capital de trabajo neto", anio, ctn, ctn_anterior)
-        seccion.filas.append([str(anio) + (MARCA_FILA if signo else ""), d.bs.activo_corriente.subtotal, d.bs.pasivo_corriente.subtotal,
-                              ctn, absoluta, relativa, ind.calcular(d, "razon_corriente").valor, ind.calcular(d, "prueba_acida").valor,
-                              ind.calcular(d, "razon_tesoreria").valor])
+        seccion.filas.append([str(anio) + (MARCA_FILA if signo else ""), _saldo(d.activo_corriente), _saldo(d.pasivo_corriente),
+                              _saldo(ctn), absoluta, relativa, _indicador_o_causa(d, "razon_corriente", seccion),
+                              _indicador_o_causa(d, "prueba_acida", seccion), _indicador_o_causa(d, "razon_tesoreria", seccion)])
         if signo:
             seccion.notas.append(signo)
         elif nota and anterior:
@@ -401,7 +496,7 @@ def capital_trabajo_interanual(lista: list[DatosEjercicio]) -> Seccion:
     """Resumen de variaciones por periodo (estructura de la Tabla 7 del trabajo)."""
     con_balance = [d for d in lista if d.bs.tiene_datos]
     seccion = Seccion(
-        "Tabla 7. Resumen de variaciones del capital de trabajo neto [USD]",
+        "Resumen de variaciones del capital de trabajo neto [USD]",
         [Columna("Período comparativo"), Columna("Activo corriente inicial", USD), Columna("Activo corriente final", USD),
          Columna("Pasivo corriente inicial", USD), Columna("Pasivo corriente final", USD), Columna("CTN inicial", VAR_USD),
          Columna("CTN final", VAR_USD), Columna("Variación absoluta CTN", VAR_USD), Columna("Variación relativa CTN", VAR_PCT)],
@@ -411,10 +506,12 @@ def capital_trabajo_interanual(lista: list[DatosEjercicio]) -> Seccion:
             continue
         inicial, final = ind.calcular(a, "ctn").valor, ind.calcular(b, "ctn").valor
         absoluta, relativa, nota = variacion(final, inicial)
+        relativa = causa_sin_variacion(final, inicial) if relativa is None else relativa
+        absoluta = causa_sin_variacion(final, inicial) if absoluta is None else absoluta
         signo = _nota_cambio_signo("el capital de trabajo neto", b.anio, final, inicial)
-        seccion.filas.append([f"{a.anio} vs {b.anio}" + (MARCA_FILA if signo else ""), a.bs.activo_corriente.subtotal,
-                              b.bs.activo_corriente.subtotal, a.bs.pasivo_corriente.subtotal, b.bs.pasivo_corriente.subtotal,
-                              inicial, final, absoluta, relativa])
+        seccion.filas.append([f"{a.anio} vs {b.anio}" + (MARCA_FILA if signo else ""), _saldo(a.activo_corriente),
+                              _saldo(b.activo_corriente), _saldo(a.pasivo_corriente), _saldo(b.pasivo_corriente),
+                              _saldo(inicial), _saldo(final), absoluta, relativa])
         if signo:
             seccion.notas.append(signo)
         elif nota:
@@ -434,17 +531,20 @@ def dupont(lista: list[DatosEjercicio]) -> list[Seccion]:
         [Columna("Concepto")] + [Columna(str(a), POR_FILA) for a in anios] + [Columna("Unidad")],
         columna_unidad=len(anios) + 1,
         notas=["RSA = Margen neto × Rotación de activos; RSP = RSA × MAF; MAF = Activo total / Patrimonio total. "
-               "Saldos al cierre (criterio del trabajo), igual que el reporte «Rentabilidad mediante fórmula DuPont»."],
+               "Saldos al cierre (criterio del trabajo), igual que el reporte «Rentabilidad mediante fórmula DuPont»."]
+        + nota_sin_clasificar(lista),
     )
-    filas_total = [("Ingresos ordinarios", lambda d: d.inc.ingresos_netos.subtotal, ind.USD),
-                   ("Utilidad neta del ejercicio", lambda d: d.inc.utilidad_neta, ind.USD),
-                   ("Activo total", lambda d: d.bs.total_activo, ind.USD),
-                   ("Patrimonio total", lambda d: d.bs.total_patrimonio, ind.USD)]
-    for clave, obtener in (("margen_neto", lambda d: _x100(factores_total(d).margen_neto)),
-                           ("rotacion_activos", lambda d: factores_total(d).rotacion_activos),
-                           ("roa_dupont", lambda d: _x100(factores_total(d).rsa)),
-                           ("maf", lambda d: factores_total(d).maf_interpretable),
-                           ("roe_dupont", lambda d: _x100(factores_total(d).rsp_interpretable))):
+    filas_total = [("Ingresos ordinarios", lambda d: d.ingresos, ind.USD),
+                   ("Utilidad neta del ejercicio", lambda d: d.utilidad_neta, ind.USD),
+                   ("Activo total", lambda d: d.activo_total, ind.USD),
+                   ("Patrimonio total", lambda d: d.patrimonio_total, ind.USD)]
+    # Los factores salen de calculations/indicadores.py, que no calcula sobre datos sin registrar.
+    valor_ind = lambda c: lambda d: ind.calcular(d, c).valor
+    for clave, obtener in (("margen_neto", valor_ind("margen_neto")),
+                           ("rotacion_activos", valor_ind("rotacion_activos")),
+                           ("roa_dupont", valor_ind("roa_dupont")),
+                           ("maf", valor_ind("maf")),
+                           ("roe_dupont", valor_ind("roe_dupont"))):
         i = ind.POR_CLAVE[clave]
         filas_total.append((i.nombre, obtener, i.unidad))
     # Comprobacion con las formulas directas de la seccion 8.4 (indicadores ROA y ROE).
@@ -452,7 +552,7 @@ def dupont(lista: list[DatosEjercicio]) -> list[Seccion]:
         i = ind.POR_CLAVE[clave]
         filas_total.append((f"{i.nombre} — verificación directa", (lambda c: lambda d: ind.calcular(d, c).valor)(clave), i.unidad))
     for etiqueta, obtener, unidad in filas_total:
-        total.filas.append([etiqueta] + [obtener(por[a]) for a in anios] + [unidad])
+        total.filas.append([etiqueta] + [_saldo(obtener(por[a])) for a in anios] + [unidad])
 
     ctrl = Seccion(
         "Sistema DuPont — enfoque de la controladora",
@@ -460,16 +560,17 @@ def dupont(lista: list[DatosEjercicio]) -> list[Seccion]:
         columna_unidad=len(anios) + 1,
     )
     filas_ctrl = [("Utilidad atribuible a la controladora", lambda d: d.utilidad_controladora()[0], ind.USD),
+                  ("Base de la utilidad atribuible", lambda d: d.base_atribucion(), ""),
                   ("Patrimonio atribuible a la controladora", lambda d: d.patrimonio_controladora, ind.USD)]
-    for clave, obtener in (("margen_neto_controladora", lambda d: _x100(factores_controladora(d)[0].margen_neto)),
-                           ("rotacion_activos", lambda d: factores_controladora(d)[0].rotacion_activos),
-                           ("roa_controladora", lambda d: _x100(factores_controladora(d)[0].rsa)),
-                           ("maf_controladora", lambda d: factores_controladora(d)[0].maf_interpretable),
-                           ("roe_controladora", lambda d: _x100(factores_controladora(d)[0].rsp_interpretable))):
+    for clave, obtener in (("margen_neto_controladora", valor_ind("margen_neto_controladora")),
+                           ("rotacion_activos", valor_ind("rotacion_activos")),
+                           ("roa_controladora", valor_ind("roa_controladora")),
+                           ("maf_controladora", valor_ind("maf_controladora")),
+                           ("roe_controladora", valor_ind("roe_controladora"))):
         i = ind.POR_CLAVE[clave]
         filas_ctrl.append((i.nombre, obtener, i.unidad))
     for etiqueta, obtener, unidad in filas_ctrl:
-        ctrl.filas.append([etiqueta] + [obtener(por[a]) for a in anios] + [unidad])
+        ctrl.filas.append([etiqueta] + [_saldo(obtener(por[a])) for a in anios] + [unidad])
     for a in anios:
         ctrl.notas.append(f"{a}: utilidad atribuible — {por[a].utilidad_controladora()[1]}.")
     return [total, ctrl]
@@ -479,7 +580,7 @@ def dupont(lista: list[DatosEjercicio]) -> list[Seccion]:
 def wacc_resumen(resultados: list[ResultadoWACC]) -> Seccion:
     anios = [r.anio for r in resultados]
     seccion = Seccion(
-        "WACC — comparativo (método del trabajo, sección 9.4)",
+        "WACC — comparativo",
         [Columna("Componente")] + [Columna(str(a), POR_FILA) for a in anios] + [Columna("Unidad")],
         columna_unidad=len(anios) + 1,
         notas=[
@@ -625,6 +726,9 @@ def trazabilidad(session: Session, lista: list[DatosEjercicio]) -> list[Seccion]
             if dato.tipo == "COMPLEMENTARIO":
                 complementarios.filas.append([str(d.anio), dato.clave, dato.nombre_original, dato.valor, dato.estado_financiero,
                                               dato.documento, dato.pagina])
+                if dato_modificado(dato):
+                    complementarios.notas.append(f"{d.anio}: {dato.clave} modificado después de la carga. Cifra impresa "
+                                                 f"{dato.importe_documento}; importe vigente {dato.valor:,.2f}.")
         for cuenta, valor, tipo in d.sin_grupo:
             fuentes.notas.append(f"{d.anio}: la cuenta {cuenta.codigo} — {cuenta.nombre} ({valor}) no tiene grupo de análisis; "
                                  "no participa en los indicadores por rubro.")
@@ -641,7 +745,7 @@ def mapeo_cuentas(session: Session) -> Seccion:
          Columna("Clase"), Columna("Tipo de pasivo (WACC)"), Columna("Indicadores en los que participa")],
     )
     for cuenta in list_accounts(session):
-        grupo = GRUPOS.get(cuenta.grupo_analisis or "")
+        grupo = grupo_de_cuenta(cuenta)
         indicadores_ = ind.indicadores_de_grupo(grupo.codigo, grupo.clase) if grupo else []
         seccion.filas.append([
             cuenta.codigo, cuenta.nombre, cuenta.categoria_principal.value,

@@ -14,6 +14,7 @@ from calculations.comparacion_anf import ESTADOS, comparar, fuera_de_alcance, re
 from calculations.fuentes_usos import calcular_fuentes_usos
 from calculations.rubros import datos_todos
 from calculations.wacc import calcular_wacc
+from components.avisos import mostrar_sin_grupo
 from components.secciones_ui import descargas, mostrar_seccion
 from components.texto import md
 from database.models import Company
@@ -29,12 +30,21 @@ def _datos(session: Session):
 
 
 def _aviso_sin_grupo(lista) -> None:
-    sin_grupo = [(d.anio, c) for d in lista for c, _, _ in d.sin_grupo]
-    if sin_grupo:
-        st.warning(
-            f"{len(sin_grupo)} importe(s) distintos de cero pertenecen a cuentas sin grupo de análisis: participan en los "
-            "totales pero no en los rubros ni en los indicadores que los usan. Asigne el grupo en «Catálogo de cuentas»."
-        )
+    mostrar_sin_grupo(lista)
+
+
+def _aviso_integridad(lista, estado: str | None = None) -> list[tuple[str, list[sec.Seccion]]]:
+    """Avisa en pantalla si un balance esta descuadrado o un estado incompleto, y devuelve la hoja para las descargas.
+    No modifica ningun importe."""
+    seccion = sec.integridad(lista, estado)
+    sin_clasificar = sec.clasificacion(lista)
+    secciones = [s for s in (seccion, sin_clasificar) if s is not None]
+    if not secciones:
+        return []
+    for ejercicio, estado_financiero, problema, diferencia in (seccion.filas if seccion else []):
+        detalle = f" Diferencia: {sec.formatear(diferencia, sec.VAR_USD)} {md('USD')}." if diferencia is not None else ""
+        st.warning(md(f"{ejercicio}, {estado_financiero}. {problema}{detalle} La aplicación no corrige los datos."))
+    return [("Avisos de integridad", secciones)]
 
 
 def render_horizontal(session: Session, company: Company) -> None:
@@ -43,12 +53,13 @@ def render_horizontal(session: Session, company: Company) -> None:
     if not lista:
         return
     _aviso_sin_grupo(lista)
+    avisos = _aviso_integridad(lista)
     nivel = st.radio("Nivel de detalle", ["rubros", "grupos", "cuentas"], horizontal=True,
-                     format_func={"rubros": "Rubros y totales (trabajo ANF)", "grupos": "Grupos de análisis",
+                     format_func={"rubros": "Rubros y totales", "grupos": "Grupos de análisis",
                                   "cuentas": "Cuentas (denominación original)"}.get, key="horizontal_nivel")
     seccion = sec.horizontal(lista, nivel)
     mostrar_seccion(seccion, notas_plegadas=True)
-    descargas(company, "Análisis horizontal 2021–2025", [("Horizontal", [seccion])], f"analisis_horizontal_{nivel}",
+    descargas(company, "Análisis horizontal 2021–2025", avisos + [("Horizontal", [seccion])], f"analisis_horizontal_{nivel}",
               clave="horizontal")
 
 
@@ -89,11 +100,12 @@ def render_horizontal_balance(session: Session, company: Company) -> None:
     if not lista:
         return
     _aviso_sin_grupo(lista)
+    avisos = _aviso_integridad(lista, "BG")
     st.caption(f"{md(company.nombre_legal)}. Período {lista[0].anio}–{lista[-1].anio}, cifras en {md(company.moneda)}. Cada "
                "ejercicio se compara con el anterior (trabajo, secciones 6.3 a 6.6).")
     tablas = sec.horizontal_balance_tablas(lista)
     capital = [sec.capital_trabajo(lista), sec.capital_trabajo_interanual(lista)]
-    trabajo, capital_tab, dos = st.tabs(["Tablas 3 y 4 del trabajo", "Capital de trabajo (Tablas 6 y 7)", "Comparar dos ejercicios"])
+    trabajo, capital_tab, dos = st.tabs(["Análisis de la situación financiera", "Capital de trabajo", "Comparar dos ejercicios"])
     with trabajo:
         for seccion in tablas:
             mostrar_seccion(seccion)
@@ -103,7 +115,7 @@ def render_horizontal_balance(session: Session, company: Company) -> None:
     with dos:
         nivel = _comparar_dos(lista, "BG", "horizontal_balance")
     descargas(company, f"Análisis horizontal del Balance General {lista[0].anio}–{lista[-1].anio}",
-              [("Tablas 3 y 4", tablas), ("Capital de trabajo", capital)] + _hojas_dos_ejercicios(lista, "BG", nivel),
+              avisos + [("Situación financiera", tablas), ("Capital de trabajo", capital)] + _hojas_dos_ejercicios(lista, "BG", nivel),
               f"analisis_horizontal_balance_{nivel}", clave="horizontal_balance")
 
 
@@ -113,16 +125,17 @@ def render_horizontal_resultados(session: Session, company: Company) -> None:
     if not lista:
         return
     _aviso_sin_grupo(lista)
+    avisos = _aviso_integridad(lista, "ER")
     st.caption(f"{md(company.nombre_legal)}. Período {lista[0].anio}–{lista[-1].anio}, cifras en {md(company.moneda)}. Cada "
                "ejercicio se compara con el anterior (trabajo, secciones 6.3 y 6.4).")
     tabla = sec.horizontal_resultados_tabla(lista)
-    trabajo, dos = st.tabs(["Tabla 5 del trabajo", "Comparar dos ejercicios"])
+    trabajo, dos = st.tabs(["Análisis del estado de resultados", "Comparar dos ejercicios"])
     with trabajo:
         mostrar_seccion(tabla)
     with dos:
         nivel = _comparar_dos(lista, "ER", "horizontal_resultados")
     descargas(company, f"Análisis horizontal del Estado de Resultados {lista[0].anio}–{lista[-1].anio}",
-              [("Tabla 5", [tabla])] + _hojas_dos_ejercicios(lista, "ER", nivel), f"analisis_horizontal_resultados_{nivel}",
+              avisos + [("Estado de resultados", [tabla])] + _hojas_dos_ejercicios(lista, "ER", nivel), f"analisis_horizontal_resultados_{nivel}",
               clave="horizontal_resultados")
 
 
@@ -131,6 +144,7 @@ def render_vertical_comparativo(session: Session, company: Company) -> None:
     lista = _datos(session)
     if not lista:
         return
+    _aviso_sin_grupo(lista)
     st.caption("El análisis vertical de un solo ejercicio, por cuenta, sigue disponible en los reportes «Análisis Vertical».")
     secciones = [sec.vertical(lista, "ER"), sec.vertical(lista, "BG")]
     for seccion in secciones:
@@ -158,6 +172,7 @@ def render_wacc(session: Session, company: Company) -> None:
     lista = [d for d in _datos(session) if d.bs.tiene_datos and d.inc.tiene_datos]
     if not lista:
         return
+    _aviso_sin_grupo(lista)
     st.warning(
         "Las tasas de interés de la deuda y la tasa de ISR (30 %) son supuestos del trabajo ANF que no pueden verificarse "
         "con los documentos disponibles. El costo del patrimonio se estima con el ROE, como en el trabajo; no es un costo "
@@ -181,6 +196,7 @@ def render_fuentes_usos(session: Session, company: Company) -> None:
     lista = _datos(session)
     if not lista:
         return
+    _aviso_sin_grupo(lista)
     pares = pares_consecutivos(lista)
     if not pares:
         st.info("Se necesitan dos ejercicios consecutivos con Balance General.")
@@ -203,6 +219,7 @@ def render_validacion(session: Session, company: Company) -> None:
     lista = _datos(session)
     if not lista:
         return
+    _aviso_sin_grupo(lista)
     st.caption("Datos originales → cálculo de la aplicación → comparación con el valor publicado en el trabajo. Los valores "
                "del trabajo nunca se usan como datos ni como resultados calculados.")
     comparaciones = comparar(lista)
@@ -233,6 +250,7 @@ def render_informe_integral(session: Session, company: Company) -> None:
     lista = _datos(session)
     if not lista:
         return
+    _aviso_sin_grupo(lista)
     st.caption("Reúne los estados financieros originales, los análisis horizontal y vertical, los indicadores, el capital de "
                "trabajo, el DuPont, el WACC, el origen y aplicación de fondos, la comparación con el trabajo ANF, las "
                "observaciones sobre discrepancias y la trazabilidad de los datos.")

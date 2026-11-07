@@ -18,6 +18,7 @@ import streamlit as st
 from sqlalchemy.orm import Session
 
 from calculations.balance_sheet import compute_balance_sheet
+from calculations.rubros import datos_ejercicio
 from calculations.validation import CONVENCION_SIGNOS, aviso_signo
 from components import confirmacion
 from components.confirmacion import Cambio
@@ -28,12 +29,15 @@ from components.texto import md
 from database.enums import TipoEstadoFinanciero as Tipo
 from database.models import Account, Company, FiscalPeriod
 from database.repositories import (
+    actualizar_atribucion,
     close_fiscal_period,
     delete_entry,
     delete_fiscal_period,
     list_entries,
     list_history,
+    par_atribucion,
     period_has_entries,
+    registrar_atribucion_documentada,
     reopen_fiscal_period,
     upsert_entry,
 )
@@ -260,6 +264,69 @@ def _administrar_ejercicio(session: Session, period: FiscalPeriod) -> None:
             st.rerun()
 
 
+def _registrar_atribucion(session: Session, period: FiscalPeriod, datos, moneda: str) -> None:
+    """Ejercicio sin atribucion registrada: una atribucion documentada que concilie sustituye al supuesto."""
+    utilidad, fuente = datos.utilidad_controladora()
+    if utilidad is None:
+        return
+    with st.expander("Registrar una atribución documentada de la utilidad neta"):
+        st.caption(md(f"{fuente}."))
+        uc = st.number_input("Utilidad atribuible a la controladora", value=float(datos.utilidad_neta), step=0.01, format="%.2f",
+                             key=f"atribucion_doc_uc_{period.id}")
+        nci = st.number_input("Participación no controladora", value=0.0, step=0.01, format="%.2f", key=f"atribucion_doc_nci_{period.id}")
+        documento = st.text_input("Documento de origen", key=f"atribucion_doc_documento_{period.id}")
+        pagina = st.number_input("Página", min_value=1, value=1, step=1, key=f"atribucion_doc_pagina_{period.id}")
+        confirmar = st.checkbox(f"Confirmo la atribución documentada del ejercicio {period.anio}", key=f"atribucion_doc_conf_{period.id}")
+        if st.button("Registrar atribución", disabled=not confirmar, key=f"atribucion_doc_guardar_{period.id}"):
+            guardado, _ = ejecutar_escritura(
+                session,
+                lambda: registrar_atribucion_documentada(
+                    session, fiscal_period_id=period.id, utilidad_neta=datos.utilidad_neta,
+                    utilidad_controladora=parse_importe_con_aviso(uc, redondear=True)[0],
+                    participacion=parse_importe_con_aviso(nci, redondear=True)[0], documento=documento, pagina=int(pagina)),
+                descripcion=f"registrar la atribución del ejercicio {period.anio}",
+            )
+            if guardado:
+                st.success("Atribución registrada.")
+                st.rerun()
+
+
+def _editar_atribucion(session: Session, period: FiscalPeriod, moneda: str) -> None:
+    """Utilidad atribuible y participacion no controladora del documento: al cambiar una, la otra se ajusta para que
+    ambas sumen la utilidad neta vigente."""
+    if period.cerrado:
+        return
+    datos = datos_ejercicio(session, period)
+    par = par_atribucion(datos.complementarios)
+    if datos.utilidad_neta is None:
+        return
+    if par is None:
+        _registrar_atribucion(session, period, datos, moneda)
+        return
+    if par[1] is None:
+        return
+    dato, participacion, origen = par
+    utilidad, fuente = datos.utilidad_controladora()
+    with st.expander("Atribución de la utilidad neta (controladora y no controladoras)"):
+        st.caption(md(f"Utilidad neta vigente: {format_money(datos.utilidad_neta, moneda)}. Atribuible a la controladora: "
+                      f"{format_money(utilidad, moneda)}. {fuente}. Registrado: atribuible {format_money(dato.valor, moneda)}; "
+                      f"no controladoras {format_money(participacion.valor, moneda)}."))
+        que = st.radio("Dato a modificar", ["Participación no controladora", "Utilidad atribuible a la controladora"], horizontal=True,
+                       key=f"atribucion_dato_{period.id}")
+        inicial = participacion.valor if que.startswith("Participación") else dato.valor
+        importe = st.number_input(que, value=float(inicial), step=0.01, format="%.2f", key=f"atribucion_valor_{period.id}_{que}")
+        confirmar = st.checkbox(f"Confirmo que deseo modificar la atribución del ejercicio {period.anio}", key=f"atribucion_conf_{period.id}")
+        if st.button("Guardar atribución", disabled=not confirmar, key=f"atribucion_guardar_{period.id}"):
+            campo = {"participacion" if que.startswith("Participación") else "utilidad_controladora": parse_importe_con_aviso(importe, redondear=True)[0]}
+            guardado, _ = ejecutar_escritura(
+                session, lambda: actualizar_atribucion(session, fiscal_period_id=period.id, utilidad_neta=datos.utilidad_neta, **campo),
+                descripcion=f"modificar la atribución del ejercicio {period.anio}",
+            )
+            if guardado:
+                st.success("Atribución actualizada.")
+                st.rerun()
+
+
 def render(session: Session, company: Company) -> None:
     st.header("Modificación de datos")
     period = select_fiscal_period(session, key="periodo_edicion", allow_create=False)
@@ -293,3 +360,4 @@ def render(session: Session, company: Company) -> None:
             st.dataframe(historial_dataframe(session, registros), width="stretch")
     with tab_ejercicio:
         _administrar_ejercicio(session, period)
+        _editar_atribucion(session, period, company.moneda)

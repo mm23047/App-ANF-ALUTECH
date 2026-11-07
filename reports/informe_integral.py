@@ -29,7 +29,8 @@ def hojas_informe(session: Session, lista: list[DatosEjercicio] | None = None) -
     con_datos = [d for d in lista if d.tiene_datos]
     wacc = [calcular_wacc(d) for d in con_datos if d.bs.tiene_datos and d.inc.tiene_datos]
     comparaciones = comparar(lista)
-    return [
+    sin_clasificar = sec.clasificacion(con_datos)
+    return ([("Cuentas sin clasificar", [sin_clasificar])] if sin_clasificar else []) + [
         ("Estados originales", [sec.estados_originales(lista, "BALANCE"), sec.estados_originales(lista, "RESULTADOS")]),
         ("Horizontal", [sec.horizontal(lista, "rubros"), sec.horizontal(lista, "grupos")]),
         ("Vertical", [sec.vertical(lista, "ER"), sec.vertical(lista, "BG")]),

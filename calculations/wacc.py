@@ -26,7 +26,7 @@ from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 
-from calculations.rubros import FINANCIERO, GRUPOS, OPERATIVO, DatosEjercicio
+from calculations.rubros import FINANCIERO, OPERATIVO, DatosEjercicio, grupo_de_cuenta
 
 CERO = Decimal("0")
 CIEN = Decimal("100")
@@ -86,6 +86,9 @@ def calcular_wacc(d: DatosEjercicio, supuestos: dict | None = None) -> Resultado
     if not (d.bs.tiene_datos and d.inc.tiene_datos):
         resultado.motivo = "Se requieren el Balance General y el Estado de Resultados del ejercicio."
         return resultado
+    if d.utilidad_neta is None or d.pasivo_total is None or d.patrimonio_total is None:
+        resultado.motivo = "Falta un dato registrado: se requieren el pasivo, el patrimonio y un Estado de Resultados completo."
+        return resultado
     datos_anio = supuestos.get("ejercicios", {}).get(str(d.anio))
     if datos_anio is None:
         resultado.motivo = f"No hay supuestos de tasas para {d.anio} en {SUPUESTOS.name}."
@@ -105,11 +108,18 @@ def calcular_wacc(d: DatosEjercicio, supuestos: dict | None = None) -> Resultado
 
     operativos = financieros = costo_deuda = CERO
     faltan_tasas = []
+    sin_clasificar = []
     for grupo in (d.bs.pasivo_corriente, d.bs.pasivo_no_corriente):
         for linea in grupo.lineas:
             cuenta = linea.cuenta
-            info = GRUPOS.get(cuenta.grupo_analisis or "")
+            info = grupo_de_cuenta(cuenta)
             proporcion = linea.valor / v
+            if info is None and linea.valor != CERO:
+                # Sin grupo no se sabe si tiene costo: no se le asigna 0 % ni una tasa.
+                sin_clasificar.append(f"{cuenta.codigo} — {cuenta.nombre}")
+                resultado.lineas.append(LineaWACC("SIN CLASIFICAR", cuenta.codigo, cuenta.nombre, None, linea.valor,
+                                                  None, None, proporcion * CIEN, None))
+                continue
             if info is not None and info.tipo_pasivo == FINANCIERO:
                 tasa = tasas.get(info.codigo)
                 if tasa is None:
@@ -126,9 +136,6 @@ def calcular_wacc(d: DatosEjercicio, supuestos: dict | None = None) -> Resultado
                                                   kd * CIEN, neto * CIEN, proporcion * CIEN, proporcion * neto * CIEN,
                                                   citas.get(info.codigo, "")))
             else:
-                if info is None and linea.valor != CERO:
-                    resultado.advertencias.append(
-                        f"{cuenta.codigo} — {cuenta.nombre} no tiene grupo de análisis: se trata como pasivo operativo sin costo.")
                 operativos += linea.valor
                 resultado.lineas.append(LineaWACC(OPERATIVO, cuenta.codigo, cuenta.nombre, cuenta.grupo_analisis, linea.valor,
                                                   CERO, CERO, proporcion * CIEN, CERO))
@@ -143,6 +150,10 @@ def calcular_wacc(d: DatosEjercicio, supuestos: dict | None = None) -> Resultado
     resultado.pct_patrimonio = d.bs.total_patrimonio / v * CIEN
     resultado.roa_pct = d.inc.utilidad_neta / v * CIEN
     resultado.aporte_patrimonio_pct = d.bs.total_patrimonio / v * ke * CIEN
+    if sin_clasificar:
+        resultado.motivo = ("Pasivo sin grupo de análisis: " + "; ".join(sin_clasificar) + ". No se sabe si tiene costo financiero: "
+                            "asigne el grupo. El WACC no se calcula.")
+        return resultado
     if faltan_tasas:
         resultado.motivo = ("Falta la tasa supuesta de: " + "; ".join(faltan_tasas) +
                             ". No se inventa una tasa: el WACC no se calcula.")

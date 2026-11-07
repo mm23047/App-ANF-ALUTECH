@@ -199,9 +199,15 @@ def _tabla_anios(lista: list[DatosEjercicio], filas: tuple[Fila, ...]) -> pd.Dat
     seccion = sec.Seccion("", [sec.Columna("Indicador"), sec.Columna("Unidad")]
                           + [sec.Columna(str(d.anio), sec.POR_FILA) for d in lista], columna_unidad=1)
     for fila in filas:
-        valores = [ind.calcular(d, fila.clave).valor for d in lista]
-        seccion.filas.append([fila.nombre, ind.POR_CLAVE[fila.clave].unidad]
-                             + [v if v is not None else NO_CALCULABLE for v in valores])
+        indicador = ind.POR_CLAVE[fila.clave]
+        tipo = {ind.USD: sec.USD, ind.PCT: sec.PCT, ind.VECES: sec.VECES, ind.DIAS_U: sec.DIAS}[indicador.unidad]
+
+        def celda(resultado: ind.ResultadoIndicador):
+            if resultado.valor is None:
+                return NO_CALCULABLE
+            return f"{sec.formatear(resultado.valor, tipo)} (provisional)" if ind.es_provisional(resultado) else resultado.valor
+
+        seccion.filas.append([fila.nombre, indicador.unidad] + [celda(ind.calcular(d, fila.clave)) for d in lista])
     return a_dataframe(seccion)
 
 
@@ -217,6 +223,10 @@ def _motivos(lista: list[DatosEjercicio], filas: tuple[Fila, ...]) -> list[str]:
         for motivo, anios in por_motivo.items():
             cuando = "todos los ejercicios" if len(anios) == len(lista) else ", ".join(str(a) for a in anios)
             motivos.append(f"{fila.nombre} ({cuando}): {NO_CALCULABLE.lower()}. {motivo}")
+        for d in lista:
+            resultado = ind.calcular(d, fila.clave)
+            if ind.tiene_aviso_de_clasificacion(resultado):
+                motivos.append(f"{fila.nombre} ({d.anio}): {resultado.nota}")
     return motivos
 
 
@@ -270,7 +280,7 @@ def _mostrar_grupo(grupo: Grupo, lista: list[DatosEjercicio], datos: DatosEjerci
 
 def _complementarios(lista: list[DatosEjercicio]) -> None:
     """Resultados que ya tenia esta pagina y no pertenecen a los cuatro grupos."""
-    with st.expander("Otros resultados del trabajo: indicadores complementarios, razones de mercado y capital de trabajo"):
+    with st.expander("Otros resultados: indicadores complementarios, razones de mercado y capital de trabajo"):
         otros, mercado, capital = st.tabs(["Otros indicadores", ind.MERCADO, "Capital de trabajo"])
         with otros:
             st.dataframe(_tabla_anios(lista, OTROS_INDICADORES), hide_index=True, width="stretch", height="content")

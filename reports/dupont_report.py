@@ -8,7 +8,7 @@ import streamlit as st
 from sqlalchemy.orm import Session
 
 from calculations.banderas import banderas_dupont
-from calculations.rubros import datos_todos
+from calculations.rubros import BASE_SIMULACION, datos_todos
 from calculations.dupont import (
     BASE_SALDOS,
     DuPontResult,
@@ -19,7 +19,7 @@ from calculations.dupont import (
     generar_interpretacion,
     interpretacion_controladora,
 )
-from components.avisos import mostrar_estado
+from components.avisos import mostrar_estado, mostrar_sin_grupo
 from components.money import format_percent, format_ratio
 from components.navigation import select_fiscal_period
 from components.secciones_ui import descargas, mostrar_seccion
@@ -43,6 +43,10 @@ def _comparativo(session: Session, company: Company) -> None:
     lista = [d for d in datos_todos(session) if d.tiene_datos]
     if not lista:
         return
+    mostrar_sin_grupo(lista)
+    for d in lista:
+        if d.base_atribucion() == BASE_SIMULACION:
+            st.warning(md(f"{d.anio}. {d.utilidad_controladora()[1]}."))
     st.markdown("### Comparativo de los ejercicios")
     secciones = sec.dupont(lista)
     for seccion in secciones:

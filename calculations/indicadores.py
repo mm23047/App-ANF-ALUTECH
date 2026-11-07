@@ -33,7 +33,7 @@ from decimal import Decimal
 from typing import Callable
 
 from calculations.dupont import factores_controladora, factores_total
-from calculations.rubros import RUBROS, DatosEjercicio
+from calculations.rubros import AVISO_AMBIGUA, AVISO_CONTRADICCION, AVISO_NO_INVENTARIO, AVISO_SALDO, RUBROS, DatosEjercicio
 from components.money import format_money, format_percent, redondear
 
 CERO = Decimal("0")
@@ -108,6 +108,10 @@ def _requiere_er(d: DatosEjercicio) -> str | None:
     return None if d.inc.tiene_datos else "No hay Estado de Resultados capturado."
 
 
+def _diferencia(a: Decimal | None, b: Decimal | None) -> Decimal | None:
+    return None if a is None or b is None else a - b
+
+
 def _con(*requisitos):
     """Decorador: devuelve 'no calculable' si falta algun estado requerido."""
     def envoltura(fn):
@@ -127,74 +131,100 @@ BS, ER = _requiere_bs, _requiere_er
 # ---------------------------------------------------------------- calculos
 @_con(BS)
 def _ctn(d):
-    return d.bs.activo_corriente.subtotal - d.bs.pasivo_corriente.subtotal, None, None
+    valor = _diferencia(d.activo_corriente, d.pasivo_corriente)
+    return valor, None if valor is not None else "Falta el activo o el pasivo corriente registrado.", None
 
 
 @_con(BS)
 def _razon_corriente(d):
-    return _div(d.bs.activo_corriente.subtotal, d.bs.pasivo_corriente.subtotal, "la razón corriente")
+    return _div(d.activo_corriente, d.pasivo_corriente, "la razón corriente")
+
+
+def _etiqueta(cuenta) -> str:
+    return f"{cuenta.codigo} — {cuenta.nombre}"
+
+
+def _motivo_reconocimiento(avisos: list) -> str:
+    """Por que la prueba acida no se calcula: cuentas que no se pudieron clasificar, saldos y contradicciones."""
+    partes = []
+    ambiguas = [_etiqueta(a.cuenta) for a in avisos if a.tipo == AVISO_AMBIGUA]
+    if ambiguas:
+        partes.append(f"No se sabe si {', '.join(ambiguas)} es inventario y puede alterar el resultado: asigne su grupo de análisis "
+                      "en el catálogo de cuentas.")
+    partes += [f"{_etiqueta(a.cuenta)} tiene {a.detalle}, no compatible con el reconocimiento automático: revise el saldo o asigne "
+               "su grupo de análisis en el catálogo de cuentas." for a in avisos if a.tipo == AVISO_SALDO]
+    partes += [f"Contradicción en {_etiqueta(a.cuenta)}: {a.detalle.rstrip('.')}. No se decide por el nombre: corrija el nombre o el grupo de "
+               "análisis en el catálogo de cuentas." for a in avisos if a.tipo == AVISO_CONTRADICCION]
+    return " ".join(partes)
 
 
 @_con(BS)
 def _prueba_acida(d):
-    return _div(d.bs.activo_corriente.subtotal - d.rubro("INVENTARIOS"), d.bs.pasivo_corriente.subtotal, "la prueba ácida")
+    bloqueos = [a for a in d.avisos_reconocimiento() if a.bloquea]
+    if bloqueos:
+        return None, _motivo_reconocimiento(bloqueos), None
+    return _div(_diferencia(d.activo_corriente, d.rubro_registrado("INVENTARIOS")), d.pasivo_corriente, "la prueba ácida")
 
 
 @_con(BS)
 def _razon_efectivo(d):
-    return _div(d.rubro("EFECTIVO"), d.bs.pasivo_corriente.subtotal, "la razón de efectivo")
+    return _div(d.rubro_registrado("EFECTIVO"), d.pasivo_corriente, "la razón de efectivo")
 
 
 @_con(BS)
 def _razon_tesoreria(d):
-    return _pct(_div(d.rubro("TESORERIA"), d.bs.pasivo_corriente.subtotal, "la razón de tesorería"))
+    return _pct(_div(d.rubro_registrado("TESORERIA"), d.pasivo_corriente, "la razón de tesorería"))
 
 
 @_con(BS)
 def _capitales_permanentes(d):
+    if d.patrimonio_total is None or d.pasivo_no_corriente is None:
+        return None, "Falta el patrimonio o el pasivo no corriente registrado.", None
     return d.capitales_permanentes, None, None
 
 
 @_con(BS)
 def _fondo_maniobra_lp(d):
-    return d.capitales_permanentes - d.bs.activo_no_corriente.subtotal, None, None
+    if d.patrimonio_total is None or d.pasivo_no_corriente is None or d.activo_no_corriente is None:
+        return None, "Falta el patrimonio, el pasivo no corriente o el activo no corriente registrado.", None
+    return d.capitales_permanentes - d.activo_no_corriente, None, None
 
 
 @_con(BS, ER)
 def _rotacion_inventarios(d):
-    return _div(d.inc.costo_ventas.subtotal, d.rubro("INVENTARIOS"), "la rotación de inventarios")
+    return _div(d.costo_ventas, d.rubro_registrado("INVENTARIOS"), "la rotación de inventarios")
 
 
 @_con(BS, ER)
 def _ppi(d):
-    return _dias(_div(d.rubro("INVENTARIOS"), d.inc.costo_ventas.subtotal, "el período promedio de inventario"))
+    return _dias(_div(d.rubro_registrado("INVENTARIOS"), d.costo_ventas, "el período promedio de inventario"))
 
 
 @_con(BS, ER)
 def _rotacion_cxc(d):
-    valor, motivo, _ = _div(d.inc.ingresos_netos.subtotal, d.rubro("CXC_COMERCIALES_PRESENTADA"), "la rotación de cuentas por cobrar")
+    valor, motivo, _ = _div(d.ingresos, d.rubro_registrado("CXC_COMERCIALES_PRESENTADA"), "la rotación de cuentas por cobrar")
     return valor, motivo, RUBROS["CXC_COMERCIALES_PRESENTADA"].nota
 
 
 @_con(BS, ER)
 def _ppc(d):
-    valor, motivo, _ = _dias(_div(d.rubro("CXC_COMERCIALES_PRESENTADA"), d.inc.ingresos_netos.subtotal, "el período promedio de cobro"))
+    valor, motivo, _ = _dias(_div(d.rubro_registrado("CXC_COMERCIALES_PRESENTADA"), d.ingresos, "el período promedio de cobro"))
     return valor, motivo, RUBROS["CXC_COMERCIALES_PRESENTADA"].nota
 
 
 @_con(BS, ER)
 def _rotacion_cxc_total(d):
-    return _div(d.inc.ingresos_netos.subtotal, d.rubro("CXC_COMERCIALES_Y_OTRAS"), "la rotación de cuentas por cobrar totales")
+    return _div(d.ingresos, d.rubro_registrado("CXC_COMERCIALES_Y_OTRAS"), "la rotación de cuentas por cobrar totales")
 
 
 @_con(BS, ER)
 def _ppc_total(d):
-    return _dias(_div(d.rubro("CXC_COMERCIALES_Y_OTRAS"), d.inc.ingresos_netos.subtotal, "el período de cobro (cartera total)"))
+    return _dias(_div(d.rubro_registrado("CXC_COMERCIALES_Y_OTRAS"), d.ingresos, "el período de cobro (cartera total)"))
 
 
 @_con(BS, ER)
 def _ppp(d):
-    valor, motivo, _ = _dias(_div(d.rubro("CXP_COMERCIALES_PRESENTADA"), d.inc.costo_ventas.subtotal, "el período promedio de pago"))
+    valor, motivo, _ = _dias(_div(d.rubro_registrado("CXP_COMERCIALES_PRESENTADA"), d.costo_ventas, "el período promedio de pago"))
     return valor, motivo, RUBROS["CXP_COMERCIALES_PRESENTADA"].nota
 
 
@@ -216,32 +246,36 @@ def _cce(d):
     return co - redondear(ppp, DECIMALES_CICLO), None, None
 
 
-@_con(BS, ER)
+def _requiere_ingresos_y_activo(d: DatosEjercicio) -> str | None:
+    return None if d.ingresos is not None and d.activo_total is not None else "Faltan los ingresos o el activo registrado."
+
+
+@_con(BS, ER, _requiere_ingresos_y_activo)
 def _rotacion_activos(d):
     return _div(d.inc.ingresos_netos.subtotal, d.bs.total_activo, "la rotación de activos totales")
 
 
 @_con(BS)
 def _endeudamiento(d):
-    return _pct(_div(d.bs.total_pasivo, d.bs.total_activo, "el índice de endeudamiento"))
+    return _pct(_div(d.pasivo_total, d.activo_total, "el índice de endeudamiento"))
 
 
 @_con(BS)
 def _pc_sobre_pasivo(d):
-    return _pct(_div(d.bs.pasivo_corriente.subtotal, d.bs.total_pasivo, "la proporción de pasivo corriente"))
+    return _pct(_div(d.pasivo_corriente, d.pasivo_total, "la proporción de pasivo corriente"))
 
 
 @_con(BS)
 def _deuda_capital(d):
-    return _div(d.bs.total_pasivo, d.bs.total_patrimonio, "la razón deuda-capital")
+    return _div(d.pasivo_total, d.patrimonio_total, "la razón deuda-capital")
 
 
 @_con(ER)
 def _cobertura_intereses(d):
-    valor, motivo, _ = _div(d.inc.utilidad_operativa, d.gastos_financieros_netos, "la razón de cargos de interés fijo")
+    valor, motivo, _ = _div(d.utilidad_operativa, d.gastos_financieros_netos_registrados, "la razón de cargos de interés fijo")
     nota = None
     if d.inc.ingresos_financieros.subtotal != CERO:
-        nota = "Gastos financieros netos de ingresos financieros (criterio del trabajo, Tabla 5)."
+        nota = "Gastos financieros netos de ingresos financieros (criterio del trabajo, sección 6.4)."
     return valor, motivo, nota
 
 
@@ -249,7 +283,7 @@ def _cobertura_intereses(d):
 def _cobertura_intereses_bruta(d):
     if not d.tiene("GASTOS_FINANCIEROS"):
         return None, "El estado de resultados presenta solo el gasto financiero neto; no se puede separar el bruto.", None
-    return _div(d.inc.utilidad_operativa, d.g("GASTOS_FINANCIEROS"), "la cobertura con gastos financieros brutos")
+    return _div(d.utilidad_operativa, d.g("GASTOS_FINANCIEROS"), "la cobertura con gastos financieros brutos")
 
 
 def _cobertura_pagos_fijos(d):
@@ -262,29 +296,29 @@ def _cobertura_pagos_fijos(d):
 
 @_con(ER)
 def _margen_bruto(d):
-    return _pct(_div(d.inc.utilidad_bruta, d.inc.ingresos_netos.subtotal, "el margen bruto"))
+    return _pct(_div(d.utilidad_bruta, d.ingresos, "el margen bruto"))
 
 
 @_con(ER)
 def _margen_operativo(d):
-    return _pct(_div(d.inc.utilidad_operativa, d.inc.ingresos_netos.subtotal, "el margen operativo"))
+    return _pct(_div(d.utilidad_operativa, d.ingresos, "el margen operativo"))
 
 
 @_con(ER)
 def _margen_neto(d):
-    return _pct(_div(d.inc.utilidad_neta, d.inc.ingresos_netos.subtotal, "el margen neto"))
+    return _pct(_div(d.utilidad_neta, d.ingresos, "el margen neto"))
 
 
 @_con(BS, ER)
 def _roa(d):
-    return _pct(_div(d.inc.utilidad_neta, d.bs.total_activo, "el ROA"))
+    return _pct(_div(d.utilidad_neta, d.activo_total, "el ROA"))
 
 
 @_con(BS, ER)
 def _roe(d):
     if d.bs.total_patrimonio <= CERO:
         return None, "El patrimonio es cero o negativo: el ROE no es interpretable.", None
-    return _pct(_div(d.inc.utilidad_neta, d.bs.total_patrimonio, "el ROE"))
+    return _pct(_div(d.utilidad_neta, d.patrimonio_total, "el ROE"))
 
 
 @_con(ER)
@@ -292,7 +326,9 @@ def _ebitda(d):
     da, fuente = d.depreciacion_amortizacion()
     if da is None:
         return None, fuente, None
-    return d.inc.utilidad_operativa + da, None, f"Depreciación y amortización: {fuente}."
+    if d.utilidad_operativa is None:
+        return None, "Falta la utilidad de operación: el estado de resultados está incompleto.", None
+    return d.utilidad_operativa + da, None, f"Depreciación y amortización: {fuente}."
 
 
 def _no_calculable(motivo: str):
@@ -311,6 +347,8 @@ _MOTIVO_PRECIO = ("No se dispone de un precio de mercado verificable de acciones
 # exponen como indicadores (fuente de la comparacion con el trabajo ANF).
 @_con(BS)
 def _maf(d):
+    if d.activo_total is None or d.patrimonio_total is None:
+        return None, "Falta el activo o el patrimonio registrado.", None
     maf = factores_total(d).maf_interpretable
     if maf is None:
         return None, "El patrimonio es cero o negativo.", None
@@ -324,6 +362,8 @@ def _motivo_rsa(d, margen):
 
 
 def _roa_dupont(d):
+    if d.utilidad_neta is None or d.activo_total is None:
+        return None, "Falta un dato registrado del estado de resultados o del activo.", None
     f = factores_total(d)
     if f.rsa is None:
         return None, _motivo_rsa(d, f.margen_neto), None
@@ -340,6 +380,8 @@ def _roe_dupont(d):
 
 @_con(BS, ER)
 def _margen_neto_controladora(d):
+    if d.utilidad_neta is None or d.activo_total is None:
+        return None, "Falta un dato registrado del estado de resultados o del activo.", None
     f, fuente = factores_controladora(d)
     nota = f"Utilidad atribuible: {fuente}."
     if f.margen_neto is None:
@@ -528,10 +570,71 @@ INDICADORES: list[Indicador] = [
 POR_CLAVE: dict[str, Indicador] = {i.clave: i for i in INDICADORES}
 
 
+# Indicadores que dependen de un grupo concreto y no solo de los totales de los estados.
+_GRUPOS_EXACTOS = {"ebitda": "DEPRECIACION_AMORTIZACION", "cobertura_intereses_bruta": "GASTOS_FINANCIEROS",
+                   "maf_controladora": "NO_CONTROLADORAS", "roe_controladora": "NO_CONTROLADORAS"}
+PROVISIONAL = "Resultado provisional"
+
+
+def _nota_provisional(indicador: Indicador, datos: DatosEjercicio) -> str | None:
+    """Advertencia si una cuenta sin grupo podria pertenecer a un rubro o grupo del que depende el indicador. No se
+    supone a que grupo pertenece: se avisa que el resultado solo incluye lo clasificado."""
+    if not datos.sin_grupo:
+        return None
+    grupos = [g for uso in indicador.usa if uso.startswith("rubro:") for g in RUBROS[uso[6:]].grupos]
+    if indicador.clave in _GRUPOS_EXACTOS:
+        grupos.append(_GRUPOS_EXACTOS[indicador.clave])
+    cuentas = datos.cuentas_sin_clasificar(*grupos) if grupos else []
+    if not cuentas:
+        return None
+    nombres = ", ".join(f"{c.codigo} — {c.nombre}" for c in cuentas)
+    return f"{PROVISIONAL}: solo incluye cuentas clasificadas. Asigne el grupo de análisis de {nombres}."
+
+
+def _nota_identificado(indicador: Indicador, datos: DatosEjercicio) -> str | None:
+    if "rubro:INVENTARIOS" not in indicador.usa or not datos.inventario_identificado():
+        return None
+    nombres = ", ".join(f"{c.codigo} — {c.nombre}" for c, _ in datos.inventario_identificado())
+    return f"Incluye inventario reconocido por su denominación, sin grupo de análisis: {nombres}."
+
+
+_RECONOCIDA_NO_INVENTARIO = "reconocida como no inventario"
+_CONTRADICCION = "Contradicción de nombre y grupo"
+
+
+def _nota_prueba_acida(indicador: Indicador, datos: DatosEjercicio) -> str | None:
+    """Lo que condiciona una prueba acida ya calculada; los casos que impiden calcularla van en su motivo."""
+    if indicador.clave != "prueba_acida":
+        return None
+    avisos = datos.avisos_reconocimiento()
+    partes = []
+    reconocidas = [_etiqueta(a.cuenta) for a in avisos if a.tipo == AVISO_NO_INVENTARIO]
+    if reconocidas:
+        partes.append(f"Incluye en el numerador cuenta {_RECONOCIDA_NO_INVENTARIO} por su denominación, sin grupo de análisis: "
+                      f"{', '.join(reconocidas)}.")
+    partes += [f"{_CONTRADICCION} en {_etiqueta(a.cuenta)}: {a.detalle}. No cambia este resultado: se respeta el grupo."
+               for a in avisos if a.tipo == AVISO_CONTRADICCION and not a.bloquea]
+    return " ".join(partes) or None
+
+
 def calcular(datos: DatosEjercicio, clave: str) -> ResultadoIndicador:
     indicador = POR_CLAVE[clave]
     valor, motivo, nota = indicador.calcular(datos)
+    provisional = _nota_provisional(indicador, datos) if valor is not None else None
+    identificado = _nota_identificado(indicador, datos) if valor is not None else None
+    acida = _nota_prueba_acida(indicador, datos) if valor is not None else None
+    nota = " ".join(t for t in (provisional, identificado, acida, nota) if t) or None
     return ResultadoIndicador(indicador, datos.anio, valor, motivo if valor is None else None, nota)
+
+
+def es_provisional(resultado: ResultadoIndicador) -> bool:
+    return bool(resultado.nota and resultado.nota.startswith(PROVISIONAL))
+
+
+def tiene_aviso_de_clasificacion(resultado: ResultadoIndicador) -> bool:
+    """Resultado provisional, que incluye una cuenta reconocida solo por su denominacion o con nombre y grupo contradictorios."""
+    return es_provisional(resultado) or bool(resultado.nota and any(
+        texto in resultado.nota for texto in ("reconocido por su denominación", _RECONOCIDA_NO_INVENTARIO, _CONTRADICCION)))
 
 
 def calcular_todos(lista: list[DatosEjercicio], categoria: str | None = None) -> list[tuple[Indicador, dict[int, ResultadoIndicador]]]:

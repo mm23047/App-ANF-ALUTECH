@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Callable
 
-from calculations.rubros import CLASE_BALANCE, FAMILIA_DE_GRUPO, GRUPOS, RUBROS, DatosEjercicio, FamiliaPresentacion
+from calculations.rubros import CLASE_BALANCE, FAMILIA_DE_GRUPO, GRUPOS, RUBROS, DatosEjercicio, FamiliaPresentacion, signo_resultado
 
 CERO = Decimal("0")
 CIEN = Decimal("100")
@@ -56,59 +56,65 @@ def _er(fn):
 
 
 def _rubro(codigo: str):
-    return lambda d: d.rubro(codigo) if d.bs.tiene_datos or d.inc.tiene_datos else None
+    return lambda d: d.rubro_registrado(codigo)
 
 
 def _con_signo(*grupos: str):
+    """Linea que un estado puede no presentar: sin cuentas es «no aplicable» y vale 0.00 %, como en la tabla 7.1 del trabajo."""
     return _er(lambda d: d.rubro_con_signo(*grupos))
+
+
+def _con_signo_requerida(*grupos: str):
+    """Linea que todo estado de resultados presenta: sin cuentas es un dato faltante, no un cero."""
+    return _er(lambda d: d.rubro_con_signo(*grupos) if any(d.tiene(g) for g in grupos) else None)
 
 
 _LISTA = [
     # Balance General
-    Concepto("activo_corriente", "Total activo corriente", _bs(lambda d: d.bs.activo_corriente.subtotal), SUBTOTAL),
-    Concepto("activo_no_corriente", "Total activo no corriente", _bs(lambda d: d.bs.activo_no_corriente.subtotal), SUBTOTAL),
-    Concepto("total_activo", "Total activo", _bs(lambda d: d.bs.total_activo), TOTAL),
-    Concepto("pasivo_corriente", "Total pasivo corriente", _bs(lambda d: d.bs.pasivo_corriente.subtotal), SUBTOTAL),
-    Concepto("pasivo_no_corriente", "Total pasivo no corriente", _bs(lambda d: d.bs.pasivo_no_corriente.subtotal), SUBTOTAL),
-    Concepto("total_pasivo", "Total pasivo", _bs(lambda d: d.bs.total_pasivo), TOTAL),
-    Concepto("total_patrimonio", "Total patrimonio", _bs(lambda d: d.bs.total_patrimonio), TOTAL),
-    Concepto("patrimonio_controladora", "Patrimonio atribuible a la controladora", _bs(lambda d: d.patrimonio_controladora), SUBTOTAL),
-    Concepto("total_pasivo_patrimonio", "Total pasivo y patrimonio", _bs(lambda d: d.bs.total_pasivo_patrimonio), TOTAL),
+    Concepto("activo_corriente", "Total activo corriente", _bs(lambda d: d.activo_corriente), SUBTOTAL),
+    Concepto("activo_no_corriente", "Total activo no corriente", _bs(lambda d: d.activo_no_corriente), SUBTOTAL),
+    Concepto("total_activo", "Total activo", _bs(lambda d: d.activo_total), TOTAL),
+    Concepto("pasivo_corriente", "Total pasivo corriente", _bs(lambda d: d.pasivo_corriente), SUBTOTAL),
+    Concepto("pasivo_no_corriente", "Total pasivo no corriente", _bs(lambda d: d.pasivo_no_corriente), SUBTOTAL),
+    Concepto("total_pasivo", "Total pasivo", _bs(lambda d: d.pasivo_total), TOTAL),
+    Concepto("total_patrimonio", "Total patrimonio", _bs(lambda d: d.patrimonio_total), TOTAL),
+    Concepto("patrimonio_controladora", "Patrimonio atribuible a la controladora", _bs(lambda d: d.patrimonio_controladora if d.patrimonio_total is not None else None), SUBTOTAL),
+    Concepto("total_pasivo_patrimonio", "Total pasivo y patrimonio", _bs(lambda d: d.bs.total_pasivo_patrimonio if d.pasivo_total is not None and d.patrimonio_total is not None else None), TOTAL),
     # Estado de resultados (importes positivos, como se capturan)
-    Concepto("ingresos", "Ingresos ordinarios", _er(lambda d: d.inc.ingresos_netos.subtotal), SUBTOTAL),
-    Concepto("costo_ventas", "Costo de ventas", _er(lambda d: d.inc.costo_ventas.subtotal)),
-    Concepto("utilidad_bruta", "Utilidad bruta", _er(lambda d: d.inc.utilidad_bruta), TOTAL),
-    Concepto("gastos_operativos_anf", RUBROS["GASTOS_OPERATIVOS_ANF"].nombre, _er(lambda d: d.rubro("GASTOS_OPERATIVOS_ANF")),
+    Concepto("ingresos", "Ingresos ordinarios", _er(lambda d: d.ingresos), SUBTOTAL),
+    Concepto("costo_ventas", "Costo de ventas", _er(lambda d: d.costo_ventas)),
+    Concepto("utilidad_bruta", "Utilidad bruta", _er(lambda d: d.utilidad_bruta), TOTAL),
+    Concepto("gastos_operativos_anf", RUBROS["GASTOS_OPERATIVOS_ANF"].nombre, _er(lambda d: d.rubro_registrado("GASTOS_OPERATIVOS_ANF")),
              nota=RUBROS["GASTOS_OPERATIVOS_ANF"].nota),
-    Concepto("utilidad_operativa", "Utilidad de operación", _er(lambda d: d.inc.utilidad_operativa), TOTAL),
+    Concepto("utilidad_operativa", "Utilidad de operación", _er(lambda d: d.utilidad_operativa), TOTAL),
     Concepto("ingresos_financieros", "Ingresos financieros", _er(lambda d: d.inc.ingresos_financieros.subtotal)),
     Concepto("gastos_financieros", "Gastos financieros (como se presentan)", _er(lambda d: d.inc.gastos_financieros.subtotal)),
-    Concepto("gastos_financieros_netos", "Gastos financieros netos", _er(lambda d: d.gastos_financieros_netos),
+    Concepto("gastos_financieros_netos", "Gastos financieros netos", _er(lambda d: d.gastos_financieros_netos_registrados),
              nota="Gastos financieros − ingresos financieros. 2021–2023 el estado ya presenta el neto."),
-    Concepto("utilidad_antes_impuestos", "Utilidad antes de impuestos", _er(lambda d: d.inc.utilidad_antes_impuestos), TOTAL),
-    Concepto("impuesto_renta", "Impuesto sobre la renta", _er(lambda d: d.inc.impuesto_renta.subtotal)),
-    Concepto("utilidad_neta", "Utilidad neta del ejercicio", _er(lambda d: d.inc.utilidad_neta), TOTAL),
+    Concepto("utilidad_antes_impuestos", "Utilidad antes de impuestos", _er(lambda d: d.utilidad_antes_impuestos), TOTAL),
+    Concepto("impuesto_renta", "Impuesto sobre la renta", _er(lambda d: d._registrado(d.inc.impuesto_renta))),
+    Concepto("utilidad_neta", "Utilidad neta del ejercicio", _er(lambda d: d.utilidad_neta), TOTAL),
     Concepto("utilidad_controladora", "Utilidad atribuible a la controladora", _er(lambda d: d.utilidad_controladora()[0])),
     Concepto("depreciacion_amortizacion_total", "Depreciación y amortización", lambda d: d.depreciacion_amortizacion()[0]),
     # Lineas con signo para el vertical del Estado de Resultados (seccion 7.1)
-    Concepto("s_ingresos", "Ingresos ordinarios", _er(lambda d: d.inc.ingresos_netos.subtotal), SUBTOTAL),
-    Concepto("s_costo_ventas", "Costo de ventas", _con_signo("COSTO_VENTAS")),
-    Concepto("s_utilidad_bruta", "Ganancia bruta", _er(lambda d: d.inc.utilidad_bruta), TOTAL),
-    Concepto("s_gastos_administracion", "Gastos de administración", _con_signo("GASTOS_ADMINISTRACION")),
-    Concepto("s_gastos_venta", "Gastos de venta y despacho o distribución", _con_signo("GASTOS_VENTA")),
+    Concepto("s_ingresos", "Ingresos ordinarios", _er(lambda d: d.ingresos), SUBTOTAL),
+    Concepto("s_costo_ventas", "Costo de ventas", _con_signo_requerida("COSTO_VENTAS")),
+    Concepto("s_utilidad_bruta", "Ganancia bruta", _er(lambda d: d.utilidad_bruta), TOTAL),
+    Concepto("s_gastos_administracion", "Gastos de administración", _con_signo_requerida("GASTOS_ADMINISTRACION")),
+    Concepto("s_gastos_venta", "Gastos de venta y despacho o distribución", _con_signo_requerida("GASTOS_VENTA")),
     Concepto("s_deterioro_cxc", "Deterioro de cuentas por cobrar", _con_signo("DETERIORO_CXC")),
     Concepto("s_gastos_personal", "Gastos de personal", _con_signo("GASTOS_PERSONAL")),
     Concepto("s_depreciacion_amortizacion", "Depreciación y amortización (en el estado de resultados)",
              _con_signo("DEPRECIACION_AMORTIZACION")),
     Concepto("s_otros_ingresos_gastos", "Otros ingresos o gastos", _con_signo("OTROS_INGRESOS_OPERATIVOS", "OTROS_NO_OPERATIVOS"),
              nota=RUBROS["OTROS_INGRESOS_GASTOS"].nota),
-    Concepto("s_utilidad_operativa", "Resultado operativo", _er(lambda d: d.inc.utilidad_operativa), TOTAL),
+    Concepto("s_utilidad_operativa", "Resultado operativo", _er(lambda d: d.utilidad_operativa), TOTAL),
     Concepto("s_ingresos_financieros", "Ingresos financieros", _con_signo("INGRESOS_FINANCIEROS")),
-    Concepto("s_gastos_financieros", "Gastos financieros", _con_signo("GASTOS_FINANCIEROS", "GASTOS_FINANCIEROS_NETOS"),
+    Concepto("s_gastos_financieros", "Gastos financieros", _con_signo_requerida("GASTOS_FINANCIEROS", "GASTOS_FINANCIEROS_NETOS"),
              nota="2021–2023: gasto financiero neto (así se presenta); 2024–2025: gasto financiero bruto."),
-    Concepto("s_utilidad_antes_impuestos", "Resultado antes de impuestos", _er(lambda d: d.inc.utilidad_antes_impuestos), TOTAL),
-    Concepto("s_impuesto_renta", "Impuesto sobre la renta", _con_signo("IMPUESTO_RENTA")),
-    Concepto("s_utilidad_neta", "Ganancia o resultado neto", _er(lambda d: d.inc.utilidad_neta), TOTAL),
+    Concepto("s_utilidad_antes_impuestos", "Resultado antes de impuestos", _er(lambda d: d.utilidad_antes_impuestos), TOTAL),
+    Concepto("s_impuesto_renta", "Impuesto sobre la renta", _con_signo_requerida("IMPUESTO_RENTA")),
+    Concepto("s_utilidad_neta", "Ganancia o resultado neto", _er(lambda d: d.utilidad_neta), TOTAL),
 ]
 CONCEPTOS: dict[str, Concepto] = {c.clave: c for c in _LISTA}
 for _r in RUBROS.values():
@@ -181,6 +187,9 @@ def variacion(actual: Decimal | None, anterior: Decimal | None) -> tuple[Decimal
 # ------------------------------------------------- comparabilidad entre presentaciones
 ADVERTENCIA_ANALITICA = "Agrupación analítica; comparabilidad no confirmada."
 AGRUPADA, NO_COMPARABLE, ANALITICA, INFORMATIVA = "agrupada", "no_comparable", "analitica", "informativa"
+COMPOSICION_DISTINTA = "composicion_distinta"  # se calcula, pero la partida no contiene lo mismo en ambos ejercicios
+# Por que una celda no tiene valor. Cada causa se muestra con su propio texto.
+SIN_DATO, NO_CALCULABLE, SIN_COMPARAR = "Sin dato", "No calculable", "No comparable"
 SIN_VARIACION_CALCULADA = (AGRUPADA, NO_COMPARABLE)  # estados en los que no se calcula la variacion
 UMBRAL_CAPITAL_SOCIAL = Decimal("0.01")  # % bajo el cual un cambio del capital social se senala para confirmarlo
 
@@ -264,6 +273,30 @@ def comparabilidad_cuenta(cuenta, anterior: DatosEjercicio, actual: DatosEjercic
                                        f"{_nombres(_grupos_presentes(familia, otro), familia)}. {ADVERTENCIA_ANALITICA}")
 
 
+def comparabilidad_utilidad_operativa(anterior: DatosEjercicio, actual: DatosEjercicio) -> Comparabilidad | None:
+    """La utilidad operativa no contiene lo mismo si los otros ingresos estan dentro de ella en un ejercicio
+    y despues de ella en el otro. La variacion se calcula y se advierte."""
+    familia = FAMILIA_DE_GRUPO["OTROS_INGRESOS_OPERATIVOS"]
+    if not presentacion_cambia(familia, anterior, actual):
+        return None
+    dentro, fuera = (anterior, actual) if anterior.tiene("OTROS_INGRESOS_OPERATIVOS") else (actual, anterior)
+    incluye = "los otros ingresos netos"
+    if dentro.tiene("DETERIORO_CXC") and not fuera.tiene("DETERIORO_CXC"):
+        incluye += " y el deterioro de cuentas por cobrar"
+    return Comparabilidad(COMPOSICION_DISTINTA, f"La utilidad operativa de {dentro.anio} incluye {incluye}; en {fuera.anio}, los otros "
+                                                "ingresos (gastos) se presentan después del resultado de operación. "
+                                                "La variación no es plenamente comparable.")
+
+
+def causa_sin_variacion(actual: Decimal | None, anterior: Decimal | None, estado: Comparabilidad | None = None) -> str:
+    """Texto de una celda de variacion sin valor: la comparacion no es valida, falta un saldo o la base no lo permite."""
+    if estado and estado.estado in SIN_VARIACION_CALCULADA:
+        return SIN_COMPARAR
+    if actual is None or anterior is None:
+        return SIN_DATO
+    return NO_CALCULABLE
+
+
 _GRUPOS_DE_CONCEPTO = {"gastos_operativos_anf": RUBROS["GASTOS_OPERATIVOS_ANF"].grupos,
                        "gastos_financieros_netos": ("GASTOS_FINANCIEROS", "GASTOS_FINANCIEROS_NETOS", "INGRESOS_FINANCIEROS")}
 
@@ -284,6 +317,7 @@ class FilaHorizontal:
     nota: str = ""
     comparabilidad: dict[int, Comparabilidad] = field(default_factory=dict)
     observaciones: dict[int, str] = field(default_factory=dict)
+    causas: dict[int, str] = field(default_factory=dict)  # por que falta una variacion (R-6)
 
 
 def _fila(clave: str, etiqueta: str, tipo: str, lista: list[DatosEjercicio], obtener, nota: str = "", comparar=None) -> FilaHorizontal:
@@ -291,6 +325,7 @@ def _fila(clave: str, etiqueta: str, tipo: str, lista: list[DatosEjercicio], obt
     for anterior, actual in zip(lista, lista[1:]):
         if actual.anio != anterior.anio + 1:
             fila.notas[actual.anio] = f"Ejercicio anterior inmediato ({actual.anio - 1}) no registrado."
+            fila.causas[actual.anio] = SIN_DATO
             continue
         absoluta, relativa, nota_var = variacion(fila.valores[actual.anio], fila.valores[anterior.anio])
         estado = comparar(anterior, actual) if comparar else None
@@ -299,6 +334,7 @@ def _fila(clave: str, etiqueta: str, tipo: str, lista: list[DatosEjercicio], obt
             if estado.estado in SIN_VARIACION_CALCULADA:
                 absoluta, relativa = None, None
             nota_var = estado.nota
+        fila.causas[actual.anio] = causa_sin_variacion(fila.valores[actual.anio], fila.valores[anterior.anio], estado)
         fila.var_abs[actual.anio] = absoluta
         fila.var_pct[actual.anio] = relativa
         if nota_var:
@@ -326,6 +362,8 @@ def _fila_grupo(g, tipo: str, lista: list[DatosEjercicio]) -> FilaHorizontal:
 def _fila_concepto(clave: str, lista: list[DatosEjercicio]) -> FilaHorizontal:
     grupos = _grupos_de_concepto(clave)
     comparar = (lambda anterior, actual: comparabilidad_agregado(grupos, anterior, actual)) if grupos else None
+    if clave == "utilidad_operativa":
+        comparar = comparabilidad_utilidad_operativa
     c = CONCEPTOS[clave]
     return _fila(clave, c.etiqueta, c.tipo, lista, c.obtener, c.nota, comparar=comparar)
 
@@ -372,7 +410,7 @@ def _grupos_resultados(lista: list[DatosEjercicio], presentes: set[str]) -> list
         if g.clase == "ER" and g.codigo in presentes:
             filas.append(_fila_grupo(g, CUENTA, lista))
     for c in ("utilidad_bruta", "utilidad_operativa", "utilidad_antes_impuestos", "utilidad_neta"):
-        filas.append(_fila(c, CONCEPTOS[c].etiqueta, TOTAL, lista, CONCEPTOS[c].obtener))
+        filas.append(_fila_concepto(c, lista))
     return filas
 
 
@@ -417,7 +455,7 @@ def horizontal_cuentas(lista: list[DatosEjercicio]) -> list[FilaHorizontal]:
 
 # ------------------------------------------------- comparacion de dos ejercicios
 AUMENTO, DISMINUCION, SIN_VARIACION, APARECE, DESAPARECE = "Aumento", "Disminución", "Sin variación", "Aparece", "Desaparece"
-PRESENTACION_AGRUPADA, SIN_COMPARAR = "Presentación agrupada", "No comparable"
+PRESENTACION_AGRUPADA = "Presentación agrupada"
 
 
 @dataclass
@@ -431,6 +469,7 @@ class FilaDosEjercicios:
     var_pct: Decimal | None
     tendencia: str
     nota: str = ""
+    causa: str = ""  # por que falta una variacion (R-6)
 
 
 def tendencia(actual: Decimal | None, anterior: Decimal | None) -> str:
@@ -469,8 +508,7 @@ def _cuentas_de_estado(lista: list[DatosEjercicio], estado: str) -> list[FilaHor
     filas = []
     if estado == "ER":
         filas = [f for f in cuentas if clases.get(f.clave) is None]
-        return filas + [_fila(c, CONCEPTOS[c].etiqueta, TOTAL, lista, CONCEPTOS[c].obtener)
-                        for c in ("utilidad_bruta", "utilidad_operativa", "utilidad_antes_impuestos", "utilidad_neta")]
+        return filas + [_fila_concepto(c, lista) for c in ("utilidad_bruta", "utilidad_operativa", "utilidad_antes_impuestos", "utilidad_neta")]
     subtotales = {"AC": ("activo_corriente",), "ANC": ("activo_no_corriente", "total_activo"), "PC": ("pasivo_corriente",),
                   "PNC": ("pasivo_no_corriente", "total_pasivo"), "PAT": ("total_patrimonio", "total_pasivo_patrimonio")}
     for clase in CLASE_BALANCE:
@@ -521,7 +559,8 @@ def dos_ejercicios(filas: list[FilaHorizontal], anio_actual: int, anio_anterior:
         observacion = fila.observaciones.get(anio_actual)
         if observacion:
             nota = " ".join(t for t in (nota, observacion) if t)
-        resultado.append(FilaDosEjercicios(fila.clave, fila.etiqueta, fila.tipo, actual, anterior, absoluta, relativa, sentido, nota))
+        resultado.append(FilaDosEjercicios(fila.clave, fila.etiqueta, fila.tipo, actual, anterior, absoluta, relativa, sentido, nota,
+                                           causa_sin_variacion(actual, anterior, estado)))
     return resultado
 
 
@@ -542,12 +581,32 @@ def porcentaje(valor_: Decimal | None, base: Decimal | None) -> Decimal | None:
     return valor_ / base * CIEN
 
 
+def _sin_clasificar_con_signo(d: DatosEjercicio, categorias: tuple[str, ...]) -> Decimal:
+    return sum((signo_resultado(c) * v for c, v, _ in d.sin_grupo if c.categoria_principal.value in categorias), CERO)
+
+
+# Partidas sin grupo: entran en las utilidades por su categoria, asi que se muestran para que las lineas sumen el total.
+_FILAS_SIN_CLASIFICAR = {
+    "s_utilidad_operativa": Concepto("s_sin_clasificar_operativas", "Partidas operativas sin grupo de análisis",
+                                     lambda d: _sin_clasificar_con_signo(d, ("COSTOS", "GASTOS_OPERATIVOS"))),
+    "s_utilidad_antes_impuestos": Concepto("s_sin_clasificar_financieras", "Partidas financieras y otras sin grupo de análisis",
+                                           lambda d: _sin_clasificar_con_signo(d, ("INGRESOS_FINANCIEROS", "GASTOS_FINANCIEROS", "OTROS_INGRESOS_GASTOS"))),
+    "s_utilidad_neta": Concepto("s_sin_clasificar_impuestos", "Impuestos sin grupo de análisis",
+                                lambda d: _sin_clasificar_con_signo(d, ("IMPUESTOS",))),
+}
+
+
 def vertical_comparativo(lista: list[DatosEjercicio], estado: str) -> list[FilaVerticalComparativa]:
     """estado: "ER" (base ingresos ordinarios) o "BG" (base activo total)."""
     claves, base = (CLAVES_VERTICAL_ER, "ingresos") if estado == "ER" else (CLAVES_VERTICAL_BG, "total_activo")
     lista = [d for d in lista if (d.inc.tiene_datos if estado == "ER" else d.bs.tiene_datos)]
     filas = []
     for clave in claves:
+        previa = _FILAS_SIN_CLASIFICAR.get(clave) if estado == "ER" else None
+        if previa is not None and any(previa.obtener(d) != CERO for d in lista):
+            valores = {d.anio: previa.obtener(d) for d in lista}
+            filas.append(FilaVerticalComparativa(previa.clave, previa.etiqueta, previa.tipo, valores,
+                                                 {d.anio: porcentaje(valores[d.anio], CONCEPTOS[base].obtener(d)) for d in lista}))
         concepto = CONCEPTOS[clave]
         valores = {d.anio: concepto.obtener(d) for d in lista}
         filas.append(FilaVerticalComparativa(

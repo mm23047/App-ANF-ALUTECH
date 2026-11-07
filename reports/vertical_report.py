@@ -14,7 +14,7 @@ from calculations.controls import conciliar_resultado
 from calculations.income_statement import compute_income_statement
 from calculations.rubros import datos_todos
 from calculations.vertical_analysis import ETIQUETA_EFECTO, compute_vertical_balance, compute_vertical_income
-from components.avisos import mostrar_estado
+from components.avisos import mostrar_estado, mostrar_sin_grupo
 from components.money import format_money, format_percent
 from components.navigation import select_fiscal_period
 from components.secciones_ui import descargas, mostrar_seccion
@@ -78,6 +78,7 @@ def _comparativo(session: Session, company: Company, estado: str, clave: str) ->
     if not lista:
         st.info("No hay ejercicios con datos capturados.")
         return
+    mostrar_sin_grupo(lista)
     seccion = sec.vertical(lista, estado)
     mostrar_seccion(seccion)
     nombre = "Balance General" if estado == "BG" else "Estado de Resultados"
@@ -86,7 +87,7 @@ def _comparativo(session: Session, company: Company, estado: str, clave: str) ->
 
 
 def _pestanas(session: Session, company: Company, estado: str, clave: str, tabla: str, detalle) -> None:
-    por_ejercicio, comparativo = st.tabs(["Por ejercicio", f"Comparativo de los ejercicios (tabla {tabla} del trabajo)"])
+    por_ejercicio, comparativo = st.tabs(["Por ejercicio", "Comparativo de los ejercicios"])
     with por_ejercicio:
         detalle(session, company)
     with comparativo:
