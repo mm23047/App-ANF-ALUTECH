@@ -43,6 +43,7 @@ if st.session_state.get("pending_restore"):
     st.session_state["db_inicializada"] = False
 
 if not st.session_state.get("db_inicializada"):
+    connection.preparar_base_inicial()
     try:
         init_db()
     except MigracionError as exc:

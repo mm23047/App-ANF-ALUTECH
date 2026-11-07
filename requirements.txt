@@ -1,4 +1,4 @@
-# Versiones probadas (fase 4, B-05): Python 3.12.10, Windows 11.
+# Versiones probadas: Python 3.12.10 en Windows 11; Python 3.11, 3.12 y 3.13 en Ubuntu 24.04.
 # Se fijan las versiones exactas con las que pasa la suite de pruebas.
 # La app usa APIs recientes de Streamlit (width="stretch",
 # st.markdown(text_alignment=...)) que no existen en 1.38, el minimo

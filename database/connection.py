@@ -5,6 +5,8 @@ versiones (ver .gitignore), y persiste entre ejecuciones de la app.
 """
 from __future__ import annotations
 
+import os
+import shutil
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -16,6 +18,21 @@ from database.models import Base
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 DB_PATH = DATA_DIR / "financiera.db"
+# Base de partida que se publica con el codigo (caso Alutech). Nunca se usa directamente: cada equipo trabaja en su copia.
+BASE_INICIAL = DATA_DIR / "inicial" / "financiera.db"
+
+
+def preparar_base_inicial() -> bool:
+    """Primera ejecucion de un clon nuevo: copia la base inicial a data/financiera.db para no crear una base vacia. Nunca
+    sobrescribe una base existente ni actua si DB_PATH se redirigio. ANF_BASE_VACIA=1 permite empezar con otra empresa."""
+    destino = DATA_DIR / "financiera.db"
+    if (DB_PATH != destino or destino.exists() or not BASE_INICIAL.is_file()
+            or os.environ.get("ANF_BASE_VACIA") == "1"):
+        return False
+    temporal = destino.with_suffix(".copiando")
+    shutil.copyfile(BASE_INICIAL, temporal)
+    os.replace(temporal, destino)  # atomico: una copia interrumpida nunca queda como base
+    return True
 
 
 def _ensure_data_dir() -> None:

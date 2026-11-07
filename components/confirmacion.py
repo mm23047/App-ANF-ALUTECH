@@ -78,7 +78,9 @@ _COLUMNAS_ANCLA = (ChangeHistory.id, ChangeHistory.tabla_afectada, ChangeHistory
 
 def _identidad_archivo(session: Session) -> tuple:
     estado = os.stat(session.get_bind().url.database)
-    return (estado.st_dev, estado.st_ino, getattr(estado, "st_birthtime_ns", estado.st_ctime_ns))
+    # st_ctime es la creacion solo en Windows; en Linux es el ultimo cambio del inodo y varia con cada escritura.
+    creacion = getattr(estado, "st_birthtime_ns", estado.st_ctime_ns if os.name == "nt" else None)
+    return (estado.st_dev, estado.st_ino, creacion)
 
 
 def estado_base(session: Session) -> EstadoBase:
