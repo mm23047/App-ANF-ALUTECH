@@ -82,7 +82,7 @@ def _comparativo(session: Session, company: Company, estado: str, clave: str) ->
     seccion = sec.vertical(lista, estado)
     mostrar_seccion(seccion)
     nombre = "Balance General" if estado == "BG" else "Estado de Resultados"
-    descargas(company, f"Análisis vertical del {nombre} {lista[0].anio}–{lista[-1].anio}", [("Vertical", [seccion])],
+    descargas(company, f"Análisis vertical del {nombre} {sec.ejercicios_de(lista)}", [("Vertical", [seccion])],
               f"analisis_vertical_{clave}_comparativo", clave=f"vertical_{clave}_comparativo")
 
 
@@ -141,7 +141,7 @@ def _detalle_income(session: Session, company: Company) -> None:
     st.caption(
         f"Base (100%): Ingresos Netos = {md(format_money(resultado.base_ingresos_netos, company.moneda))} · "
         "Los costos, gastos e impuestos restan (columna Efecto): su importe se muestra como se captura y su "
-        "porcentaje en negativo, como en la tabla 7.1 del trabajo."
+        "porcentaje en negativo."
     )
     st.dataframe(_tabla_presentacion(resultado.lineas, company.moneda), hide_index=True, width="stretch", height="content",
                  column_config=columnas_derecha("Valor", "Participación %"))

@@ -341,7 +341,7 @@ def test_informe_integral_excel_y_pdf(datos, tmp_path):
     hojas = hojas_informe(s)
     nombres = [n for n, _ in hojas]
     assert nombres == ["Estados originales", "Horizontal", "Vertical", "Indicadores", "Capital de trabajo", "DuPont", "WACC",
-                       "Origen y aplicación", "Comparación ANF", "Observaciones", "Trazabilidad"]
+                       "Origen y aplicación", "Trazabilidad"]
     archivo = tmp_path / "informe.xlsx"
     archivo.write_bytes(secciones_a_excel(Empresa, "Informe", hojas))
     wb = load_workbook(archivo)
@@ -426,7 +426,7 @@ def test_paginas_con_los_datos_de_alutech(bd_cargada, tmp_path):
     resultados = json.loads(proceso.stdout.strip().splitlines()[-1])
     errores = {k: v["excepciones"] for k, v in resultados.items() if k != "_menu" and (v["excepciones"] or v["pagina"] != k)}
     assert errores == {}
-    validacion = resultados["Validación › Comparación con el trabajo ANF"]["tablas"][0]
+    validacion = resultados["Validación › Contraste de resultados"]["tablas"][0]
     assert {f["Estado"] for f in validacion} == {"Coincidencia por redondeo", "Diferencia", "No aplica", "Resultado derivado"}
 
 

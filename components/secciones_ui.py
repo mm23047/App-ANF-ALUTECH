@@ -19,14 +19,15 @@ def a_dataframe(seccion: Seccion) -> pd.DataFrame:
     )
 
 
-def mostrar_seccion(seccion: Seccion, *, notas_plegadas: bool = False) -> None:
+def mostrar_seccion(seccion: Seccion, *, notas_plegadas: bool = False, ancho_concepto: str = "large") -> None:
+    """ancho_concepto: ancho de la primera columna de texto; "medium" en tablas con muchas columnas."""
     st.markdown(f"#### {md(seccion.titulo)}")
     if not seccion.filas:
         st.info("Sin datos para esta sección.")
     else:
         configuracion = columnas_derecha(*(c.nombre for c in seccion.columnas if c.tipo != TEXTO))
         if seccion.columnas[0].tipo == TEXTO:  # la denominacion de la partida no se corta
-            configuracion[seccion.columnas[0].nombre] = st.column_config.TextColumn(width="large")
+            configuracion[seccion.columnas[0].nombre] = st.column_config.TextColumn(width=ancho_concepto)
         st.dataframe(a_dataframe(seccion), hide_index=True, width="stretch", height="content", column_config=configuracion)
     if seccion.notas:
         if notas_plegadas and len(seccion.notas) > 3:

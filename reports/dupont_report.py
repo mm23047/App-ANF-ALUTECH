@@ -51,7 +51,7 @@ def _comparativo(session: Session, company: Company) -> None:
     secciones = sec.dupont(lista)
     for seccion in secciones:
         mostrar_seccion(seccion)
-    descargas(company, f"Análisis DuPont {lista[0].anio}–{lista[-1].anio}", [("DuPont", secciones)], "analisis_dupont_comparativo",
+    descargas(company, f"Análisis DuPont {sec.ejercicios_de(lista)}", [("DuPont", secciones)], "analisis_dupont_comparativo",
               clave="dupont_comparativo")
 
 

@@ -7,7 +7,6 @@ son los del trabajo ANF (secciones 6.5, 8 y 9). Saldos al cierre.
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from decimal import Decimal
 
@@ -25,7 +24,6 @@ from reports import secciones as sec
 MILLON = Decimal("1000000")
 NO_CALCULABLE = "No calculable"
 CLAVE_ANIO = "indicadores_anio"
-_CITA_DUPONT = re.compile(r",\s*9\.[56]\b")
 
 
 @dataclass(frozen=True)
@@ -61,7 +59,7 @@ GRUPOS: tuple[Grupo, ...] = (
         (
             "Saldos al cierre de cada ejercicio: no reflejan los movimientos de efectivo durante el año.",
             "El activo corriente incluye cuentas por cobrar a partes relacionadas. Los estados muestran su saldo, "
-            "no su recuperabilidad efectiva (trabajo, sección 4).",
+            "no su recuperabilidad efectiva.",
         ),
         (["razon_corriente", "prueba_acida"], "Razón corriente y prueba ácida (veces)"),
         categoria=ind.LIQUIDEZ,
@@ -73,27 +71,21 @@ GRUPOS: tuple[Grupo, ...] = (
         (
             Fila("rotacion_inventarios", "Rotación de inventarios", "Rotación de inventarios", "8.2 A"),
             Fila("ppi", "Período promedio de inventario (PPI)", "PPI", "8.2 A, 9.3"),
-            Fila("rotacion_cxc", "Rotación de cuentas por cobrar", "Rotación de CxC", "8.2 B"),
             Fila("ppc", "Período promedio de cobro (PPC)", "PPC", "8.2 B, 9.3"),
             Fila("ppp", "Período promedio de pago (PPP)", "PPP", "9.3"),
             Fila("rotacion_activos", "Rotación de activos totales", "Rotación de activos", "8.2 D"),
-            Fila("ciclo_operativo", "Ciclo operativo", "Ciclo operativo", "8.2 C, 9.3"),
-            Fila("cce", "Ciclo de conversión del efectivo (CCE)", "CCE", "9.3"),
         ),
         (
-            "Rotación de CxC y PPC usan la línea presentada, igual que la sección 9.3 del trabajo: solo «Cuentas por "
+            "Rotación de CxC y PPC usan la línea presentada en el estado de situación financiera: solo «Cuentas por "
             "cobrar comerciales» en 2021–2023 y «Deudores comerciales y Otras Cuentas por Cobrar» en 2024–2025. La base "
             "cambia entre 2023 y 2024, por lo que esa comparación no es homogénea.",
-            "La sección 8.2 B del trabajo usa en 2023 comerciales + otras (96,097,483), y la 9.3 solo comerciales "
-            "(41,272,525). Aquí se sigue la 9.3; la variante de abajo muestra la otra base para los cinco años.",
+            "Los indicadores principales usan la línea comercial presentada; la variante de abajo calcula la otra base "
+            "(comerciales + otras cuentas por cobrar) para todos los ejercicios. Ambas carteras se muestran en la tabla "
+            "«Cuentas por cobrar: dos bases que no son equivalentes».",
             "El PPP mantiene su fórmula: cuentas por pagar de la línea presentada / costo de ventas × 365. El costo de "
             "ventas aproxima las compras y la línea incluye otras cuentas por pagar desde 2024.",
-            "El CCE hereda ambos cambios de base. El signo de 2023 depende de la base usada: con comerciales + otras, "
-            "tanto en cobros como en pagos, pasa de negativo a positivo. Esa variante del CCE no se calcula aquí.",
-            "Ciclo operativo y CCE siguen el desarrollo escrito de la sección 9.3: CO = PPI + PPC y CCE = CO − PPP, con cada "
-            "operando a 2 decimales. Los demás indicadores no usan redondeo intermedio.",
         ),
-        (["ppi", "ppc", "ppp", "cce"], "Ciclo de conversión del efectivo (días)"),
+        (["ppi", "ppc", "ppp"], "Períodos promedio de inventario, cobro y pago (días)"),
         (
             Fila("rotacion_cxc_total", "Rotación de cuentas por cobrar comerciales y otras", "", "8.2 B (variante)"),
             Fila("ppc_total", "Período de cobro (comerciales y otras)", "", "8.2 B (variante)"),
@@ -116,14 +108,15 @@ GRUPOS: tuple[Grupo, ...] = (
         (
             "El pasivo total incluye pasivos operativos sin costo explícito (proveedores, impuestos, provisiones), "
             "no solo deuda financiera.",
-            "La cobertura usa gastos financieros netos, como el trabajo. En 2021–2023 los estados presentan directamente "
+            "La cobertura usa gastos financieros netos (gastos financieros menos ingresos financieros). En 2021–2023 los "
+            "estados presentan directamente "
             "el neto; en 2024–2025 es gastos financieros menos ingresos financieros.",
             "La cobertura de pagos fijos iguala a la razón de cargos de interés fijo porque los estados no desglosan las cuotas de "
-            "arrendamiento ni la amortización del principal (trabajo, 8.3 C): no mide la cobertura real con esos pagos.",
+            "arrendamiento ni la amortización del principal: no mide la cobertura real con esos pagos.",
         ),
         (["endeudamiento", "pc_sobre_pasivo"], "Endeudamiento (%)"),
         (Fila("cobertura_intereses_bruta", "Cobertura con gastos financieros brutos", "", "Complementario"),),
-        "Variante con gastos financieros brutos (no figura en el trabajo)",
+        "Variante con gastos financieros brutos (indicador complementario)",
         categoria=ind.ENDEUDAMIENTO,
         bases=("total_pasivo", "pasivo_corriente", "total_activo", "total_patrimonio", "utilidad_operativa", "gastos_financieros_netos"),
     ),
@@ -139,8 +132,7 @@ GRUPOS: tuple[Grupo, ...] = (
             Fila("eps", "Ganancia por acción (EPS)", "EPS", "8.4 D"),
         ),
         (
-            "ROA y ROE usan la utilidad neta total y el activo y el patrimonio totales al cierre, como la sección 8.4 "
-            "del trabajo.",
+            "ROA y ROE usan la utilidad neta total y el activo y el patrimonio totales al cierre del ejercicio.",
             "La utilidad operativa de 2022 y 2023 no está impresa en los estados: se obtiene de sus partidas. En 2021–2023 "
             "incluye el deterioro y los otros ingresos netos; en 2024–2025 los otros ingresos o gastos quedan después de "
             "este resultado.",
@@ -150,14 +142,18 @@ GRUPOS: tuple[Grupo, ...] = (
         bases=("ingresos", "utilidad_bruta", "utilidad_operativa", "utilidad_neta", "total_activo", "total_patrimonio"),
     ),
 )
-# Resto de indicadores de calculations/indicadores.py que el trabajo presenta fuera de estos cuatro grupos.
+# «Indicadores complementarios»: los que se presentan fuera de los cuatro grupos (sec.CLAVES_COMPLEMENTARIOS).
 OTROS_INDICADORES: tuple[Fila, ...] = (
     Fila("razon_efectivo", "Razón de efectivo", "", "5.6 d"),
     Fila("razon_tesoreria", "Razón de tesorería", "", "9.1"),
     Fila("capitales_permanentes", "Capitales permanentes", "", "9.2.2"),
     Fila("fondo_maniobra_lp", "Fondo de maniobra a largo plazo", "", "9.2.2"),
     Fila("ebitda", "EBITDA", "", "6.7"),
+    Fila("rotacion_cxc", "Rotación de cuentas por cobrar", "Rotación de CxC", "8.2 B"),
+    Fila("ciclo_operativo", "Ciclo operativo", "Ciclo operativo", "8.2 C, 9.3"),
+    Fila("cce", "Ciclo de conversión del efectivo (CCE)", "CCE", "9.3"),
 )
+assert tuple(f.clave for f in OTROS_INDICADORES) == sec.CLAVES_COMPLEMENTARIOS  # pantalla = exportaciones
 
 
 def _valor_tarjeta(indicador: ind.Indicador, valor: Decimal | None) -> str:
@@ -235,8 +231,7 @@ def _formulas(grupo: Grupo, datos: DatosEjercicio) -> None:
     st.table(pd.DataFrame([
         {"Indicador": md(fila.nombre),
          "Fórmula": md(ind.POR_CLAVE[fila.clave].formula),
-         f"Interpretación ({datos.anio})": md(ind.interpretacion(ind.calcular(datos, fila.clave))),
-         "Trabajo": md(fila.seccion)}
+         f"Interpretación ({datos.anio})": md(ind.interpretacion(ind.calcular(datos, fila.clave)))}
         for fila in grupo.filas
     ]), hide_index=True)
 
@@ -255,7 +250,7 @@ def _mostrar_grupo(grupo: Grupo, lista: list[DatosEjercicio], datos: DatosEjerci
     st.subheader(grupo.titulo)
     st.caption(grupo.descripcion)
     _tarjetas(grupo, datos, anterior)
-    st.markdown("##### Comparativo 2021–2025")
+    st.markdown(f"##### Comparativo {sec.ejercicios_de(lista)}")
     st.dataframe(_tabla_anios(lista, grupo.filas), hide_index=True, width="stretch", height="content",
                  column_config=columnas_derecha(*(str(d.anio) for d in lista)))
     if grupo.bases:
@@ -280,10 +275,11 @@ def _mostrar_grupo(grupo: Grupo, lista: list[DatosEjercicio], datos: DatosEjerci
 
 def _complementarios(lista: list[DatosEjercicio]) -> None:
     """Resultados que ya tenia esta pagina y no pertenecen a los cuatro grupos."""
-    with st.expander("Otros resultados: indicadores complementarios, razones de mercado y capital de trabajo"):
-        otros, mercado, capital = st.tabs(["Otros indicadores", ind.MERCADO, "Capital de trabajo"])
+    with st.expander("Otros resultados del análisis financiero: indicadores complementarios, razones de mercado y capital de trabajo"):
+        otros, mercado, capital = st.tabs([sec.COMPLEMENTARIOS, ind.MERCADO, "Capital de trabajo"])
         with otros:
             st.dataframe(_tabla_anios(lista, OTROS_INDICADORES), hide_index=True, width="stretch", height="content")
+            st.warning("\n".join(f"- {texto}" for texto in sec.NOTAS_COMPLEMENTARIOS))
             for motivo in _motivos(lista, OTROS_INDICADORES):
                 st.caption(md(motivo))
         with mercado:
@@ -292,31 +288,22 @@ def _complementarios(lista: list[DatosEjercicio]) -> None:
             mostrar_seccion(sec.capital_trabajo(lista))
 
 
-def _indicadores_sin_citas_dupont(lista: list[DatosEjercicio], categoria: str) -> sec.Seccion:
-    """Tabla de la categoria sin citar las secciones 9.5 y 9.6 del trabajo. Las citas se
-    quitan solo en esta copia: calculations/indicadores.py las conserva para otros reportes."""
-    seccion = sec.indicadores(lista, categoria)
-    columna = next(i for i, c in enumerate(seccion.columnas) if c.nombre == "Sección del trabajo")
-    for fila in seccion.filas:
-        fila[columna] = _CITA_DUPONT.sub("", fila[columna])
-    return seccion
-
-
 def _base_de(grupo: Grupo, lista: list[DatosEjercicio]) -> sec.Seccion:
     return sec.base_financiera(lista, grupo.bases, f"Base financiera de {grupo.titulo.lower()} (saldos al cierre) [USD]")
 
 
 def _secciones_de(grupo: Grupo, lista: list[DatosEjercicio]) -> list[sec.Seccion]:
     extra = [sec.bases_cxc(lista)] if grupo.categoria == ind.ACTIVIDAD else []
-    return [_base_de(grupo, lista), *extra, _indicadores_sin_citas_dupont(lista, grupo.categoria)]
+    return [_base_de(grupo, lista), *extra, sec.indicadores(lista, grupo.categoria)]
 
 
 def hojas_exportacion(lista: list[DatosEjercicio]) -> list[tuple[str, list[sec.Seccion]]]:
     """Hojas de las descargas de esta pagina. DuPont no se incluye: tiene su propio reporte."""
     por_categoria = {grupo.categoria: grupo for grupo in GRUPOS}
     hojas = [(categoria, _secciones_de(por_categoria[categoria], lista) if categoria in por_categoria
-              else [_indicadores_sin_citas_dupont(lista, categoria)])
+              else [sec.indicadores(lista, categoria)])
              for categoria in ind.CATEGORIAS if categoria != ind.DUPONT]
+    hojas.append((sec.COMPLEMENTARIOS, [sec.indicadores_complementarios(lista)]))
     hojas.append(("Capital de trabajo", [sec.capital_trabajo(lista)]))
     return hojas
 
@@ -334,8 +321,8 @@ def render_grupos(lista: list[DatosEjercicio], company=None) -> None:
         with pestana:
             _mostrar_grupo(grupo, lista, datos, anterior)
             if company is not None:
-                st.markdown("##### Reporte de este apartado")
-                descargas(company, f"Ratios de {grupo.titulo.lower()} {lista[0].anio}–{lista[-1].anio}",
+                st.markdown("##### Reporte de este grupo de indicadores")
+                descargas(company, f"Ratios de {grupo.titulo.lower()} {sec.ejercicios_de(lista)}",
                           [(grupo.titulo, _secciones_de(grupo, lista))], f"ratios_{grupo.titulo.lower()}",
                           clave=f"ratios_{grupo.titulo.lower()}")
     _complementarios(lista)

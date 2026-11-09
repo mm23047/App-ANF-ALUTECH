@@ -10,7 +10,7 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy.orm import Session
 
-from calculations.comparacion_anf import ESTADOS, comparar, fuera_de_alcance, resumen
+from calculations.comparacion_anf import ESTADOS, comparar, resumen
 from calculations.fuentes_usos import calcular_fuentes_usos
 from calculations.rubros import datos_todos
 from calculations.wacc import calcular_wacc
@@ -19,7 +19,7 @@ from components.secciones_ui import descargas, mostrar_seccion
 from components.texto import md
 from database.models import Company
 from reports import secciones as sec
-from reports.informe_integral import TITULO, hojas_informe, pares_consecutivos
+from reports.informe_integral import archivo_ejercicios, hojas_informe, pares_consecutivos, titulo_informe
 
 
 def _datos(session: Session):
@@ -48,8 +48,9 @@ def _aviso_integridad(lista, estado: str | None = None) -> list[tuple[str, list[
 
 
 def render_horizontal(session: Session, company: Company) -> None:
-    st.header("Reporte — Análisis Horizontal 2021–2025")
+    encabezado = st.empty()
     lista = _datos(session)
+    encabezado.header(f"Reporte — Análisis Horizontal {_rango(lista)}".rstrip())
     if not lista:
         return
     _aviso_sin_grupo(lista)
@@ -59,7 +60,7 @@ def render_horizontal(session: Session, company: Company) -> None:
                                   "cuentas": "Cuentas (denominación original)"}.get, key="horizontal_nivel")
     seccion = sec.horizontal(lista, nivel)
     mostrar_seccion(seccion, notas_plegadas=True)
-    descargas(company, "Análisis horizontal 2021–2025", avisos + [("Horizontal", [seccion])], f"analisis_horizontal_{nivel}",
+    descargas(company, f"Análisis horizontal {_rango(lista)}", avisos + [("Horizontal", [seccion])], f"analisis_horizontal_{nivel}",
               clave="horizontal")
 
 
@@ -94,6 +95,11 @@ def _hojas_dos_ejercicios(lista, estado: str, nivel: str) -> list[tuple[str, lis
     return [(f"{b} vs {a}", [sec.horizontal_dos_ejercicios(lista, b, a, estado, nivel)]) for a, b in _pares_estado(lista, estado)]
 
 
+def _rango(lista) -> str:
+    """Ejercicios analizados, tal como estan registrados (p. ej. 2021–2025)."""
+    return sec.ejercicios_de([d for d in lista if d.tiene_datos])
+
+
 def render_horizontal_balance(session: Session, company: Company) -> None:
     st.header("Reporte — Análisis Horizontal del Balance General")
     lista = [d for d in _datos(session) if d.bs.tiene_datos]
@@ -101,8 +107,8 @@ def render_horizontal_balance(session: Session, company: Company) -> None:
         return
     _aviso_sin_grupo(lista)
     avisos = _aviso_integridad(lista, "BG")
-    st.caption(f"{md(company.nombre_legal)}. Período {lista[0].anio}–{lista[-1].anio}, cifras en {md(company.moneda)}. Cada "
-               "ejercicio se compara con el anterior (trabajo, secciones 6.3 a 6.6).")
+    st.caption(f"{md(company.nombre_legal)}. Período {_rango(lista)}, cifras en {md(company.moneda)}. Cada "
+               "ejercicio se compara con el anterior.")
     tablas = sec.horizontal_balance_tablas(lista)
     capital = [sec.capital_trabajo(lista), sec.capital_trabajo_interanual(lista)]
     trabajo, capital_tab, dos = st.tabs(["Análisis de la situación financiera", "Capital de trabajo", "Comparar dos ejercicios"])
@@ -114,7 +120,7 @@ def render_horizontal_balance(session: Session, company: Company) -> None:
             mostrar_seccion(seccion)
     with dos:
         nivel = _comparar_dos(lista, "BG", "horizontal_balance")
-    descargas(company, f"Análisis horizontal del Balance General {lista[0].anio}–{lista[-1].anio}",
+    descargas(company, f"Análisis horizontal del Balance General {_rango(lista)}",
               avisos + [("Situación financiera", tablas), ("Capital de trabajo", capital)] + _hojas_dos_ejercicios(lista, "BG", nivel),
               f"analisis_horizontal_balance_{nivel}", clave="horizontal_balance")
 
@@ -126,22 +132,23 @@ def render_horizontal_resultados(session: Session, company: Company) -> None:
         return
     _aviso_sin_grupo(lista)
     avisos = _aviso_integridad(lista, "ER")
-    st.caption(f"{md(company.nombre_legal)}. Período {lista[0].anio}–{lista[-1].anio}, cifras en {md(company.moneda)}. Cada "
-               "ejercicio se compara con el anterior (trabajo, secciones 6.3 y 6.4).")
+    st.caption(f"{md(company.nombre_legal)}. Período {_rango(lista)}, cifras en {md(company.moneda)}. Cada "
+               "ejercicio se compara con el anterior.")
     tabla = sec.horizontal_resultados_tabla(lista)
     trabajo, dos = st.tabs(["Análisis del estado de resultados", "Comparar dos ejercicios"])
     with trabajo:
         mostrar_seccion(tabla)
     with dos:
         nivel = _comparar_dos(lista, "ER", "horizontal_resultados")
-    descargas(company, f"Análisis horizontal del Estado de Resultados {lista[0].anio}–{lista[-1].anio}",
+    descargas(company, f"Análisis horizontal del Estado de Resultados {_rango(lista)}",
               avisos + [("Estado de resultados", [tabla])] + _hojas_dos_ejercicios(lista, "ER", nivel), f"analisis_horizontal_resultados_{nivel}",
               clave="horizontal_resultados")
 
 
 def render_vertical_comparativo(session: Session, company: Company) -> None:
-    st.header("Reporte — Análisis Vertical comparativo 2021–2025")
+    encabezado = st.empty()
     lista = _datos(session)
+    encabezado.header(f"Reporte — Análisis Vertical comparativo {_rango(lista)}".rstrip())
     if not lista:
         return
     _aviso_sin_grupo(lista)
@@ -149,7 +156,7 @@ def render_vertical_comparativo(session: Session, company: Company) -> None:
     secciones = [sec.vertical(lista, "ER"), sec.vertical(lista, "BG")]
     for seccion in secciones:
         mostrar_seccion(seccion)
-    descargas(company, "Análisis vertical comparativo 2021–2025", [("Vertical", secciones)], "analisis_vertical_comparativo",
+    descargas(company, f"Análisis vertical comparativo {_rango(lista)}", [("Vertical", secciones)], "analisis_vertical_comparativo",
               clave="vertical_comp")
 
 
@@ -161,10 +168,10 @@ def render_indicadores(session: Session, company: Company) -> None:
     if not lista:
         return
     _aviso_sin_grupo(lista)
-    st.caption(f"{md(company.nombre_legal)}. Saldos al cierre de cada ejercicio, criterio del trabajo ANF (secciones 8.2 y 8.4).")
+    st.caption(f"{md(company.nombre_legal)}. Indicadores calculados con los saldos al cierre de cada ejercicio.")
     render_grupos(lista, company)
     st.markdown("##### Reporte completo de indicadores")
-    descargas(company, "Indicadores financieros 2021–2025", hojas_exportacion(lista), "indicadores_financieros", clave="indicadores")
+    descargas(company, f"Indicadores financieros {_rango(lista)}", hojas_exportacion(lista), "indicadores_financieros", clave="indicadores")
 
 
 def render_wacc(session: Session, company: Company) -> None:
@@ -174,20 +181,20 @@ def render_wacc(session: Session, company: Company) -> None:
         return
     _aviso_sin_grupo(lista)
     st.warning(
-        "Las tasas de interés de la deuda y la tasa de ISR (30 %) son supuestos del trabajo ANF que no pueden verificarse "
-        "con los documentos disponibles. El costo del patrimonio se estima con el ROE, como en el trabajo; no es un costo "
+        "Las tasas de interés de la deuda y la tasa de ISR (30 %) son supuestos de entrada que no pueden verificarse "
+        "con los documentos disponibles. El costo del patrimonio se estima con el ROE al cierre; no es un costo "
         "de capital exigido por los accionistas. El resultado es una estimación."
     )
     resultados = [calcular_wacc(d) for d in lista]
     resumen_ = sec.wacc_resumen(resultados)
     mostrar_seccion(resumen_)
     supuestos = sec.supuestos_wacc()
-    with st.expander("Supuestos usados (fuentes/anf/supuestos_wacc.json)"):
+    with st.expander("Supuestos de tasas utilizados"):
         mostrar_seccion(supuestos)
     anio = st.selectbox("Detalle del ejercicio", [r.anio for r in resultados], index=len(resultados) - 1, key="wacc_anio")
     detalle = sec.wacc_detalle(next(r for r in resultados if r.anio == anio))
-    mostrar_seccion(detalle)
-    descargas(company, "WACC 2021–2025", [("WACC", [resumen_, supuestos] + [sec.wacc_detalle(r) for r in resultados])], "wacc",
+    mostrar_seccion(detalle, ancho_concepto="medium")  # todas las columnas a la vista
+    descargas(company, f"WACC {sec.ejercicios_de(resultados)}", [("WACC", [resumen_, supuestos] + [sec.wacc_detalle(r) for r in resultados])], "wacc",
               clave="wacc")
 
 
@@ -215,46 +222,38 @@ def render_fuentes_usos(session: Session, company: Company) -> None:
 
 
 def render_validacion(session: Session, company: Company) -> None:
-    st.header("Validación — Comparación con el trabajo de investigación ANF")
+    st.header(f"Validación — {sec.TITULO_CONTRASTE}")
     lista = _datos(session)
     if not lista:
         return
     _aviso_sin_grupo(lista)
-    st.caption("Datos originales → cálculo de la aplicación → comparación con el valor publicado en el trabajo. Los valores "
-               "del trabajo nunca se usan como datos ni como resultados calculados.")
+    st.caption("Control de consistencia: datos financieros registrados → cálculo de la aplicación → contraste con un "
+               "valor de referencia externo. Los valores de referencia no intervienen en ningún cálculo.")
     comparaciones = comparar(lista)
     conteo = resumen(comparaciones)
     columnas = st.columns(len(ESTADOS))
     for columna, estado in zip(columnas, ESTADOS):
         columna.metric(estado, conteo[estado])
     filtro = st.multiselect("Estados a mostrar", list(ESTADOS), default=[e for e in ESTADOS if e != "Coincide"], key="val_estados")
-    secciones_ref = sorted({c.referencia.seccion for c in comparaciones},
-                           key=lambda s: [(0, int(x), "") if x.isdigit() else (1, 0, x) for x in s.replace(" ", ".").split(".")])
-    elegidas = st.multiselect("Secciones del trabajo", secciones_ref, default=secciones_ref, key="val_secciones")
-    visibles = [c for c in comparaciones if c.estado in filtro and c.referencia.seccion in elegidas]
-    seccion = sec.comparacion(visibles)
-    mostrar_seccion(seccion)
+    seccion = sec.comparacion([c for c in comparaciones if c.estado in filtro])
+    mostrar_seccion(seccion, ancho_concepto="medium")  # nueve columnas: todas a la vista
     with st.expander("Resumen por indicador"):
-        df = pd.DataFrame([{"Ref.": c.referencia.id, "Concepto": c.referencia.concepto, "Estado": c.estado} for c in comparaciones])
+        df = pd.DataFrame([{"Concepto": c.referencia.concepto.rstrip("*").rstrip(), "Estado": c.estado} for c in comparaciones])
         st.dataframe(df.groupby(["Concepto", "Estado"]).size().unstack(fill_value=0), width="stretch")
-    with st.expander("Fuera del alcance de la comparación"):
-        for texto in fuera_de_alcance():
-            st.caption(md(texto))
     completa = sec.comparacion(comparaciones)
-    descargas(company, "Comparación con el trabajo de investigación ANF", [("Comparación ANF", [completa])],
-              "comparacion_trabajo_anf", clave="validacion")
+    descargas(company, sec.TITULO_CONTRASTE, [("Contraste", [completa])], "contraste_de_resultados", clave="validacion")
 
 
 def render_informe_integral(session: Session, company: Company) -> None:
-    st.header("Reporte — Informe integral 2021–2025")
+    encabezado = st.empty()
     lista = _datos(session)
+    encabezado.header(f"Reporte — Informe integral {_rango(lista)}".rstrip())
     if not lista:
         return
     _aviso_sin_grupo(lista)
     st.caption("Reúne los estados financieros originales, los análisis horizontal y vertical, los indicadores, el capital de "
-               "trabajo, el DuPont, el WACC, el origen y aplicación de fondos, la comparación con el trabajo ANF, las "
-               "observaciones sobre discrepancias y la trazabilidad de los datos.")
+               "trabajo, el DuPont, el WACC, el origen y aplicación de fondos y la trazabilidad de los datos.")
     hojas = hojas_informe(session, lista)
-    descargas(company, TITULO, hojas, "informe_integral_2021_2025", clave="integral")
+    descargas(company, titulo_informe(lista), hojas, f"informe_integral_{archivo_ejercicios(lista)}", clave="integral")
     for seccion in hojas[0][1]:
         mostrar_seccion(seccion)

@@ -275,7 +275,7 @@ def _cobertura_intereses(d):
     valor, motivo, _ = _div(d.utilidad_operativa, d.gastos_financieros_netos_registrados, "la razón de cargos de interés fijo")
     nota = None
     if d.inc.ingresos_financieros.subtotal != CERO:
-        nota = "Gastos financieros netos de ingresos financieros (criterio del trabajo, sección 6.4)."
+        nota = "Gastos financieros netos de ingresos financieros."
     return valor, motivo, nota
 
 
@@ -291,7 +291,7 @@ def _cobertura_pagos_fijos(d):
     terminos valen cero en la formula y el indice iguala a la razon de cargos de interes fijo."""
     valor, motivo, _ = _cobertura_intereses(d)
     return valor, motivo, ("Los estados no desglosan las cuotas de arrendamiento ni la amortización obligatoria del principal: el índice "
-                           "iguala a la razón de cargos de interés fijo (trabajo, 8.3 C). No mide la cobertura con esos pagos.")
+                           "iguala a la razón de cargos de interés fijo. No mide la cobertura con esos pagos.")
 
 
 @_con(ER)

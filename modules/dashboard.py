@@ -99,7 +99,7 @@ def _analisis_multianual(session: Session, company: Company) -> None:
                                      name=ind.POR_CLAVE[clave].nombre))
         fig.update_layout(title="Rentabilidad y endeudamiento (%)", xaxis=dict(dtick=1))
         st.plotly_chart(fig, width="stretch", key="dash_rentabilidad")
-    st.caption("Indicadores con saldos al cierre (criterio del trabajo ANF). Detalle, fórmulas e interpretación en "
+    st.caption("Indicadores con saldos al cierre de cada ejercicio. Detalle, fórmulas e interpretación en "
                "«Reportes › Indicadores financieros».")
 
 

@@ -520,7 +520,8 @@ def test_o3_textos_largos_se_ajustan_sin_perder_informacion(libros_excel):
     ws = libros_excel["dupont"]
     fuente = next(c for c in ws["A"] if c.value == "Base de saldos:")
     valor = ws.cell(fuente.row, 2)
-    assert valor.value.startswith("Saldos al cierre") and len(valor.value) > 100  # texto completo, sin recortes
+    from calculations.dupont import BASE_SALDOS
+    assert valor.value == BASE_SALDOS  # texto completo, sin recortes
     assert f"B{fuente.row}:C{fuente.row}" in {str(r) for r in ws.merged_cells.ranges}
     assert valor.alignment.wrap_text and ws.row_dimensions[fuente.row].height >= 30
     assert fuente.alignment.vertical == "top"  # la etiqueta queda junto al inicio del texto

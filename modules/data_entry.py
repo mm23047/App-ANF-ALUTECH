@@ -325,7 +325,7 @@ def render_initial_balances(session: Session, company: Company) -> None:
     st.header("Ingreso de datos — Saldos iniciales")
     st.caption(
         "Estos saldos se conservan como registro de apertura del ejercicio. El modelo DuPont no los usa: se calcula "
-        "con los saldos al cierre, como el trabajo (secciones 8.4, 9.5 y 9.6)."
+        "con los saldos al cierre del ejercicio."
     )
     period = select_fiscal_period(session, key="periodo_saldos_iniciales", allow_create=False)
     if period is None:

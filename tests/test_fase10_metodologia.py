@@ -111,10 +111,10 @@ def test_las_funciones_no_tienen_excepciones_por_anio_ni_cifras(nombre):
 
 def test_seccion_de_las_dos_bases_en_pantalla(por_anio):
     filas = {f[0]: f for f in a_dataframe(sec.bases_cxc(list(por_anio.values()))).values.tolist()}
-    comercial, cartera = filas["Línea comercial presentada (9.3): saldo al cierre"], filas["Comerciales y otras: saldo al cierre"]
+    comercial, cartera = filas["Línea comercial presentada: saldo al cierre"], filas["Comerciales y otras: saldo al cierre"]
     assert comercial[1:6] == ["53,081,088", "32,581,092", "41,272,525", "97,204,415", "70,169,882"]
     assert cartera[1:6] == ["117,984,175", "85,022,305", "96,097,483", "97,204,415", "70,169,882"]
-    assert filas["Línea comercial presentada (9.3): período de cobro"][3] == "31.47"
+    assert filas["Línea comercial presentada: período de cobro"][3] == "31.47"
     assert filas["Comerciales y otras: período de cobro"][3] == "73.28"
 
 
@@ -288,4 +288,4 @@ def test_pantalla_real_de_indicadores_muestra_la_metodologia(pantallas):
     assert [fijos[str(a)] for a in ANIOS] == ["4.76", "1.82", "2.03", "1.25", "1.46"]
     bases = [f for t in p["tablas"] for f in t if "Concepto" in f and f["Concepto"].startswith("Comerciales y otras: saldo")]
     assert bases and bases[0]["2023"] == "96,097,483"
-    assert any("9.3" in texto and "2 decimales" in texto for texto in p["textos"] + p.get("avisos", []))
+    assert any("CO = PPI + PPC" in texto and "2 decimales" in texto for texto in p["textos"] + p.get("avisos", []))

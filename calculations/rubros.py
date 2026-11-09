@@ -326,7 +326,7 @@ _RUBROS = [
     # Estado de resultados
     Rubro("GASTOS_OPERATIVOS_ANF", "Gastos operativos (administración, venta, personal y depreciación)",
           ("GASTOS_ADMINISTRACION", "GASTOS_VENTA", "GASTOS_PERSONAL", "DEPRECIACION_AMORTIZACION"),
-          "Criterio del trabajo ANF (sección 6.4): excluye el deterioro de cuentas por cobrar y los otros ingresos.",
+          "Excluye el deterioro de cuentas por cobrar y los otros ingresos.",
           requiere=(("GASTOS_ADMINISTRACION", "GASTOS_VENTA"),)),
     Rubro("OTROS_INGRESOS_GASTOS", "Otros ingresos o gastos (neto)", ("OTROS_INGRESOS_OPERATIVOS", "OTROS_NO_OPERATIVOS"),
           "2021–2023 se presentan dentro de la utilidad de operación; 2024–2025, después del resultado financiero."),
@@ -579,7 +579,7 @@ class DatosEjercicio:
         if otro is None or otro is dato or otro.valor == dato.valor:
             return ""
         return (f"; difiere de la atribución de {otro.valor:,.0f} del Estado de resultados ({otro.documento}, pág. {otro.pagina}): "
-                "pendiente editorial y académica")
+                "los dos estados no concuerdan; diferencia pendiente de revisión")
 
     def atribucion(self) -> tuple[Decimal | None, str, str]:
         """(utilidad atribuible, fuente, base). Base: de donde sale la cifra; un supuesto nunca se presenta como dato.
@@ -624,7 +624,7 @@ class DatosEjercicio:
             impresa = self.complementarios.get("utilidad_neta")
             origen_neta = f" ({impresa.documento}, pág. {impresa.pagina})" if impresa is not None else ""
             return self.inc.utilidad_neta, (
-                f"Supuesto: utilidad atribuible igual a utilidad neta total (criterio de 9.6 del trabajo). Utilidad neta "
+                f"Supuesto: utilidad atribuible igual a utilidad neta total (no hay participaciones no controladoras). Utilidad neta "
                 f"{self.inc.utilidad_neta:,.2f}{origen_neta}. Los documentos no informan la atribución: no es un dato comprobado y se "
                 "sustituye al registrar una atribución documentada"), BASE_SUPUESTO_IGUALDAD
         return None, "Hay participaciones no controladoras y el documento no informa la utilidad atribuible", BASE_NO_DISPONIBLE

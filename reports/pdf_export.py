@@ -202,7 +202,7 @@ def export_vertical_pdf(company, period, titulo: str, lineas, base, nombre_base:
     story.append(Paragraph(f"Base (100%): {escape(nombre_base)} = {escape(format_money(base, company.moneda))}", _seccion_style))
     if any(l.efecto for l in lineas):
         story.append(Paragraph("Los costos, gastos e impuestos restan (columna Efecto): su importe se muestra como se "
-                               "captura y su porcentaje en negativo, como en la tabla 7.1 del trabajo.", _sub_style))
+                               "captura y su porcentaje en negativo.", _sub_style))
     story.append(Spacer(1, 0.3 * cm))
 
     filas = [["Código", "Concepto", "Importe", "%", "Efecto"]]

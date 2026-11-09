@@ -258,12 +258,12 @@ La variable dura mientras esté abierta esa terminal.
 | **Ingreso de datos › Saldos iniciales** | Registro de los saldos de apertura de cada ejercicio. El DuPont no los usa |
 | **Ingreso de datos › Importación Excel** | Descargar plantillas y cargar archivos con vista previa |
 | **Datos originales › Trazabilidad y controles** | Documento y página de cada importe, totales impresos contra calculados, y mapeo de cuentas |
-| **Reportes › Análisis Horizontal 2021–2025** | Variación absoluta y relativa por rubro, grupo o cuenta |
-| **Reportes › Análisis Vertical comparativo 2021–2025** | Análisis vertical de los cinco ejercicios, lado a lado |
+| **Reportes › Análisis Horizontal comparativo** | Variación absoluta y relativa por rubro, grupo o cuenta |
+| **Reportes › Análisis Vertical comparativo** | Análisis vertical de los ejercicios registrados, lado a lado |
 | **Reportes › WACC** | Costo promedio ponderado de capital, con sus supuestos y el detalle por ejercicio |
 | **Reportes › Origen y aplicación de fondos** | Fuentes y usos entre dos ejercicios consecutivos |
-| **Reportes › Informe integral 2021–2025** | Todo el análisis en un solo Excel o PDF |
-| **Validación › Comparación con el trabajo ANF** | Resultado calculado contra el publicado, con diferencia, estado y causa |
+| **Reportes › Informe integral** | Todo el análisis en un solo Excel o PDF |
+| **Validación › Contraste de resultados** | Control de consistencia: resultado calculado contra un valor de referencia externo, con diferencia, estado y tipo de diferencia |
 | **Historial de cambios** | Registro global de cambios, con filtros por tabla, ejercicio y cuenta |
 | **Copias de seguridad** | Crear, descargar y restaurar copias |
 
@@ -366,19 +366,19 @@ se iguala a cero; si puede estar agrupada en otra línea figura como *Presentaci
 *No comparable*. Las sumas con composición no comprobada calculan la variación con la advertencia «Agrupación analítica;
 comparabilidad no confirmada». Cada celda sin valor indica su causa: *Sin dato*, *No calculable* (base cero o negativa) o *No comparable*.
 Si un balance no cuadra o un estado está incompleto, la página lo advierte sin corregir los datos. Las descargas usan el nivel
-elegido. La opción oculta *Análisis Horizontal 2021–2025* se conserva.
+elegido. La opción oculta *Análisis Horizontal comparativo* se conserva.
 
 **WACC:** vea el resumen de todos los años, los supuestos usados y el detalle del ejercicio que elija.
 
 **Origen y aplicación de fondos:** elija el par de ejercicios. Se construye con variaciones de saldos, así que **no es un
 estado de flujos de efectivo**.
 
-**Validación:** filtre por estado y por sección del trabajo. Las coincidencias se ocultan al inicio para centrar la
+**Validación:** filtre por estado. Las coincidencias se ocultan al inicio para centrar la
 revisión en las diferencias.
 
-**Informe integral:** en pantalla muestra solo los estados originales. El archivo descargado reúne 11 secciones: estados
-originales, horizontal, vertical, indicadores, capital de trabajo, DuPont, WACC, origen y aplicación, comparación con el
-trabajo, observaciones y trazabilidad.
+**Informe integral:** en pantalla muestra solo los estados originales. El archivo descargado reúne 9 secciones: estados
+originales, horizontal, vertical, indicadores, capital de trabajo, DuPont, WACC, origen y aplicación y trazabilidad. El
+contraste de resultados está en la página Validación.
 
 ### Exportar
 
@@ -469,11 +469,11 @@ Funcionan sin adaptación los reportes por ejercicio y el DuPont. Estas partes s
 
 | Parte | Limitación |
 |---|---|
-| Títulos con «2021–2025» | El texto es fijo, aunque los cálculos usan los ejercicios que existan |
+| Notas sobre la presentación de los estados | Describen los estados de Alutech (p. ej., «2021–2023: estados combinados») y no se adaptan a otra empresa |
 | WACC | Requiere tasas para cada año en `fuentes/anf/supuestos_wacc.json`. Sin ellas, no se calcula |
 | Validación | Compara contra el trabajo sobre Alutech y no tiene sentido para otra empresa |
 | Trazabilidad | Solo tiene información de los importes de Alutech |
-| Indicadores | Los importes se rotulan siempre en USD y citan secciones del trabajo ANF, aunque la moneda sea otra |
+| Indicadores | Los importes se rotulan siempre en USD, aunque la moneda sea otra |
 
 ## 14. Pruebas
 

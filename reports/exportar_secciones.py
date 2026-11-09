@@ -33,8 +33,7 @@ FORMATOS = {USD: "#,##0.00", PCT: '0.00"%"', VECES: "0.00", DIAS: "#,##0.00", VA
             VAR_PCT: '+0.00"%";-0.00"%";0.00"%"'}
 FORMATOS_ENTEROS = {USD: "#,##0", VAR_USD: "+#,##0;-#,##0;0"}  # sin centavos cuando no los hay, como en pantalla y en el PDF
 FUENTE_DATOS = ("Fuente de los datos: estados financieros originales de Alutech, S. A. de C. V. y subsidiarias - División "
-                "Acero (carpeta documentos/). Resultados calculados por la aplicación. Los valores del trabajo ANF solo se "
-                "muestran como referencia de comparación.")
+                "Acero (carpeta documentos/). Resultados calculados por la aplicación.")
 
 
 # ------------------------------------------------------------------ Excel

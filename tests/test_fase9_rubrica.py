@@ -32,7 +32,7 @@ from database.seed import seed_default_accounts
 from reports import secciones as sec
 from reports.excel_export import export_balance_excel
 from reports.exportar_secciones import _anchos_columnas, secciones_a_excel, secciones_a_pdf
-from reports.indicadores_financieros import GRUPOS, hojas_exportacion
+from reports.indicadores_financieros import GRUPOS, OTROS_INDICADORES, hojas_exportacion
 from reports.pdf_export import export_balance_pdf
 from scripts.cargar_alutech import cargar
 from test_fase8_vertical_dupont import _guardar_empresa
@@ -239,13 +239,20 @@ def test_cobertura_de_pagos_fijos_iguala_la_de_intereses_como_dice_8_3_c(lista, 
     d = next(x for x in lista if x.anio == anio)
     resultado = ind.calcular(d, "cobertura_pagos_fijos")
     assert resultado.valor == ind.calcular(d, "cobertura_intereses").valor
-    assert "8.3 C" in resultado.nota
+    assert "iguala a la razón de cargos de interés fijo" in resultado.nota  # explica la equivalencia
 
 
 def test_los_cuatro_apartados_de_ratios_reunen_los_indicadores_del_documento():
     claves = {g.titulo: [f.clave for f in g.filas] for g in GRUPOS}
     assert {"ctn", "razon_corriente", "prueba_acida"} <= set(claves["Liquidez"])
-    assert {"rotacion_inventarios", "ppi", "rotacion_cxc", "ppc", "ppp", "rotacion_activos", "ciclo_operativo", "cce"} <= set(claves["Actividad"])
+    assert {"rotacion_inventarios", "ppi", "ppc", "ppp", "rotacion_activos"} <= set(claves["Actividad"])
+    # Decision de presentacion (2026-11-09): rotacion de CxC, ciclo operativo y CCE se muestran en «Indicadores
+    # complementarios», una sola vez y fuera de Actividad. Los ocho indicadores de actividad siguen en la pagina.
+    complementarios = [f.clave for f in OTROS_INDICADORES]
+    trasladados = {"rotacion_cxc", "ciclo_operativo", "cce"}
+    assert all(complementarios.count(c) == 1 for c in trasladados) and not trasladados & set(claves["Actividad"])
+    en_pagina = set(complementarios).union(*map(set, claves.values()))
+    assert {"rotacion_inventarios", "ppi", "rotacion_cxc", "ppc", "ppp", "rotacion_activos", "ciclo_operativo", "cce"} <= en_pagina
     assert {"endeudamiento", "deuda_capital", "cobertura_intereses", "cobertura_pagos_fijos"} <= set(claves["Endeudamiento"])
     assert {"margen_bruto", "margen_operativo", "margen_neto", "roa", "roe", "eps"} <= set(claves["Rentabilidad"])
 

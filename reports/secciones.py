@@ -173,8 +173,25 @@ def clasificacion(lista: list[DatosEjercicio]) -> Seccion | None:
     return seccion if seccion.filas else None
 
 
-def _rango(anios: list[int]) -> str:
-    return f"{anios[0]}–{anios[-1]}" if anios else ""
+def rango_ejercicios(anios) -> str:
+    """Ejercicios registrados para titulos: 2021–2025, 2024, o 2021–2023 y 2025 si hay huecos. Solo presentacion."""
+    anios = sorted(set(anios))
+    tramos: list[list[int]] = []
+    for anio in anios:
+        if tramos and anio == tramos[-1][-1] + 1:
+            tramos[-1].append(anio)
+        else:
+            tramos.append([anio])
+    partes = [str(t[0]) if len(t) == 1 else f"{t[0]}–{t[-1]}" for t in tramos]
+    return partes[0] if len(partes) == 1 else ", ".join(partes[:-1]) + " y " + partes[-1] if partes else ""
+
+
+def ejercicios_de(lista) -> str:
+    """rango_ejercicios de una lista de DatosEjercicio (o de objetos con .anio)."""
+    return rango_ejercicios(d.anio for d in lista)
+
+
+_rango = rango_ejercicios
 
 
 # ------------------------------------------------------------- horizontal
@@ -220,7 +237,7 @@ _NOTA_FORMULAS = ("Variación absoluta = Vt − Vt−1; variación relativa = (V
 _NOTA_CELDAS = ("«Sin dato»: falta el importe de uno de los ejercicios. «No calculable»: la base es cero o negativa; se conserva la variación "
                 "absoluta. «No comparable»: la presentación de la partida cambia entre ambos ejercicios.")
 _NOTA_2023_2024 = ("2021–2023: estados combinados; 2024–2025: estados consolidados. El cambio modifica la presentación de varias "
-                   "partidas: las variaciones 2023–2024 deben interpretarse con cautela (trabajo, 6.2).")
+                   "partidas: las variaciones 2023–2024 deben interpretarse con cautela.")
 _NOTA_SENTIDOS = ("«Presentación agrupada»: la partida no se presenta por separado en uno de los ejercicios y puede estar comprendida "
                   "en otra línea. «No comparable»: la presentación cambia y la variación no se calcula. «Aparece» o «Desaparece»: "
                   "sin importe en uno de los ejercicios. Un saldo cero solo se muestra si el estado lo informa.")
@@ -298,7 +315,7 @@ def horizontal_resultados_tabla(lista: list[DatosEjercicio]) -> Seccion:
         + [Columna(f"Var. abs. {str(a)[-2:]}–{str(b)[-2:]}", VAR_USD) for a, b in pares]
         + [Columna(f"Var. rel. {str(a)[-2:]}–{str(b)[-2:]}", VAR_PCT) for a, b in pares],
         notas=[_NOTA_FORMULAS,
-               "Costos y gastos en positivo, como en el trabajo: un aumento significa mayor costo o gasto.",
+               "Costos y gastos en positivo: un aumento significa mayor costo o gasto.",
                "Gastos operativos: administración, venta o distribución y, en 2024–2025, personal y depreciación y amortización. "
                "No incluyen el deterioro de cuentas por cobrar ni los otros ingresos netos de 2021–2023, que sí forman parte de la "
                "utilidad operativa.",
@@ -326,7 +343,7 @@ def horizontal_dos_ejercicios(lista: list[DatosEjercicio], anio: int, anterior: 
         + nota_sin_clasificar(lista),
     )
     if estado == "ER":
-        seccion.notas.append("Costos y gastos en positivo, como en el trabajo: un aumento significa mayor costo o gasto.")
+        seccion.notas.append("Costos y gastos en positivo: un aumento significa mayor costo o gasto.")
     for fila in dos_ejercicios(horizontal_de_estado(lista, estado, nivel), anio, anterior):
         if fila.tipo != "cuenta":
             seccion.filas_destacadas.add(len(seccion.filas))
@@ -370,11 +387,10 @@ def vertical(lista: list[DatosEjercicio], estado: str) -> Seccion:
     anios = sorted({a for f in filas for a in f.valores})
     if estado == "ER":
         titulo = f"Análisis vertical del estado de resultados {_rango(anios)} (% de los ingresos ordinarios)"
-        nota = ("Base: ingresos ordinarios de cada ejercicio. Costos y gastos con signo negativo, como en el trabajo "
-                "(sección 7.1).")
+        nota = "Base (100 %): ingresos ordinarios de cada ejercicio. Costos y gastos con signo negativo."
     else:
         titulo = f"Análisis vertical del balance general {_rango(anios)} (% del activo total)"
-        nota = "Base: activo total de cada ejercicio (sección 7.2)."
+        nota = "Base (100 %): activo total de cada ejercicio."
     seccion = Seccion(titulo, [Columna("Partida")] + [Columna(str(a), PCT) for a in anios] + [Columna(f"Importe {a}", USD) for a in anios],
                       notas=[nota] + nota_sin_clasificar(lista))
     for f in filas:
@@ -394,21 +410,35 @@ def _celda_de_indicador(clave: str, resultado):
     return NO_CALCULABLE if clave == "prueba_acida" and resultado.valor is None else resultado.valor
 
 
-def indicadores(lista: list[DatosEjercicio], categoria: str) -> Seccion:
+COMPLEMENTARIOS = "Indicadores complementarios"
+# Indicadores que se presentan en «Indicadores complementarios» (pantalla, PDF, Excel e informe integral) en lugar de su
+# categoria de calculo. Solo presentacion: calculations/indicadores.py conserva su categoria, formula y dependencias.
+CLAVES_COMPLEMENTARIOS = ("razon_efectivo", "razon_tesoreria", "capitales_permanentes", "fondo_maniobra_lp", "ebitda",
+                          "rotacion_cxc", "ciclo_operativo", "cce")
+NOTAS_COMPLEMENTARIOS = (
+    "Ciclo operativo y CCE: CO = PPI + PPC y CCE = CO − PPP, con cada operando redondeado a 2 decimales. Los demás "
+    "indicadores no usan redondeo intermedio.",
+    "El CCE hereda los cambios de base de las cuentas por cobrar y por pagar. El signo de 2023 depende de la base usada: "
+    "con comerciales + otras, tanto en cobros como en pagos, pasa de negativo a positivo. Esa variante del CCE no se calcula.",
+)
+
+
+def _seccion_indicadores(titulo: str, lista: list[DatosEjercicio], seleccion, notas_iniciales=()) -> Seccion:
     anios = _anios(lista)
+    con_datos = [d for d in lista if d.tiene_datos]
     seccion = Seccion(
-        f"Indicadores — {categoria}",
+        titulo,
         [Columna("Indicador"), Columna("Fórmula"), Columna("Cuentas utilizadas"), Columna("Unidad")]
-        + [Columna(str(a), POR_FILA) for a in anios] + [Columna(f"Interpretación ({anios[-1] if anios else ''})"),
-                                                         Columna("Sección del trabajo")],
-        columna_unidad=3,
+        + [Columna(str(a), POR_FILA) for a in anios] + [Columna(f"Interpretación ({anios[-1] if anios else ''})")],
+        columna_unidad=3, notas=list(notas_iniciales),
     )
-    for indicador, resultados in ind.calcular_todos(lista, categoria):
+    for indicador in seleccion:
+        resultados = {d.anio: ind.calcular(d, indicador.clave) for d in con_datos}
         ultimo = resultados.get(anios[-1]) if anios else None
         seccion.filas.append(
             [indicador.nombre, indicador.formula, indicador.insumos, indicador.unidad]
             + [_celda_de_indicador(indicador.clave, resultados.get(a)) for a in anios]
-            + [ind.interpretacion(ultimo) if ultimo else "", indicador.seccion_anf]
+            + [ind.interpretacion(ultimo) if ultimo else ""]
         )
         motivos = {r.motivo for r in resultados.values() if r.motivo}
         notas = {r.nota for r in resultados.values() if r.nota}
@@ -420,6 +450,23 @@ def indicadores(lista: list[DatosEjercicio], categoria: str) -> Seccion:
     return seccion
 
 
+# Apartado en que se presenta un indicador cuando difiere de su categoria de calculo (que no cambia). La ganancia por
+# accion pertenece a los indicadores de rentabilidad, como en la pagina; razones de mercado son P/E y M/L.
+CATEGORIA_PRESENTADA = {"eps": ind.RENTABILIDAD}
+
+
+def indicadores(lista: list[DatosEjercicio], categoria: str) -> Seccion:
+    """Indicadores de una categoria, sin los que se presentan en «Indicadores complementarios»."""
+    seleccion = [i for i in ind.INDICADORES if CATEGORIA_PRESENTADA.get(i.clave, i.categoria) == categoria
+                 and i.clave not in CLAVES_COMPLEMENTARIOS]
+    return _seccion_indicadores(f"Indicadores — {categoria}", lista, seleccion)
+
+
+def indicadores_complementarios(lista: list[DatosEjercicio]) -> Seccion:
+    return _seccion_indicadores(f"Indicadores — {COMPLEMENTARIOS}", lista, [ind.POR_CLAVE[c] for c in CLAVES_COMPLEMENTARIOS],
+                                NOTAS_COMPLEMENTARIOS)
+
+
 def bases_cxc(lista: list[DatosEjercicio]) -> Seccion:
     """Las dos carteras, en todos los ejercicios y sin mezclarlas: no son el mismo indicador."""
     anios = _anios(lista)
@@ -427,15 +474,14 @@ def bases_cxc(lista: list[DatosEjercicio]) -> Seccion:
         "Cuentas por cobrar: dos bases que no son equivalentes",
         [Columna("Concepto")] + [Columna(str(a), POR_FILA) for a in anios] + [Columna("Unidad")],
         columna_unidad=len(anios) + 1,
-        notas=["Línea comercial presentada: fórmula explícita de la sección 9.3 y base del PPC, del ciclo operativo y del CCE de "
-               "esta aplicación. Desde que los estados presentan una sola línea, esa línea ya incluye otras cuentas por cobrar.",
-               "Comerciales y otras: la misma regla en todos los ejercicios. La sección 8.2 B publica este valor solo en el "
-               "primer ejercicio en que une ambas líneas; en los anteriores usa la línea comercial, por lo que su serie no sigue "
-               "una regla única.",
+        notas=["Línea comercial presentada: base de la rotación de cuentas por cobrar, del PPC, del ciclo operativo y del CCE. "
+               "Desde que los estados presentan una sola línea, esa línea ya incluye otras cuentas por cobrar.",
+               "Comerciales y otras: alternativa analítica que suma las otras cuentas por cobrar corrientes, con la misma regla "
+               "en todos los ejercicios.",
                "Las dos bases no deben compararse como si fueran el mismo indicador."],
     )
     for titulo, rubro, rotacion, ppc in (
-            ("Línea comercial presentada (9.3)", "rubro:CXC_COMERCIALES_PRESENTADA", "rotacion_cxc", "ppc"),
+            ("Línea comercial presentada", "rubro:CXC_COMERCIALES_PRESENTADA", "rotacion_cxc", "ppc"),
             ("Comerciales y otras", "rubro:CXC_COMERCIALES_Y_OTRAS", "rotacion_cxc_total", "ppc_total")):
         for etiqueta, obtener, unidad in ((f"{titulo}: saldo al cierre", CONCEPTOS[rubro].obtener, ind.USD),
                                           (f"{titulo}: rotación", (lambda c: lambda d: ind.calcular(d, c).valor)(rotacion), ind.VECES),
@@ -527,11 +573,11 @@ def dupont(lista: list[DatosEjercicio]) -> list[Seccion]:
     anios = _anios(lista)
     por = {d.anio: d for d in lista if d.tiene_datos}
     total = Seccion(
-        "Sistema DuPont con saldos al cierre — enfoque total (secciones 9.5 y 9.6)",
+        "Sistema DuPont con saldos al cierre — enfoque total",
         [Columna("Concepto")] + [Columna(str(a), POR_FILA) for a in anios] + [Columna("Unidad")],
         columna_unidad=len(anios) + 1,
         notas=["RSA = Margen neto × Rotación de activos; RSP = RSA × MAF; MAF = Activo total / Patrimonio total. "
-               "Saldos al cierre (criterio del trabajo), igual que el reporte «Rentabilidad mediante fórmula DuPont»."]
+               "Saldos al cierre del ejercicio, igual que el reporte «Rentabilidad mediante fórmula DuPont»."]
         + nota_sin_clasificar(lista),
     )
     filas_total = [("Ingresos ordinarios", lambda d: d.ingresos, ind.USD),
@@ -586,7 +632,7 @@ def wacc_resumen(resultados: list[ResultadoWACC]) -> Seccion:
         notas=[
             "Ponderación sobre pasivo total + patrimonio. Pasivos operativos con costo 0 %; deuda financiera a la tasa "
             "supuesta × (1 − t); patrimonio a Ke = ROE al cierre (no es el rendimiento exigido por los socios).",
-            "Las tasas de interés y la tasa de ISR son SUPUESTOS del trabajo ANF (fuentes/anf/supuestos_wacc.json): no "
+            "Las tasas de interés y la tasa de ISR son SUPUESTOS de entrada (fuentes/anf/supuestos_wacc.json): no "
             "pueden verificarse con los documentos disponibles. Los importes, pesos y Ke sí provienen de los estados "
             "financieros originales.",
         ],
@@ -622,7 +668,7 @@ def wacc_detalle(resultado: ResultadoWACC) -> Seccion:
     seccion = Seccion(
         f"WACC {resultado.anio} — detalle por fuente de financiamiento",
         [Columna("Tipo"), Columna("Código"), Columna("Cuenta"), Columna("Importe", USD), Columna("Costo", PCT),
-         Columna("Costo neto", PCT), Columna("Proporción", PCT), Columna("Aporte al WACC", PCT), Columna("Cita del trabajo (no verificada)")],
+         Columna("Costo neto", PCT), Columna("Proporción", PCT), Columna("Aporte al WACC", PCT), Columna("Fuente citada de la tasa (no verificada)")],
     )
     for l in resultado.lineas:
         seccion.filas.append([l.tipo.capitalize(), l.codigo, l.nombre, l.importe, l.costo_pct, l.costo_neto_pct, l.proporcion_pct,
@@ -635,13 +681,23 @@ def wacc_detalle(resultado: ResultadoWACC) -> Seccion:
     return seccion
 
 
+# Notas de presentacion. fuentes/anf/supuestos_wacc.json conserva su descripcion original para la trazabilidad.
+_NOTA_SUPUESTOS_WACC = (
+    "Las tasas de interés de cada fuente de deuda y la tasa del impuesto sobre la renta no pueden verificarse con los "
+    "estados financieros disponibles: cuando se cita una fuente, son notas del informe auditado completo, que no forma parte "
+    "de los documentos cargados, y en algunos ejercicios no hay fuente citada. La aplicación las usa como datos de entrada configurables, separados de los datos originales y de los "
+    "resultados calculados. El costo del patrimonio no es un supuesto: se calcula con los estados financieros.")
+_NOTA_KE = ("Costo del patrimonio (Ke) = ROE al cierre = utilidad neta del ejercicio / patrimonio total al cierre. Es una "
+            "aproximación contable, no el rendimiento exigido por los accionistas (p. ej., CAPM).")
+
+
 def supuestos_wacc() -> Seccion:
     datos = cargar_supuestos()
     anios = sorted(datos["ejercicios"])
     grupos = sorted({g for a in anios for g in datos["ejercicios"][a]["tasas"]}, key=lambda g: list(GRUPOS).index(g))
-    seccion = Seccion("Supuestos del WACC tomados del trabajo ANF (no verificables con los documentos)",
+    seccion = Seccion("Supuestos del WACC: tasas de interés y tasa de ISR (no verificables con los documentos)",
                       [Columna("Fuente de deuda (grupo de análisis)")] + [Columna(a, PCT) for a in anios],
-                      notas=[datos["descripcion"], datos["metodo_costo_patrimonio"]])
+                      notas=[_NOTA_SUPUESTOS_WACC, _NOTA_KE])
     seccion.filas.append(["Tasa de ISR"] + [Decimal(datos["ejercicios"][a]["tasa_isr"]) for a in anios])
     for g in grupos:
         seccion.filas.append([GRUPOS[g].nombre] + [Decimal(datos["ejercicios"][a]["tasas"][g])
@@ -669,28 +725,43 @@ def fuentes_usos(resultado: ResultadoFuentesUsos) -> Seccion:
 
 
 # ------------------------------------------------------------ comparacion
+TITULO_CONTRASTE = "Contraste de resultados"
+FUENTE_REFERENCIA = ("Los valores de referencia son datos externos que se usan solo para contrastar los resultados calculados por "
+                     "la aplicación. No forman parte de los datos de entrada ni intervienen en ningún cálculo, indicador o reporte.")
+NOTA_COLUMNAS_CONTRASTE = (
+    "Resultado calculado: obtenido por la aplicación con los datos financieros registrados. Valor de referencia: dato "
+    "externo, no calculado por la aplicación. Diferencia = resultado calculado − valor de referencia; Diferencia % se mide "
+    "sobre el valor de referencia. Tipo de diferencia: clasificación de la causa analizada; vacío cuando no hay diferencia "
+    "que explicar.")
+# Presentacion neutra de las categorias de fuentes/anf/observaciones_validacion.json (el archivo no cambia).
+TIPOS_DIFERENCIA = {"Error en el trabajo académico": "Error en el valor de referencia"}
+
+
 def comparacion(comparaciones: list[Comparacion], *, solo_estados: tuple[str, ...] | None = None,
-                titulo: str = "Comparación con el trabajo de investigación ANF") -> Seccion:
+                titulo: str = TITULO_CONTRASTE) -> Seccion:
+    """Resultado calculado frente al valor de referencia. Las causas detalladas de cada diferencia se conservan para la
+    auditoria interna en fuentes/anf/observaciones_validacion.json y no se presentan."""
     seccion = Seccion(
         titulo,
-        [Columna("Ref."), Columna("Sección"), Columna("Tabla"), Columna("Indicador / concepto"), Columna("Año"),
-         Columna("Resultado aplicación", POR_FILA), Columna("Resultado trabajo ANF", POR_FILA), Columna("Diferencia", POR_FILA),
-         Columna("Diferencia %", PCT), Columna("Estado"), Columna("Unidad"), Columna("Categoría de la causa"),
-         Columna("Causa documentada")],
-        columna_unidad=10,
-        notas=["Coincide: igual al redondear a la precisión del trabajo. Coincidencia por redondeo: diferencia ≤ una unidad "
-               "del último decimal presentado. Diferencia: mayor que esa tolerancia (causa investigada). No verificable: "
-               "faltan datos. No aplica: ambos lo declaran no calculable.",
-               "Importes en millones cuando el trabajo los presenta así (EBITDA, CTN y escala de la sección 10)."],
+        [Columna("Indicador / concepto"), Columna("Año"), Columna("Resultado calculado", POR_FILA),
+         Columna("Valor de referencia", POR_FILA), Columna("Diferencia", POR_FILA), Columna("Diferencia %", PCT),
+         Columna("Estado"), Columna("Unidad"), Columna("Tipo de diferencia")],
+        columna_unidad=7,
+        notas=[FUENTE_REFERENCIA, NOTA_COLUMNAS_CONTRASTE,
+               "Coincide: igual al redondear a la precisión del valor de referencia. Coincidencia por redondeo: diferencia ≤ "
+               "una unidad del último decimal presentado. Diferencia: mayor que esa tolerancia. No verificable: faltan "
+               "datos. No aplica: ninguno de los dos es calculable. Resultado derivado: el valor de referencia se obtiene "
+               "de otro indicador.",
+               "Los conceptos rotulados «(millones)» se contrastan en millones de USD."],
     )
     for c in comparaciones:
         if solo_estados and c.estado not in solo_estados:
             continue
         unidad = {"USD": ind.USD, "%": ind.PCT, "veces": ind.VECES, "días": ind.DIAS_U}.get(c.referencia.unidad, ind.VECES)
-        anf = "No calculable" if c.valor_anf is None else c.valor_anf
-        seccion.filas.append([c.referencia.id, c.referencia.seccion, c.referencia.tabla, c.referencia.concepto, str(c.anio),
-                              c.valor_app if c.valor_app is not None else "No calculable", anf, c.diferencia, c.diferencia_pct,
-                              c.estado, unidad, c.categoria, c.causa])
+        referencia = "No calculable" if c.valor_anf is None else c.valor_anf
+        seccion.filas.append([c.referencia.concepto.rstrip("*").rstrip(), str(c.anio),
+                              c.valor_app if c.valor_app is not None else "No calculable", referencia, c.diferencia,
+                              c.diferencia_pct, c.estado, unidad, TIPOS_DIFERENCIA.get(c.categoria, c.categoria)])
     return seccion
 
 

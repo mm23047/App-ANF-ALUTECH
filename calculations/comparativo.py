@@ -534,7 +534,7 @@ def _nota_dos_ejercicios(actual, anterior, nota: str, anio_anterior: int, anio_a
     if anterior and actual and (anterior > CERO) != (actual > CERO):
         if anterior < CERO:
             return "Cambia de signo con base negativa: la variación relativa no se calcula; use la variación absoluta."
-        return "Cambia de signo: el porcentaje debe leerse junto con la variación absoluta y el cambio de signo (trabajo, 6.3)."
+        return "Cambia de signo: el porcentaje debe leerse junto con la variación absoluta y el cambio de signo."
     return nota
 
 

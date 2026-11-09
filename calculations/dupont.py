@@ -41,8 +41,7 @@ CERO = Decimal("0.00")
 CIEN = Decimal("100")
 TOLERANCIA_PCT = Decimal("0.01")
 NO_INTERPRETABLE = "NO INTERPRETABLE"
-BASE_SALDOS = ("Saldos al cierre del ejercicio, como en las secciones 8.4, 9.5 y 9.6 del trabajo; no se usan saldos "
-               "promedio ni el balance del ejercicio anterior.")
+BASE_SALDOS = "Saldos al cierre del ejercicio; no se usan saldos promedio ni el balance del ejercicio anterior."
 # Tipos de valor de las filas de presentacion
 IMPORTE, PORCENTAJE, VECES = "importe", "porcentaje", "veces"
 

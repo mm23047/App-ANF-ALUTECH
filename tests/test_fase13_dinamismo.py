@@ -663,11 +663,11 @@ def test_2023_mantiene_la_pagina_11_conciliada_y_deja_a_la_vista_la_pagina_9(bd)
         assert D("12309102.00") + D("1021578.00") == D("13330680.00") == d.inc.utilidad_neta
         utilidad, fuente = d.utilidad_controladora()
         assert utilidad == D("12309102.00") and d.base_atribucion() == BASE_DOCUMENTO
-        assert "pág. 11" in fuente and "pág. 9" in fuente and "pendiente editorial" in fuente and "13,330,680" in fuente
+        assert "pág. 11" in fuente and "pág. 9" in fuente and "pendiente de revisión" in fuente and "13,330,680" in fuente
         assert "13,796,630" not in fuente and "12,542,077" not in fuente
         assert "pág. 9" not in lista[2021].utilidad_controladora()[1]  # 2021: ambas fuentes coinciden
         _, ctrl = sec.dupont(list(lista.values()))
-        assert any("pendiente editorial" in n for n in ctrl.notas)
+        assert any("pendiente de revisión" in n for n in ctrl.notas)
 
 
 # ------------------------------------------------------------- Decision 3: supuesto de simulacion
