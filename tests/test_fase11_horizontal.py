@@ -196,7 +196,10 @@ def test_tablas_marcan_la_fila_y_explican_la_marca_sin_cambiar_cifras(lista):
     fila = df[df["Cuenta financiera"].str.contains("†")]
     assert fila["Cuenta financiera"].tolist() == ["Cuentas por cobrar comerciales y otras (corrientes) †"]
     assert fila["Var. rel. 23–24"].tolist() == ["+1.15%"]
-    assert any(n.startswith("† ") and ADVERTENCIA_ANALITICA in n for n in tabla_4.notas)
+    # La nota † de la fila se fusiona con la nota de cuentas por cobrar: una sola nota, con la comparabilidad no confirmada.
+    cxc = [n for n in tabla_4.notas if "Cuentas por cobrar comerciales y otras" in n]
+    assert len(cxc) == 1 and cxc[0].startswith("† Cuentas por cobrar comerciales y otras (2023–2024): alternativa analítica")
+    assert "no está confirmada" in cxc[0] and "sin conceptos adicionales" in cxc[0] and "únicamente la línea comercial" in cxc[0]
     tabla_3 = a_dataframe(sec.horizontal_balance_tablas(lista)[0])
     assert not tabla_3["Cuenta financiera"].str.contains("†").any()  # 2021-2023 no tiene cambios de presentacion
 
@@ -209,6 +212,21 @@ def test_tabla_5_conserva_cifras_y_marca_las_filas_analiticas(lista):
     assert gastos.endswith("†") and financieros.endswith("†")
     assert df.loc[gastos, "Var. rel. 23–24"] == "+4.33%" and df.loc[financieros, "Var. rel. 23–24"] == "+27.47%"
 
+
+
+def test_notas_de_las_tablas_horizontales_debajo_de_cada_tabla(lista):
+    """Balance 2023–2025: tres notas (formulas, cuentas por cobrar, estados combinados y consolidados). Estado de
+    resultados: nueve notas, con las tres advertencias † de 2023–2024."""
+    tabla_4 = sec.horizontal_balance_tablas(lista)[1]
+    assert len(tabla_4.notas) == 3 == len(set(tabla_4.notas))
+    assert tabla_4.notas[0].startswith("Variación absoluta") and tabla_4.notas[2].startswith("2021–2023: estados combinados")
+    assert "cautela" in tabla_4.notas[2]
+    er = sec.horizontal_resultados_tabla(lista)
+    assert len(er.notas) == 9 == len(set(er.notas))
+    marcadas = [n for n in er.notas if n.startswith("† ")]
+    assert [n.split(" (")[0] for n in marcadas] == ["† Gastos operativos", "† Utilidad de operación", "† Gastos financieros netos"]
+    assert all("(2023–2024)" in n for n in marcadas) and "no es plenamente comparable" in marcadas[1]
+    assert sum("comparabilidad no confirmada" in n for n in marcadas) == 2
 
 # ------------------------------------------------------------- cambios de signo (R-5)
 def _fila_dos(actual, anterior):

@@ -244,12 +244,13 @@ _NOTA_SENTIDOS = ("«Presentación agrupada»: la partida no se presenta por sep
 MARCA_FILA = " †"
 
 
-def _etiqueta_con_advertencia(fila, anios: list[int], seccion: Seccion) -> str:
-    """Marca en la propia fila las comparaciones no confirmadas de los ejercicios de la tabla y explica la marca al pie."""
+def _etiqueta_con_advertencia(fila, anios: list[int], seccion: Seccion, notas_fila: dict[str, str] | None = None) -> str:
+    """Marca en la propia fila las comparaciones no confirmadas de los ejercicios de la tabla y explica la marca al pie.
+    notas_fila: redaccion de la nota de una fila solo para esta tabla (la nota del concepto se usa tambien en otros reportes)."""
     avisos = [(anio, fila.comparabilidad[anio]) for anio in anios if anio in fila.comparabilidad and anio - 1 in anios]
     for anio, estado in avisos:
-        texto = " ".join(t for t in (estado.nota, fila.nota) if t)
-        seccion.notas.append(f"† {fila.etiqueta} ({anio - 1}–{anio}): {texto}")
+        texto = " ".join(t for t in (estado.nota, (notas_fila or {}).get(fila.clave, fila.nota)) if t)
+        seccion.notas.append(f"† {fila.etiqueta} ({anio - 1}–{anio}): {texto[:1].lower()}{texto[1:]}")
     return fila.etiqueta + MARCA_FILA if avisos else fila.etiqueta
 
 
@@ -294,14 +295,41 @@ def horizontal_balance_tablas(lista: list[DatosEjercicio]) -> list[Seccion]:
         f"Análisis horizontal del estado de situación financiera ({anios[0]}–{anios[:3][-1]}) [USD]",
         [_NOTA_FORMULAS, "Cuentas por cobrar: únicamente la línea «Cuentas por cobrar comerciales» en los estados combinados."])]
     if len(anios) > 3:
-        secciones.append(_tabla_trabajo(
-            lista, anios[2:], CLAVES_TABLA_4,
-            f"Análisis horizontal del estado de situación financiera ({anios[2]}–{anios[-1]}) [USD]",
-            [_NOTA_FORMULAS, "Cuentas por cobrar: alternativa analítica con comerciales y otras cuentas por cobrar, porque los estados "
-                             "consolidados presentan una sola línea cuya composición no se detalla. Por esa razón el importe del primer "
-                             f"ejercicio difiere del que muestra el análisis {anios[0]}–{anios[:3][-1]}, que usa solo la línea comercial.",
-             _NOTA_2023_2024]))
+        tabla = _tabla_trabajo(lista, anios[2:], CLAVES_TABLA_4,
+                               f"Análisis horizontal del estado de situación financiera ({anios[2]}–{anios[-1]}) [USD]",
+                               [_NOTA_FORMULAS, _NOTA_2023_2024])
+        _fusionar_nota_cxc(tabla, [d for d in lista if d.anio in anios], anios)
+        secciones.append(tabla)
     return secciones
+
+
+def _fusionar_nota_cxc(tabla: Seccion, lista: list[DatosEjercicio], anios: list[int]) -> None:
+    """Una sola nota para las cuentas por cobrar comerciales y otras: la alternativa analitica, la composicion no
+    confirmada de la linea unificada y la diferencia con el analisis de los primeros ejercicios. Sustituye a la nota †
+    de la fila (que la marca sigue explicando, con sus ejercicios) y va en segundo lugar, tras las formulas."""
+    prefijo = f"† {CONCEPTOS['rubro:CXC_COMERCIALES_Y_OTRAS'].etiqueta} ("
+    marcadas = [n for n in tabla.notas if n.startswith(prefijo)]
+    tabla.notas = [n for n in tabla.notas if n not in marcadas]
+    periodos = [n[len(prefijo):n.index("): ", len(prefijo))] for n in marcadas]
+    por = {d.anio: d for d in lista}
+    unificada = [d.anio for d in lista if d.anio in anios[2:] and d.tiene("DEUDORES_COMERCIALES_OTRAS")]
+    primero, tramo = anios[2], f"{anios[0]}–{anios[:3][-1]}"
+    texto = ("alternativa analítica que presenta conjuntamente las cuentas por cobrar comerciales y las otras cuentas por cobrar "
+             "corrientes. "
+             + (f"En {rango_ejercicios(unificada)} los estados consolidados" if unificada else "Los estados consolidados")
+             + " presentan una línea unificada cuya composición no se detalla; por tanto, no se ha confirmado que contenga "
+             "exclusivamente esas categorías, sin conceptos adicionales, y la comparabilidad de la partida no está confirmada. "
+             + (f"El importe de {primero} en esta alternativa incluye las otras cuentas por cobrar corrientes; por eso difiere del "
+                f"que muestra el análisis {tramo}, que utiliza únicamente la línea comercial." if por[primero].tiene("OTRAS_CXC_CP") else
+                f"El importe de {primero} en esta alternativa puede diferir del que muestra el análisis {tramo}, que utiliza "
+                "únicamente la línea comercial."))
+    nombre = "Cuentas por cobrar comerciales y otras"
+    tabla.notas.insert(1, f"† {nombre} ({', '.join(periodos)}): {texto}" if periodos else f"{nombre}: {texto}")
+
+
+# Redaccion de la nota † de una fila en la tabla del estado de resultados (misma informacion que la nota del concepto).
+_NOTAS_FILA_TABLA_5 = {"gastos_financieros_netos": "Gastos financieros menos ingresos financieros; en 2021–2023 el estado ya "
+                                                   "presenta el importe neto."}
 
 
 def horizontal_resultados_tabla(lista: list[DatosEjercicio]) -> Seccion:
@@ -315,18 +343,19 @@ def horizontal_resultados_tabla(lista: list[DatosEjercicio]) -> Seccion:
         + [Columna(f"Var. abs. {str(a)[-2:]}–{str(b)[-2:]}", VAR_USD) for a, b in pares]
         + [Columna(f"Var. rel. {str(a)[-2:]}–{str(b)[-2:]}", VAR_PCT) for a, b in pares],
         notas=[_NOTA_FORMULAS,
-               "Costos y gastos en positivo: un aumento significa mayor costo o gasto.",
-               "Gastos operativos: administración, venta o distribución y, en 2024–2025, personal y depreciación y amortización. "
-               "No incluyen el deterioro de cuentas por cobrar ni los otros ingresos netos de 2021–2023, que sí forman parte de la "
-               "utilidad operativa.",
-               "Utilidad operativa: los estados de 2022 y 2023 no imprimen este subtotal; se obtiene de sus partidas impresas.",
-               "Gastos financieros netos: en 2021–2023 los estados presentan directamente el neto; en 2024–2025, gastos financieros "
-               "menos ingresos financieros.", _NOTA_2023_2024] + nota_sin_clasificar(lista),
+               "Costos y gastos: se presentan en positivo, por lo que un aumento indica un mayor costo o gasto.",
+               "Gastos operativos: comprenden los gastos de administración y de venta o distribución y, en 2024–2025, también los "
+               "de personal y la depreciación y amortización. No incluyen el deterioro de cuentas por cobrar ni los otros ingresos "
+               "netos de 2021–2023, que sí forman parte de la utilidad operativa.",
+               "Utilidad operativa: los estados de 2022 y 2023 no presentan este subtotal; se obtiene a partir de las partidas que "
+               "sí presentan.",
+               "Gastos financieros netos: en 2021–2023 los estados presentan directamente el importe neto; en 2024–2025 se "
+               "calculan como gastos financieros menos ingresos financieros.", _NOTA_2023_2024] + nota_sin_clasificar(lista),
     )
     for fila in filas:
         if fila.tipo != "cuenta":
             seccion.filas_destacadas.add(len(seccion.filas))
-        seccion.filas.append([_etiqueta_con_advertencia(fila, anios, seccion)] + [_saldo(fila.valores.get(a)) for a in anios]
+        seccion.filas.append([_etiqueta_con_advertencia(fila, anios, seccion, _NOTAS_FILA_TABLA_5)] + [_saldo(fila.valores.get(a)) for a in anios]
                              + [_variacion(fila.var_abs, fila, b) for _, b in pares] + [_variacion(fila.var_pct, fila, b) for _, b in pares])
     return seccion
 
