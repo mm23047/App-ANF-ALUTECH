@@ -361,7 +361,7 @@ def export_dupont_excel(company, period, resultado) -> bytes:
     if filas_controladora:
         fila = _filas_dupont_excel(ws, fila, "Enfoque de la controladora", filas_controladora)
         escribir(ws, fila, 1, "Ganancia atribuible:").font = Font(italic=True)
-        escribir(ws, fila, 2, resultado.controladora.fuente)
+        escribir(ws, fila, 2, resultado.controladora.descripcion)
         ajustes.append((fila, 2, 3))
         fila += 2
 

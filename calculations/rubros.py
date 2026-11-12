@@ -362,7 +362,7 @@ _FAMILIAS = [
 FAMILIA_DE_GRUPO: dict[str, FamiliaPresentacion] = {g: f for f in _FAMILIAS for g in f.grupos}
 
 
-BASE_DOCUMENTO = "Dato del documento"
+BASE_DOCUMENTO = "Dato registrado"
 BASE_INGRESADA = "Dato ingresado"
 BASE_SIMULACION = "Supuesto de simulación"
 BASE_SUPUESTO_IGUALDAD = "Supuesto: igual a la utilidad neta"
@@ -573,16 +573,40 @@ class DatosEjercicio:
     def base_atribucion(self) -> str:
         return self.atribucion()[2]
 
-    def _nota_otra_atribucion(self, dato) -> str:
-        """Otra atribucion impresa de la utilidad neta que no coincide con la usada: queda a la vista, sin elegirla."""
+    def descripcion_atribucion(self) -> str:
+        """Criterio de la utilidad atribuible en redaccion neutral, sin documentos ni paginas (presentacion DuPont)."""
+        return self.atribucion()[3]
+
+    def _otra_atribucion(self, dato):
+        """Otra atribucion registrada de la utilidad neta que no coincide con la usada, o None."""
         otro = self.complementarios.get("utilidad_controladora_er")
         if otro is None or otro is dato or otro.valor == dato.valor:
+            return None
+        return otro
+
+    def _nota_otra_atribucion(self, dato) -> str:
+        """Otra atribucion impresa de la utilidad neta que no coincide con la usada: queda a la vista, sin elegirla."""
+        otro = self._otra_atribucion(dato)
+        if otro is None:
             return ""
         return (f"; difiere de la atribución de {otro.valor:,.0f} del Estado de resultados ({otro.documento}, pág. {otro.pagina}): "
                 "los dos estados no concuerdan; diferencia pendiente de revisión")
 
-    def atribucion(self) -> tuple[Decimal | None, str, str]:
-        """(utilidad atribuible, fuente, base). Base: de donde sale la cifra; un supuesto nunca se presenta como dato.
+    def _advertencia_otra_atribucion(self, dato) -> str:
+        """Version neutral de _nota_otra_atribucion: la discrepancia sigue a la vista, sin citar su procedencia."""
+        otro = self._otra_atribucion(dato)
+        if otro is None:
+            return ""
+        neta = self.utilidad_neta if self.inc.tiene_datos else None
+        igual = " (igual a la utilidad neta total, sin participación no controladora)" if neta is not None and otro.valor == neta else ""
+        return (f". Advertencia: los datos registrados incluyen otra cifra de utilidad atribuible a la controladora, "
+                f"{otro.valor:,.2f}{igual}, que difiere en {abs(otro.valor - dato.valor):,.2f} de la cifra utilizada. Las dos "
+                "cifras no concuerdan y la diferencia entre la utilidad neta total, la utilidad atribuible y la participación no "
+                "controladora no está conciliada: queda pendiente de revisión")
+
+    def atribucion(self) -> tuple[Decimal | None, str, str, str]:
+        """(utilidad atribuible, fuente, base, descripcion). Base: de donde sale la cifra; un supuesto nunca se presenta como
+        dato. La fuente cita documento y pagina (edicion de datos); la descripcion dice lo mismo sin citarlos (DuPont).
 
         La cifra registrada se usa mientras concilie con la utilidad neta vigente. Si la utilidad neta cambia, el cambio se
         atribuye a la controladora como supuesto de simulacion. Sin participacion registrada, o si las cifras del documento
@@ -593,41 +617,59 @@ class DatosEjercicio:
             dato, participacion, origen = par
             fuente = f"{origen} ({dato.documento}, pág. {dato.pagina})"
             base = BASE_INGRESADA if dato_modificado(dato) else BASE_DOCUMENTO
+            descripcion = "Dato registrado"
             if base == BASE_INGRESADA:
                 fuente += f"; dato modificado por el usuario, cifra impresa {dato.importe_documento}"
+                descripcion = f"Dato registrado y modificado por el usuario (cifra original {dato.importe_documento})"
+            otra = self._advertencia_otra_atribucion(dato)
             fuente += self._nota_otra_atribucion(dato)
             if not self.inc.tiene_datos:
-                return dato.valor, fuente, base
+                return dato.valor, fuente, base, f"{descripcion}: {dato.valor:,.2f}{otra}"
             neta = self.utilidad_neta
             if neta is None:
-                return None, "El Estado de Resultados está incompleto: no hay utilidad neta que atribuir", BASE_NO_DISPONIBLE
+                texto = "El Estado de Resultados está incompleto: no hay utilidad neta que atribuir"
+                return None, texto, BASE_NO_DISPONIBLE, texto
             impresa = self.complementarios.get("utilidad_neta")
             sin_cambios = impresa is not None and impresa.valor == neta
             if participacion is None:
                 if impresa is not None and not sin_cambios:
                     return None, (f"La utilidad neta cambió y no hay participación no controladora registrada para actualizar la cifra de "
-                                  f"{fuente}"), BASE_NO_DISPONIBLE
-                return dato.valor, fuente, base
+                                  f"{fuente}"), BASE_NO_DISPONIBLE, (
+                        "La utilidad neta cambió y no hay participación no controladora registrada para actualizar la utilidad "
+                        "atribuible registrada")
+                return dato.valor, fuente, base, f"{descripcion}: {dato.valor:,.2f} atribuibles a la controladora{otra}"
             if dato.valor + participacion.valor == neta:
-                return dato.valor, fuente, base
+                return dato.valor, fuente, base, (
+                    f"{descripcion}: {dato.valor:,.2f} atribuibles a la controladora más {participacion.valor:,.2f} de "
+                    f"participación no controladora suman la utilidad neta total de {neta:,.2f}{otra}")
             if sin_cambios:
                 return None, (f"No concilia: atribuible {dato.valor} + no controladora {participacion.valor} difiere de la utilidad "
-                              f"neta {neta} ({fuente}). No se elige una cifra: requiere una decisión"), BASE_NO_DISPONIBLE
+                              f"neta {neta} ({fuente}). No se elige una cifra: requiere una decisión"), BASE_NO_DISPONIBLE, (
+                    f"No concilia: atribuible {dato.valor:,.2f} + no controladora {participacion.valor:,.2f} difiere de la utilidad "
+                    f"neta total {neta:,.2f}{otra}. No se elige una cifra: requiere una decisión")
             return neta - participacion.valor, (
                 f"Derivada por supuesto de simulación: el cambio de la utilidad neta se atribuye íntegramente a la controladora y la "
                 f"participación no controladora queda fija en {participacion.valor:,.2f} ({origen}, {participacion.documento}, "
                 f"pág. {participacion.pagina}). No es una distribución contable comprobada: se requiere información actualizada de atribución"
-            ), BASE_SIMULACION
+            ), BASE_SIMULACION, (
+                f"Derivada por supuesto de simulación: la utilidad neta vigente ({neta:,.2f}) difiere de la registrada; el cambio se "
+                f"atribuye íntegramente a la controladora y la participación no controladora registrada queda fija en "
+                f"{participacion.valor:,.2f}. No es una distribución contable comprobada: se requiere información actualizada de "
+                "atribución")
         if not self.inc.tiene_datos:
-            return None, "Sin Estado de Resultados", BASE_NO_DISPONIBLE
+            return None, "Sin Estado de Resultados", BASE_NO_DISPONIBLE, "Sin Estado de Resultados"
         if self.g("NO_CONTROLADORAS") == CERO:
             impresa = self.complementarios.get("utilidad_neta")
             origen_neta = f" ({impresa.documento}, pág. {impresa.pagina})" if impresa is not None else ""
             return self.inc.utilidad_neta, (
                 f"Supuesto: utilidad atribuible igual a utilidad neta total (no hay participaciones no controladoras). Utilidad neta "
                 f"{self.inc.utilidad_neta:,.2f}{origen_neta}. Los documentos no informan la atribución: no es un dato comprobado y se "
-                "sustituye al registrar una atribución documentada"), BASE_SUPUESTO_IGUALDAD
-        return None, "Hay participaciones no controladoras y el documento no informa la utilidad atribuible", BASE_NO_DISPONIBLE
+                "sustituye al registrar una atribución documentada"), BASE_SUPUESTO_IGUALDAD, (
+                f"Supuesto: utilidad atribuible igual a la utilidad neta total ({self.inc.utilidad_neta:,.2f}), porque no hay "
+                "participaciones no controladoras registradas. No hay una atribución registrada para este ejercicio: es un "
+                "supuesto, no un dato de atribución comprobado, y se sustituye al registrar la atribución")
+        return None, "Hay participaciones no controladoras y el documento no informa la utilidad atribuible", BASE_NO_DISPONIBLE, (
+            "Hay participaciones no controladoras y no hay una utilidad atribuible registrada")
 
     def depreciacion_amortizacion(self) -> tuple[Decimal | None, str]:
         if self.tiene("DEPRECIACION_AMORTIZACION"):

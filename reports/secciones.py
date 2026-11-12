@@ -606,7 +606,7 @@ def dupont(lista: list[DatosEjercicio]) -> list[Seccion]:
         columna_unidad=len(anios) + 1,
     )
     filas_ctrl = [("Utilidad atribuible a la controladora", lambda d: d.utilidad_controladora()[0], ind.USD),
-                  ("Base de la utilidad atribuible", lambda d: d.base_atribucion(), ""),
+                  ("Criterio de la utilidad atribuible", lambda d: d.base_atribucion(), ""),
                   ("Patrimonio atribuible a la controladora", lambda d: d.patrimonio_controladora, ind.USD)]
     for clave, obtener in (("margen_neto_controladora", valor_ind("margen_neto_controladora")),
                            ("rotacion_activos", valor_ind("rotacion_activos")),
@@ -618,7 +618,7 @@ def dupont(lista: list[DatosEjercicio]) -> list[Seccion]:
     for etiqueta, obtener, unidad in filas_ctrl:
         ctrl.filas.append([etiqueta] + [_saldo(obtener(por[a])) for a in anios] + [unidad])
     for a in anios:
-        ctrl.notas.append(f"{a}: utilidad atribuible — {por[a].utilidad_controladora()[1]}.")
+        ctrl.notas.append(f"{a}: utilidad atribuible — {por[a].descripcion_atribucion()}.")
     return [total, ctrl]
 
 

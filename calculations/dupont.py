@@ -132,6 +132,7 @@ class EnfoqueControladora:
     patrimonio: Decimal | None
     factores: FactoresDuPont
     fuente: str
+    descripcion: str = ""  # criterio de la utilidad atribuible, sin documentos ni paginas
 
     @property
     def disponible(self) -> bool:
@@ -226,7 +227,8 @@ def compute_dupont(session: Session, fiscal_period: FiscalPeriod) -> DuPontResul
         roe_dupont_pct=q2(total.rsp * CIEN), roe_directo_pct=q2(total.roe_directo * CIEN),
         coincide_redondeo=abs(q2(total.rsp * CIEN) - q2(total.roe_directo * CIEN)) <= TOLERANCIA_PCT,
         roe=total.rsp, roe_directo=total.roe_directo,
-        controladora=EnfoqueControladora(utilidad_controladora, d.patrimonio_controladora, f_controladora, fuente_controladora),
+        controladora=EnfoqueControladora(utilidad_controladora, d.patrimonio_controladora, f_controladora, fuente_controladora,
+                                         d.descripcion_atribucion()),
     )
 
     positivo = total.patrimonio_positivo

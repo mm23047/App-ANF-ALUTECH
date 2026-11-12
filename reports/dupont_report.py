@@ -46,7 +46,7 @@ def _comparativo(session: Session, company: Company) -> None:
     mostrar_sin_grupo(lista)
     for d in lista:
         if d.base_atribucion() == BASE_SIMULACION:
-            st.warning(md(f"{d.anio}. {d.utilidad_controladora()[1]}."))
+            st.warning(md(f"{d.anio}. {d.descripcion_atribucion()}."))
     st.markdown("### Comparativo de los ejercicios")
     secciones = sec.dupont(lista)
     for seccion in secciones:
@@ -63,7 +63,7 @@ def _mostrar_enfoques(resultado: DuPontResult, moneda: str, sufijo: str = "") ->
         return
     st.markdown(f"### Enfoque de la controladora{sufijo}")
     st.caption("Usa la ganancia y el patrimonio atribuibles a los propietarios de la controladora; los activos son los "
-               f"totales de la empresa. Ganancia atribuible: {md(resultado.controladora.fuente)}.")
+               f"totales de la empresa. Ganancia atribuible: {md(resultado.controladora.descripcion)}.")
     st.dataframe(_tabla(filas_enfoque_controladora(resultado), moneda), hide_index=True, width="stretch", height="content",
                  column_config=columnas_derecha("Valor"))
 

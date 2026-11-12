@@ -670,6 +670,39 @@ def test_2023_mantiene_la_pagina_11_conciliada_y_deja_a_la_vista_la_pagina_9(bd)
         assert any("pendiente de revisión" in n for n in ctrl.notas)
 
 
+
+def test_dupont_sin_referencias_documentales_y_con_advertencias(bd):
+    """DuPont (pantalla, PDF, Excel y comparativo) explica la utilidad atribuible sin citar documentos ni paginas, y
+    conserva las advertencias de 2023 (sin conciliar) y de 2024 y 2025 (supuesto)."""
+    from reportlab import rl_config
+    from reports.pdf_export import export_dupont_pdf
+    prohibido = ("documento", ".pdf", "pág.", "página", "Certific", "EEFF", "cambios en el patrimonio", "trabajo")
+    with session_scope() as s:
+        lista = ejercicios(s)
+        total, ctrl = sec.dupont(list(lista.values()))
+        assert not any(f[0] == "Base de la utilidad atribuible" for f in ctrl.filas)
+        textos = [n for n in total.notas + ctrl.notas] + [str(c) for f in ctrl.filas for c in f]
+        compresion, rl_config.pageCompression = rl_config.pageCompression, 0
+        try:
+            for anio, d in lista.items():
+                r = compute_dupont(s, d.periodo)
+                libro = load_workbook(io.BytesIO(export_dupont_excel(get_company(s), d.periodo, r)))
+                textos += [str(c) for ws in libro.worksheets for f in ws.iter_rows(values_only=True) for c in f if c]
+                textos.append(r.controladora.descripcion)
+                textos.append(export_dupont_pdf(get_company(s), d.periodo, r).decode("latin-1"))
+        finally:
+            rl_config.pageCompression = compresion
+        for texto in textos:
+            assert not any(x.lower() in texto.lower() for x in prohibido), texto[:200]
+        assert "pendiente de revisión" in lista[2023].descripcion_atribucion()
+        assert "13,330,680.00" in lista[2023].descripcion_atribucion() and "no está conciliada" in lista[2023].descripcion_atribucion()
+        for anio in (2024, 2025):
+            assert lista[anio].descripcion_atribucion().startswith("Supuesto: utilidad atribuible igual a la utilidad neta total")
+            assert "no un dato de atribución comprobado" in lista[anio].descripcion_atribucion()
+        # La fuente con documento y pagina se conserva para la edicion de datos
+        assert "pág." in lista[2021].utilidad_controladora()[1]
+
+
 # ------------------------------------------------------------- Decision 3: supuesto de simulacion
 @pytest.mark.parametrize("anio", [2021, 2022, 2023])
 def test_cambio_de_utilidad_se_identifica_como_supuesto_de_simulacion(bd, anio):
@@ -690,7 +723,7 @@ def test_cambio_de_utilidad_se_identifica_como_supuesto_de_simulacion(bd, anio):
         assert participacion == NCI[anio]  # no se modifica sola
         assert valor(d, "roe_controladora") < roe
         _, ctrl = sec.dupont(list(lista.values()))
-        base = next(f for f in ctrl.filas if f[0] == "Base de la utilidad atribuible")
+        base = next(f for f in ctrl.filas if f[0] == "Criterio de la utilidad atribuible")
         assert base[anio - 2020] == BASE_SIMULACION
         assert any("supuesto de simulación" in n for n in ctrl.notas)
         assert any("supuesto de simulación" in str(c) for c in celdas_excel([("DuPont", [ctrl])]))
@@ -728,7 +761,7 @@ def test_igualdad_con_la_utilidad_neta_es_un_supuesto_identificado(bd, anio, net
         assert fuente.startswith("Supuesto: utilidad atribuible igual a utilidad neta total")
         assert "no es un dato comprobado" in fuente and f"{neta:,.2f}" in fuente and "12_EEFF" in fuente
         _, ctrl = sec.dupont(list(lista.values()))
-        base = next(f for f in ctrl.filas if f[0] == "Base de la utilidad atribuible")
+        base = next(f for f in ctrl.filas if f[0] == "Criterio de la utilidad atribuible")
         assert base[anio - 2020] == BASE_SUPUESTO_IGUALDAD and base[1] == BASE_DOCUMENTO  # se distingue de un dato documentado
         libro = load_workbook(io.BytesIO(export_dupont_excel(get_company(s), d.periodo, compute_dupont(s, d.periodo))))
         assert any("Supuesto: utilidad atribuible" in str(c) for ws in libro.worksheets for f in ws.iter_rows(values_only=True) for c in f if c)

@@ -260,7 +260,7 @@ def export_dupont_pdf(company, period, resultado) -> bytes:
     if filas_controladora:
         story.append(Paragraph("Enfoque de la controladora", _seccion_style))
         story.append(Paragraph("Ganancia y patrimonio atribuibles a los propietarios de la controladora; activos totales de "
-                               f"la empresa. Ganancia atribuible: {escape(resultado.controladora.fuente)}.", _sub_style))
+                               f"la empresa. Ganancia atribuible: {escape(resultado.controladora.descripcion)}.", _sub_style))
         story.append(Spacer(1, 0.2 * cm))
         story.append(_tabla_dupont(filas_controladora, company.moneda))
         story.append(Spacer(1, 0.4 * cm))
